@@ -186,6 +186,24 @@ where
             .and_then(|plan_name| self.plans_config.resolve(plan_name))
     }
 
+    /// Returns whether a versioned request targets a historical (fully committed) block.
+    /// When no pending deltas buffer is active, returns `false` (can't distinguish).
+    async fn is_historical(
+        &self,
+        version: &dto::VersionParam,
+        protocol_system: &str,
+        chain: dto::Chain,
+    ) -> Result<bool, RpcError> {
+        if self.pending_deltas.is_none() {
+            return Ok(false);
+        }
+        let at = BlockOrTimestamp::try_from(version)?;
+        let (_, deltas_version) = self
+            .calculate_versions(&at, protocol_system, chain.into())
+            .await?;
+        Ok(deltas_version.is_none())
+    }
+
     #[instrument(skip(self, request))]
     async fn get_contract_state(
         &self,
@@ -1117,6 +1135,10 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
+        let historical = handler
+            .is_historical(&body.version, &body.protocol_system, body.chain)
+            .await?;
+        restrictions.check_historical_allowed(historical)?;
     }
 
     // Call the handler to get the state
@@ -1253,6 +1275,10 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
+        let historical = handler
+            .is_historical(&body.version, &body.protocol_system, body.chain)
+            .await?;
+        restrictions.check_historical_allowed(historical)?;
     }
 
     // Call the handler to get protocol states
@@ -2802,6 +2828,7 @@ mod tests {
             component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
             token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
             traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+            allow_historical: true,
         };
         let mut plans = std::collections::HashMap::new();
         plans.insert("restricted".to_string(), restrictions);
@@ -3204,5 +3231,155 @@ plans:
         let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
         assert_eq!(body.protocol_systems, vec!["ambient", "sushiswap", "uniswap_v3"]);
         assert_eq!(body.pagination.total, 3);
+    }
+
+    fn plans_config_no_historical() -> PlansConfig {
+        let yaml = r#"
+plans:
+  no_history:
+    allow_historical: false
+"#;
+        serde_yaml::from_str(yaml).unwrap()
+    }
+
+    #[rstest]
+    #[case::committed_rejects(CommitStatus::Committed, false)]
+    #[case::uncommitted_passes(CommitStatus::Uncommitted, true)]
+    #[actix_web::test]
+    async fn test_contract_state_historical_restriction(
+        #[case] commit_status: CommitStatus,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_contracts()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        mock_buffer
+            .expect_get_block_commit_status()
+            .returning(move |_, _| Ok(Some(commit_status)));
+        if should_pass {
+            mock_buffer
+                .expect_update_vm_states()
+                .return_once(|_, _, _, _| Ok(()));
+        }
+
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            plans_config_no_historical(),
+            vec![],
+            vec![],
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/contract_state",
+                    web::post().to(contract_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let request_body = dto::StateRequestBody::new(
+            None,
+            "test_system".to_string(),
+            dto::VersionParam { timestamp: Some(Utc::now().naive_utc()), block: None },
+            dto::Chain::Ethereum,
+            dto::PaginationParams::new(0, 10),
+        );
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/contract_state")
+                .insert_header(("X-User-Plan", "no_history"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        if should_pass {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        } else {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        }
+    }
+
+    #[rstest]
+    #[case::committed_rejects(CommitStatus::Committed, false)]
+    #[case::uncommitted_passes(CommitStatus::Uncommitted, true)]
+    #[actix_web::test]
+    async fn test_protocol_state_historical_restriction(
+        #[case] commit_status: CommitStatus,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_protocol_states()
+                .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        mock_buffer
+            .expect_get_block_commit_status()
+            .returning(move |_, _| Ok(Some(commit_status)));
+        if should_pass {
+            mock_buffer
+                .expect_merge_native_states()
+                .return_once(|_, _, _, _| Ok(()));
+        }
+
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            plans_config_no_historical(),
+            vec![],
+            vec![],
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_state",
+                    web::post().to(protocol_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        // Use explicit protocol_ids to avoid the custom Deserialize issue with
+        // null protocol_ids and to take a simpler handler path.
+        let request_body = serde_json::json!({
+            "protocol_ids": ["comp1"],
+            "protocol_system": "test_system",
+            "include_balances": true,
+            "version": { "timestamp": Utc::now().naive_utc().format("%Y-%m-%dT%H:%M:%S").to_string() },
+            "chain": "ethereum",
+            "pagination": { "page": 0, "page_size": 10 }
+        });
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_state")
+                .insert_header(("X-User-Plan", "no_history"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        if should_pass {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        } else {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        }
     }
 }

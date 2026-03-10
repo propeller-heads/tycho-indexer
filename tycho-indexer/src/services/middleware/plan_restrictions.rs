@@ -77,7 +77,7 @@ impl NumericRestriction {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct PlanRestrictions {
     #[serde(default)]
     pub allowed_protocol_systems: Option<HashSet<String>>,
@@ -87,6 +87,24 @@ pub struct PlanRestrictions {
     pub token_quality: Option<NumericRestriction>,
     #[serde(default)]
     pub traded_n_days_ago: Option<NumericRestriction>,
+    #[serde(default = "default_true")]
+    pub allow_historical: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for PlanRestrictions {
+    fn default() -> Self {
+        Self {
+            allowed_protocol_systems: None,
+            component_tvl: None,
+            token_quality: None,
+            traded_n_days_ago: None,
+            allow_historical: true,
+        }
+    }
 }
 
 impl PlanRestrictions {
@@ -103,6 +121,15 @@ impl PlanRestrictions {
                         .join(", "),
                 )));
             }
+        }
+        Ok(())
+    }
+
+    pub fn check_historical_allowed(&self, is_historical: bool) -> Result<(), RpcError> {
+        if is_historical && !self.allow_historical {
+            return Err(RpcError::PlanRestrictionViolation(
+                "historical queries are not available on this plan".into(),
+            ));
         }
         Ok(())
     }
@@ -269,6 +296,7 @@ mod tests {
             component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
             token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
             traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+            allow_historical: true,
         }
     }
 
@@ -623,5 +651,48 @@ plans:
         assert!(request
             .validate_restrictions(&plan)
             .is_ok());
+    }
+
+    #[rstest]
+    #[case::allowed_not_historical(true, false, false)]
+    #[case::allowed_historical(true, true, false)]
+    #[case::disallowed_not_historical(false, false, false)]
+    #[case::disallowed_historical(false, true, true)]
+    fn test_check_historical_allowed(
+        #[case] allow_historical: bool,
+        #[case] is_historical: bool,
+        #[case] should_fail: bool,
+    ) {
+        let restrictions = PlanRestrictions { allow_historical, ..Default::default() };
+        let result = restrictions.check_historical_allowed(is_historical);
+        assert_eq!(result.is_err(), should_fail);
+        if should_fail {
+            assert!(result
+                .unwrap_err()
+                .to_string()
+                .contains("historical"));
+        }
+    }
+
+    #[test]
+    fn test_yaml_allow_historical() {
+        let yaml = r#"
+plans:
+  free:
+    allow_historical: false
+  pro:
+    allow_historical: true
+  default: {}
+"#;
+        let config: PlansConfig = serde_yaml::from_str(yaml).unwrap();
+
+        let free = config.resolve("free").unwrap();
+        assert!(!free.allow_historical);
+
+        let pro = config.resolve("pro").unwrap();
+        assert!(pro.allow_historical);
+
+        let default = config.resolve("default").unwrap();
+        assert!(default.allow_historical);
     }
 }
