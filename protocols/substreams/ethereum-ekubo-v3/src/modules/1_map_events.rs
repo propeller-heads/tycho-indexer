@@ -32,15 +32,8 @@ use crate::{
     },
 };
 
-// Decodes all Ekubo-relevant events that can be recognized from log data alone.
-//
-// This stream is pre-filtered where decode-time information is sufficient:
-// - PoolInitialized events for unsupported pool extensions are dropped immediately because the full
-//   pool config is available at decode time.
-// - Other events may still belong to pools that are not tracked, because their payloads do not
-//   contain enough information to decide that here.
 #[substreams::handlers::map]
-fn map_unfiltered_events(block: eth::v2::Block) -> BlockTransactionEvents {
+fn map_events(block: eth::v2::Block) -> BlockTransactionEvents {
     BlockTransactionEvents {
         block_transaction_events: block
             .transactions()
