@@ -58,17 +58,15 @@ fn test_uniswap_v3_uniswap_v2() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -135,17 +133,15 @@ fn test_uniswap_v3_uniswap_v3() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -221,17 +217,15 @@ fn test_uniswap_v3_curve() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdt,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdt],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdt,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdt],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -282,17 +276,15 @@ fn test_balancer_v2_uniswap_v2() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -413,24 +405,22 @@ fn test_multi_protocol() {
     let encoder = get_tycho_router_encoder();
 
     // Put all components together
-    let solution = Solution {
-        exact_out: false,
-        token_in: dai,
-        amount_in: BigUint::from_str("1500_000000000000000000").unwrap(),
-        token_out: eth.clone(),
-        min_amount_out: BigUint::from_str("732214216964381330").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        dai,
+        eth.clone(),
+        BigUint::from_str("1500_000000000000000000").unwrap(),
+        BigUint::from_str("732214216964381330").unwrap(),
+        vec![
             usv2_swap_dai_weth,
             balancer_swap_weth_wbtc,
             curve_swap_wbtc_usdt,
             ekubo_swap_usdt_usdc,
             usv4_swap_usdc_eth,
         ],
-        user_transfer_type: UserTransferType::TransferFromPermit2,
-        ..Default::default()
-    };
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2);
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -490,17 +480,15 @@ fn test_uniswap_v3_balancer_v3() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_0000000000000000").unwrap(),
-        token_out: qnt,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_qnt],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        qnt,
+        BigUint::from_str("1_0000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_qnt],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])

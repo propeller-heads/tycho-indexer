@@ -67,17 +67,15 @@ fn test_sequential_swap_usx() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: dai.clone(),
-        amount_in: BigUint::from_str("2000000000000000000000").unwrap(),
-        token_out: usdt.clone(),
-        min_amount_out: BigUint::from_str("1990000000").unwrap(),
-        sender: filler.clone(),
-        receiver: filler.clone(),
-        swaps: vec![swap_dai_usdc, swap_usdc_usdt],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        filler.clone(),
+        filler.clone(),
+        dai.clone(),
+        usdt.clone(),
+        BigUint::from_str("2000000000000000000000").unwrap(),
+        BigUint::from_str("1990000000").unwrap(),
+        vec![swap_dai_usdc, swap_usdc_usdt],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])

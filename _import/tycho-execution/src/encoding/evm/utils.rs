@@ -40,7 +40,7 @@ pub fn biguint_to_u256(value: &BigUint) -> U256 {
 
 /// Converts a decimal to a `U24` value. The percentage is a `f64` value between 0 and 1.
 /// MAX_UINT24 corresponds to 100%.
-pub fn percentage_to_uint24(decimal: f64) -> U24 {
+pub(crate) fn percentage_to_uint24(decimal: f64) -> U24 {
     const MAX_UINT24: u32 = 16_777_215; // 2^24 - 1
 
     let scaled = (decimal / 1.0) * (MAX_UINT24 as f64);
@@ -48,7 +48,7 @@ pub fn percentage_to_uint24(decimal: f64) -> U24 {
 }
 
 /// Gets the position of a token in a list of tokens.
-pub fn get_token_position(tokens: &Vec<&Bytes>, token: &Bytes) -> Result<U8, EncodingError> {
+pub(crate) fn get_token_position(tokens: &Vec<&Bytes>, token: &Bytes) -> Result<U8, EncodingError> {
     let position = U8::from(
         tokens
             .iter()
@@ -63,7 +63,9 @@ pub fn get_token_position(tokens: &Vec<&Bytes>, token: &Bytes) -> Result<U8, Enc
 /// Pads or truncates a byte slice to a fixed size array of N bytes.
 /// If input is shorter than N, it pads with zeros at the start.
 /// If input is longer than N, it truncates from the start (keeps last N bytes).
-pub fn pad_or_truncate_to_size<const N: usize>(input: &[u8]) -> Result<[u8; N], EncodingError> {
+pub(crate) fn pad_or_truncate_to_size<const N: usize>(
+    input: &[u8],
+) -> Result<[u8; N], EncodingError> {
     let mut result = [0u8; N];
 
     if input.len() <= N {
@@ -80,7 +82,10 @@ pub fn pad_or_truncate_to_size<const N: usize>(input: &[u8]) -> Result<[u8; N], 
 }
 
 /// Extracts a static attribute from a swap.
-pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>, EncodingError> {
+pub(crate) fn get_static_attribute(
+    swap: &Swap,
+    attribute_name: &str,
+) -> Result<Vec<u8>, EncodingError> {
     Ok(swap
         .component()
         .static_attributes
@@ -92,7 +97,7 @@ pub fn get_static_attribute(swap: &Swap, attribute_name: &str) -> Result<Vec<u8>
 /// Returns the current Tokio runtime handle, or creates a new one if it doesn't exist.
 /// It also returns the runtime to prevent it from being dropped before use.
 /// This is required since tycho-execution does not have a pre-existing runtime.
-pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
+pub(crate) fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
     match Handle::try_current() {
         Ok(h) => Ok((h, None)),
         Err(_) => {
@@ -104,7 +109,7 @@ pub fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
     }
 }
 
-pub type EVMProvider = Arc<
+pub(crate) type EVMProvider = Arc<
     FillProvider<
         JoinFill<
             alloy::providers::Identity,
@@ -115,7 +120,7 @@ pub type EVMProvider = Arc<
 >;
 
 /// Gets the client used for interacting with the EVM-compatible network.
-pub async fn get_client() -> Result<EVMProvider, EncodingError> {
+pub(crate) async fn get_client() -> Result<EVMProvider, EncodingError> {
     dotenvy::dotenv().ok();
     let eth_rpc_url = env::var("RPC_URL")
         .map_err(|_| EncodingError::FatalError("Missing RPC_URL in environment".to_string()))?;
@@ -130,7 +135,7 @@ pub async fn get_client() -> Result<EVMProvider, EncodingError> {
 ///
 /// Prefix-length encoding is a data encoding method where the beginning of a data segment
 /// (the "prefix") contains information about the length of the following data.
-pub fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
+pub(crate) fn ple_encode(action_data_array: Vec<Vec<u8>>) -> Vec<u8> {
     let mut encoded_action_data: Vec<u8> = Vec::new();
 
     for action_data in action_data_array {

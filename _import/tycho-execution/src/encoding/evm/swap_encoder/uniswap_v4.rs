@@ -166,7 +166,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
             Self::encode_angstrom_attestations(&attestations)?
         } else {
             // Regular hook - use user_data as normal
-            swap.get_user_data()
+            swap.user_data()
                 .clone()
                 .unwrap_or_default()
                 .to_vec()

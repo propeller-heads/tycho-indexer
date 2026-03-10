@@ -84,44 +84,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chain = cli.chain;
     let encoder: Box<dyn TychoEncoder> = match cli.command {
         Commands::TychoRouter => {
-            let mut builder = TychoRouterEncoderBuilder::new().chain(chain);
-            let executors_addresses: Option<String> =
-                if let Some(config_path) = cli.executors_file_path {
-                    Some(fs::read_to_string(&config_path).map_err(|e| {
-                        EncodingError::FatalError(format!(
-                            "Error reading executors file from {config_path:?}: {e}",
-                        ))
-                    })?)
-                } else {
-                    None
-                };
-            let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
-                .add_default_encoders(executors_addresses)?;
-            builder = builder.swap_encoder_registry(swap_encoder_registry);
+            let executors_addresses = if let Some(config_path) = cli.executors_file_path {
+                Some(fs::read_to_string(&config_path).map_err(|e| {
+                    EncodingError::FatalError(format!(
+                        "Error reading executors file from {config_path:?}: {e}",
+                    ))
+                })?)
+            } else {
+                None
+            };
+            let swap_encoder_registry =
+                SwapEncoderRegistry::new(chain).add_default_encoders(executors_addresses)?;
+            let mut builder = TychoRouterEncoderBuilder::new()
+                .chain(chain)
+                .swap_encoder_registry(swap_encoder_registry);
             if let Some(router_address) = cli.router_address {
                 builder = builder.router_address(router_address);
             }
             builder.build()?
         }
-        Commands::TychoExecutor => TychoExecutorEncoderBuilder::new().build()?,
+        Commands::TychoExecutor => {
+            let swap_encoder_registry =
+                SwapEncoderRegistry::new(chain).add_default_encoders(None)?;
+            TychoExecutorEncoderBuilder::new()
+                .swap_encoder_registry(swap_encoder_registry)
+                .build()?
+        }
     };
 
     let encoded_solutions = encoder.encode_solutions(vec![solution])?;
     let encoded = serde_json::json!({
-            "swaps": format!("0x{}", hex::encode(&encoded_solutions[0].swaps)),
-            "interacting_with": format!("0x{}", hex::encode(&encoded_solutions[0].interacting_with)),
-            "function_signature": format!("{}",&encoded_solutions[0].function_signature),
-            "n_tokens": format!("{}", &encoded_solutions[0].n_tokens),
-            "permit": match encoded_solutions[0].permit.as_ref() {
-        Some(permit) => {
-            match PermitSingle::try_from(permit) {
-                Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
-                Err(_) => String::new(),
+        "swaps": format!("0x{}", hex::encode(encoded_solutions[0].swaps())),
+        "interacting_with": format!("0x{}", hex::encode(encoded_solutions[0].interacting_with())),
+        "function_signature": encoded_solutions[0].function_signature(),
+        "n_tokens": encoded_solutions[0].n_tokens().to_string(),
+        "permit": match encoded_solutions[0].permit() {
+            Some(permit) => {
+                match PermitSingle::try_from(permit) {
+                    Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
+                    Err(_) => String::new(),
+                }
             }
-        }
-        None => String::new(),
-    },
-        });
+            None => String::new(),
+        },
+    });
     // Output the encoded result as JSON to stdout
     println!(
         "{}",

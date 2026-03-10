@@ -31,7 +31,7 @@ use crate::encoding::{
 /// * `split_swap_strategy`: Encoder for split swaps
 /// * `router_address`: Address of the Tycho router contract
 #[derive(Clone)]
-pub struct TychoRouterEncoder {
+pub(crate) struct TychoRouterEncoder {
     chain: Chain,
     single_swap_strategy: SingleSwapStrategyEncoder,
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
@@ -40,7 +40,7 @@ pub struct TychoRouterEncoder {
 }
 
 impl TychoRouterEncoder {
-    pub fn new(
+    pub(crate) fn new(
         chain: Chain,
         swap_encoder_registry: SwapEncoderRegistry,
         router_address: Bytes,
@@ -68,27 +68,27 @@ impl TychoRouterEncoder {
         let solution = self.add_weth_swaps(solution, &self.chain);
 
         let protocols: HashSet<String> = solution
-            .swaps
+            .swaps()
             .iter()
             .map(|swap| swap.component().protocol_system.clone())
             .collect();
 
-        let mut encoded_solution = if (solution.swaps.len() == 1) ||
+        let mut encoded_solution = if (solution.swaps().len() == 1) ||
             ((protocols.len() == 1 &&
                 protocols
                     .iter()
                     .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str()))) &&
                 solution
-                    .swaps
+                    .swaps()
                     .iter()
-                    .all(|swap| swap.get_split() == 0.0))
+                    .all(|swap| swap.split() == 0.0))
         {
             self.single_swap_strategy
                 .encode_strategy(&solution)?
         } else if solution
-            .swaps
+            .swaps()
             .iter()
-            .all(|swap| swap.get_split() == 0.0)
+            .all(|swap| swap.split() == 0.0)
         {
             self.sequential_swap_strategy
                 .encode_strategy(&solution)?
@@ -97,15 +97,15 @@ impl TychoRouterEncoder {
                 .encode_strategy(&solution)?
         };
 
-        if solution.user_transfer_type == UserTransferType::TransferFromPermit2 {
+        if *solution.user_transfer_type() == UserTransferType::TransferFromPermit2 {
             let permit2 = Permit2::new()?;
             let permit = permit2.get_permit(
                 &self.router_address,
-                &solution.sender,
-                &solution.token_in,
-                &solution.amount_in,
+                solution.sender(),
+                solution.token_in(),
+                solution.amount_in(),
             )?;
-            encoded_solution.permit = Some(permit);
+            encoded_solution = encoded_solution.with_permit(permit);
         };
         Ok(encoded_solution)
     }
@@ -114,39 +114,39 @@ impl TychoRouterEncoder {
     /// contains a swap that goes from ETH to WETH or vice versa but doesn't include the
     /// corresponding wrapping or unwrapping swap.
     fn add_weth_swaps(&self, solution: &Solution, chain: &Chain) -> Solution {
-        let mut solution_with_added_wraps_unwraps: Vec<Swap> =
-            Vec::with_capacity(solution.swaps.len());
+        let swaps = solution.swaps();
+        let mut new_swaps: Vec<Swap> = Vec::with_capacity(swaps.len());
 
         // Check if we need to add a wrapping swap at the beginning of the solution
         if let Some(s) =
-            self._wrapping_bridge(&solution.token_in, &solution.swaps[0].token_in().address, chain)
+            self._wrapping_bridge(solution.token_in(), &swaps[0].token_in().address, chain)
         {
-            solution_with_added_wraps_unwraps.push(s);
+            new_swaps.push(s);
         }
 
         // Iterate through the swaps and add them to the new solution, adding wrapping/unwrapping
         // swaps in between if needed
-        for i in 0..solution.swaps.len() {
-            solution_with_added_wraps_unwraps.push(solution.swaps[i].clone());
-            if i + 1 < solution.swaps.len() {
-                let token_out = &solution.swaps[i].token_out().address;
-                let token_in = &solution.swaps[i + 1].token_in().address;
+        for i in 0..swaps.len() {
+            new_swaps.push(swaps[i].clone());
+            if i + 1 < swaps.len() {
+                let token_out = &swaps[i].token_out().address;
+                let token_in = &swaps[i + 1].token_in().address;
                 if let Some(s) = self._wrapping_bridge(token_out, token_in, chain) {
-                    solution_with_added_wraps_unwraps.push(s);
+                    new_swaps.push(s);
                 }
             }
         }
 
         // Check if we need to add an unwrapping swap at the end of the solution
-        if let Some(last_swap) = solution.swaps.last() {
+        if let Some(last_swap) = swaps.last() {
             if let Some(s) =
-                self._wrapping_bridge(&last_swap.token_out().address, &solution.token_out, chain)
+                self._wrapping_bridge(&last_swap.token_out().address, solution.token_out(), chain)
             {
-                solution_with_added_wraps_unwraps.push(s);
+                new_swaps.push(s);
             }
         }
 
-        Solution { swaps: solution_with_added_wraps_unwraps, ..solution.clone() }
+        solution.clone().with_swaps(new_swaps)
     }
 
     // This method checks if an ETH <-> WETH swap is needed between two tokens and
@@ -194,20 +194,21 @@ impl TychoEncoder for TychoRouterEncoder {
     /// * The token cannot appear more than once in the solution unless it is the first and last
     ///   token (i.e. a true cyclical swap).
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out {
+        if solution.exact_out() {
             return Err(EncodingError::FatalError(
                 "Currently only exact input solutions are supported".to_string(),
             ));
         }
-        if solution.swaps.is_empty() {
+        if solution.swaps().is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
         }
 
+        let swaps = solution.swaps();
         let mut solution_tokens = vec![];
         let mut split_tokens_already_considered = HashSet::new();
-        for (i, swap) in solution.swaps.iter().enumerate() {
+        for (i, swap) in swaps.iter().enumerate() {
             // so we don't count the split tokens more than once
-            if swap.get_split() != 0.0 {
+            if swap.split() != 0.0 {
                 if !split_tokens_already_considered.contains(&swap.token_in().address) {
                     solution_tokens.push(&swap.token_in().address);
                     split_tokens_already_considered.insert(&swap.token_in().address);
@@ -218,7 +219,7 @@ impl TychoEncoder for TychoRouterEncoder {
                     solution_tokens.push(&swap.token_in().address);
                 }
             }
-            if i == solution.swaps.len() - 1 {
+            if i == swaps.len() - 1 {
                 solution_tokens.push(&swap.token_out().address);
             }
         }
@@ -230,8 +231,8 @@ impl TychoEncoder for TychoRouterEncoder {
                 .collect::<HashSet<&Bytes>>()
                 .len()
         {
-            if let Some(last_swap) = solution.swaps.last() {
-                if *solution.swaps[0].token_in().address != *last_swap.token_out().address {
+            if let Some(last_swap) = swaps.last() {
+                if *swaps[0].token_in().address != *last_swap.token_out().address {
                     return Err(EncodingError::FatalError(
                         "Cyclical swaps are only allowed if they are the first and last token of a solution".to_string(),
                     ));
@@ -250,12 +251,12 @@ impl TychoEncoder for TychoRouterEncoder {
 /// # Fields
 /// * `swap_encoder_registry`: Registry of swap encoders
 #[derive(Clone)]
-pub struct TychoExecutorEncoder {
+pub(crate) struct TychoExecutorEncoder {
     swap_encoder_registry: SwapEncoderRegistry,
 }
 
 impl TychoExecutorEncoder {
-    pub fn new(swap_encoder_registry: SwapEncoderRegistry) -> Result<Self, EncodingError> {
+    pub(crate) fn new(swap_encoder_registry: SwapEncoderRegistry) -> Result<Self, EncodingError> {
         Ok(TychoExecutorEncoder { swap_encoder_registry })
     }
 
@@ -263,7 +264,7 @@ impl TychoExecutorEncoder {
         &self,
         solution: &Solution,
     ) -> Result<EncodedSolution, EncodingError> {
-        let grouped_swaps = group_swaps(&solution.swaps);
+        let grouped_swaps = group_swaps(solution.swaps());
         let number_of_groups = grouped_swaps.len();
         if number_of_groups > 1 {
             return Err(EncodingError::InvalidInput(format!(
@@ -286,7 +287,7 @@ impl TychoExecutorEncoder {
             })?;
 
         let encoding_context = EncodingContext {
-            exact_out: solution.exact_out,
+            exact_out: solution.exact_out(),
             router_address: None,
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
@@ -306,13 +307,12 @@ impl TychoExecutorEncoder {
             initial_protocol_data.extend(ple_encode(grouped_protocol_data));
         }
 
-        Ok(EncodedSolution {
-            swaps: initial_protocol_data,
-            interacting_with: swap_encoder.executor_address().clone(),
-            permit: None,
-            function_signature: "".to_string(),
-            n_tokens: 0,
-        })
+        Ok(EncodedSolution::new(
+            initial_protocol_data,
+            swap_encoder.executor_address().clone(),
+            "".to_string(),
+            0,
+        ))
     }
 }
 
@@ -336,7 +336,7 @@ impl TychoEncoder for TychoExecutorEncoder {
     /// A solution is considered valid if all the following conditions are met:
     /// * The solution is not exact out.
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out {
+        if solution.exact_out() {
             return Err(EncodingError::FatalError(
                 "Currently only exact input solutions are supported".to_string(),
             ));
@@ -445,25 +445,23 @@ mod tests {
         #[test]
         fn test_encode_router_calldata_split_swap_group() {
             let encoder = get_tycho_router_encoder();
-            let mut swap_usdc_eth = swap_usdc_eth_univ4();
-            swap_usdc_eth = swap_usdc_eth.split(0.5); // Set split to 50%
-            let solution = Solution {
-                exact_out: false,
-                token_in: usdc(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: eth(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_usdc_eth, swap_usdc_eth_univ4()],
-                ..Default::default()
-            };
+            let swap_usdc_eth = swap_usdc_eth_univ4().with_split(0.5);
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc(),
+                eth(),
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from_str("105_152_000000000000000000").unwrap(),
+                vec![swap_usdc_eth, swap_usdc_eth_univ4()],
+            );
 
             let encoded_solution_res = encoder.encode_solution(&solution);
             assert!(encoded_solution_res.is_ok());
 
             let encoded_solution = encoded_solution_res.unwrap();
             assert!(encoded_solution
-                .function_signature
+                .function_signature()
                 .contains("splitSwap"));
         }
 
@@ -494,23 +492,22 @@ mod tests {
                 default_token(dai().clone()),
             );
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: dai(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: dai(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_dai_usdc, swap_usdc_eth_univ4(), swap_weth_dai],
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                dai(),
+                dai(),
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from_str("105_152_000000000000000000").unwrap(),
+                vec![swap_dai_usdc, swap_usdc_eth_univ4(), swap_weth_dai],
+            );
 
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
-            assert_eq!(solution.swaps.len(), 4);
-            assert_eq!(solution.swaps[2].token_in().address, eth());
-            assert_eq!(solution.swaps[2].token_out().address, weth());
+            assert_eq!(solution.swaps().len(), 4);
+            assert_eq!(solution.swaps()[2].token_in().address, eth());
+            assert_eq!(solution.swaps()[2].token_out().address, weth());
             assert_eq!(
-                solution.swaps[2]
+                solution.swaps()[2]
                     .component()
                     .protocol_system,
                 "weth"
@@ -534,23 +531,22 @@ mod tests {
                 default_token(dai().clone()),
             );
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: eth(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: dai(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_weth_dai],
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                eth(),
+                dai(),
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from_str("105_152_000000000000000000").unwrap(),
+                vec![swap_weth_dai],
+            );
 
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
-            assert_eq!(solution.swaps.len(), 2);
-            assert_eq!(solution.swaps[0].token_in().address, eth());
-            assert_eq!(solution.swaps[0].token_out().address, weth());
+            assert_eq!(solution.swaps().len(), 2);
+            assert_eq!(solution.swaps()[0].token_in().address, eth());
+            assert_eq!(solution.swaps()[0].token_out().address, weth());
             assert_eq!(
-                solution.swaps[0]
+                solution.swaps()[0]
                     .component()
                     .protocol_system,
                 "weth"
@@ -563,20 +559,19 @@ mod tests {
             // after adding swap:  USDC -> ETH -> WETH
 
             let encoder = get_tycho_router_encoder();
-            let solution = Solution {
-                exact_out: false,
-                token_in: usdc(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: weth(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_usdc_eth_univ4()],
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc(),
+                weth(),
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from_str("105_152_000000000000000000").unwrap(),
+                vec![swap_usdc_eth_univ4()],
+            );
 
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
-            let last_swap = solution.swaps.last().unwrap();
-            assert_eq!(solution.swaps.len(), 2);
+            let last_swap = solution.swaps().last().unwrap();
+            assert_eq!(solution.swaps().len(), 2);
             assert_eq!(last_swap.token_in().address, eth());
             assert_eq!(last_swap.token_out().address, weth());
             assert_eq!(last_swap.component().protocol_system, "weth");
@@ -594,29 +589,34 @@ mod tests {
             let input_swaps = vec![swap_usdc_eth_univ4(), eth_weth_swap];
 
             let encoder = get_tycho_router_encoder();
-            let solution = Solution {
-                exact_out: false,
-                token_in: usdc(),
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: weth(),
-                min_amount_out: BigUint::from_str("105_152_000000000000000000").unwrap(),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: input_swaps.clone(),
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc(),
+                weth(),
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from_str("105_152_000000000000000000").unwrap(),
+                input_swaps.clone(),
+            );
 
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
-            assert_eq!(solution.swaps.len(), 2);
-            assert_eq!(solution.swaps, input_swaps);
+            assert_eq!(solution.swaps().len(), 2);
+            assert_eq!(solution.swaps(), input_swaps.as_slice());
         }
 
         #[test]
         fn test_validate_fails_for_exact_out() {
             let encoder = get_tycho_router_encoder();
-            let solution = Solution {
-                exact_out: true, // This should cause an error
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                BigUint::default(),
+                BigUint::default(),
+                vec![],
+            )
+            .with_exact_out(true);
             let result = encoder.validate_solution(&solution);
 
             assert!(result.is_err());
@@ -631,8 +631,15 @@ mod tests {
         #[test]
         fn test_validate_fails_no_swaps() {
             let encoder = get_tycho_router_encoder();
-            let solution =
-                Solution { exact_out: false, token_in: eth(), swaps: vec![], ..Default::default() };
+            let solution = Solution::new(
+                Bytes::default(),
+                Bytes::default(),
+                eth(),
+                Bytes::default(),
+                BigUint::default(),
+                BigUint::default(),
+                vec![],
+            );
 
             let result = encoder.validate_solution(&solution);
 
@@ -681,13 +688,15 @@ mod tests {
                 ),
             ];
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: dai(),
-                token_out: dai(),
+            let solution = Solution::new(
+                Bytes::default(),
+                Bytes::default(),
+                dai(),
+                dai(),
+                BigUint::default(),
+                BigUint::default(),
                 swaps,
-                ..Default::default()
-            };
+            );
 
             let result = encoder.validate_solution(&solution);
 
@@ -739,13 +748,15 @@ mod tests {
                 ),
             ];
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: dai(),
-                token_out: wbtc(),
+            let solution = Solution::new(
+                Bytes::default(),
+                Bytes::default(),
+                dai(),
+                wbtc(),
+                BigUint::default(),
+                BigUint::default(),
                 swaps,
-                ..Default::default()
-            };
+            );
 
             let result = encoder.validate_solution(&solution);
 
@@ -784,7 +795,7 @@ mod tests {
                     default_token(dai()),
                     default_token(weth()),
                 )
-                .split(0.5),
+                .with_split(0.5),
                 Swap::new(
                     ProtocolComponent {
                         id: "0x0000000000000000000000000000000000000000".to_string(),
@@ -796,13 +807,15 @@ mod tests {
                 ),
             ];
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: weth(),
-                token_out: weth(),
+            let solution = Solution::new(
+                Bytes::default(),
+                Bytes::default(),
+                weth(),
+                weth(),
+                BigUint::default(),
+                BigUint::default(),
                 swaps,
-                ..Default::default()
-            };
+            );
 
             let result = encoder.validate_solution(&solution);
 
@@ -838,16 +851,15 @@ mod tests {
                 default_token(token_out.clone()),
             );
 
-            let solution = Solution {
-                exact_out: false,
+            let solution = Solution::new(
+                Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Bytes::default(),
                 token_in,
-                amount_in: BigUint::from(1000000000000000000u64),
                 token_out,
-                min_amount_out: BigUint::from(1000000000000000000u64),
-                sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                swaps: vec![swap],
-                ..Default::default()
-            };
+                BigUint::from(1000000000000000000u64),
+                BigUint::from(1000000000000000000u64),
+                vec![swap],
+            );
 
             let encoded_solutions = encoder
                 .encode_solutions(vec![solution])
@@ -855,10 +867,10 @@ mod tests {
             let encoded = encoded_solutions
                 .first()
                 .expect("Expected at least one encoded solution");
-            let hex_protocol_data = encode(&encoded.swaps);
+            let hex_protocol_data = encode(encoded.swaps());
             assert_eq!(
-                encoded.interacting_with,
-                Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap()
+                encoded.interacting_with(),
+                &Bytes::from_str("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f").unwrap()
             );
             assert_eq!(
                 hex_protocol_data,
@@ -893,16 +905,15 @@ mod tests {
                 default_token(token_out.clone()),
             );
 
-            let solution = Solution {
-                exact_out: false,
+            let solution = Solution::new(
+                Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+                Bytes::default(),
                 token_in,
-                amount_in: BigUint::from(1000000000000000000u64),
                 token_out,
-                min_amount_out: BigUint::from(1000000000000000000u64),
-                sender: Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
-                swaps: vec![swap.clone(), swap],
-                ..Default::default()
-            };
+                BigUint::from(1000000000000000000u64),
+                BigUint::from(1000000000000000000u64),
+                vec![swap.clone(), swap],
+            );
 
             let result = encoder.encode_solutions(vec![solution]);
             assert!(result.is_err());
@@ -916,16 +927,15 @@ mod tests {
             let usdc = usdc();
             let pepe = pepe();
 
-            let solution = Solution {
-                exact_out: false,
-                token_in: usdc,
-                amount_in: BigUint::from_str("1000_000000").unwrap(),
-                token_out: pepe,
-                min_amount_out: BigUint::from(1000000000000000000u64),
-                sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-                swaps: vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
-                ..Default::default()
-            };
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc,
+                pepe,
+                BigUint::from_str("1000_000000").unwrap(),
+                BigUint::from(1000000000000000000u64),
+                vec![swap_usdc_eth_univ4(), swap_eth_pepe_univ4()],
+            );
 
             let encoded_solutions = encoder
                 .encode_solutions(vec![solution])
@@ -933,10 +943,10 @@ mod tests {
             let encoded_solution = encoded_solutions
                 .first()
                 .expect("Expected at least one encoded solution");
-            let hex_protocol_data = encode(&encoded_solution.swaps);
+            let hex_protocol_data = encode(encoded_solution.swaps());
             assert_eq!(
-                encoded_solution.interacting_with,
-                Bytes::from_str("0xf62849f9a0b5bf2913b396098f7c7019b51a820a").unwrap()
+                encoded_solution.interacting_with(),
+                &Bytes::from_str("0xf62849f9a0b5bf2913b396098f7c7019b51a820a").unwrap()
             );
             assert_eq!(
                 hex_protocol_data,

@@ -47,18 +47,16 @@ fn test_sequential_swap_strategy_encoder() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        user_transfer_type: UserTransferType::TransferFromPermit2,
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2);
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -109,17 +107,15 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -232,19 +228,16 @@ fn test_sequential_strategy_cyclic_swap() {
 
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: usdc.clone(),
-        amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
-        token_out: usdc.clone(),
-        min_amount_out: BigUint::from_str("99389294").unwrap(), /* Expected output
-                                                                 * from test */
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_usdc_weth, swap_weth_usdc],
-        user_transfer_type: UserTransferType::TransferFromPermit2,
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        usdc.clone(),
+        usdc.clone(),
+        BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+        BigUint::from_str("99389294").unwrap(),
+        vec![swap_usdc_weth, swap_weth_usdc],
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2);
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -355,19 +348,16 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
 
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: usdc.clone(),
-        amount_in: BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
-        token_out: usdc.clone(),
-        min_amount_out: BigUint::from_str("99389294").unwrap(), /* Expected output
-                                                                 * from test */
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_usdc_weth, swap_weth_usdc],
-        user_transfer_type: UserTransferType::UseVaultsFunds,
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        usdc.clone(),
+        usdc.clone(),
+        BigUint::from_str("100000000").unwrap(), // 100 USDC (6 decimals)
+        BigUint::from_str("99389294").unwrap(),
+        vec![swap_usdc_weth, swap_weth_usdc],
+    )
+    .with_user_transfer_type(UserTransferType::UseVaultsFunds);
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -456,19 +446,17 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
     );
     let encoder = get_tycho_router_encoder();
 
-    let solution = Solution {
-        exact_out: false,
-        token_in: weth,
-        amount_in: BigUint::from_str("1_000000000000000000").unwrap(),
-        token_out: usdc,
-        min_amount_out: BigUint::from_str("26173932").unwrap(),
-        sender: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        receiver: Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
-        swaps: vec![swap_weth_wbtc, swap_wbtc_usdc],
-        client_fee_bps: 100, // 1% fee
-        client_fee_receiver: client_fee_receiver(),
-        ..Default::default()
-    };
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        weth,
+        usdc,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("26173932").unwrap(),
+        vec![swap_weth_wbtc, swap_wbtc_usdc],
+    )
+    .with_client_fee_bps(100) // 1% fee
+    .with_client_fee_receiver(client_fee_receiver());
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])

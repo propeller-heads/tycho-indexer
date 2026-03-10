@@ -75,7 +75,7 @@ impl SwapEncoderRegistry {
         Ok(self)
     }
 
-    // Adds an encoder to the registry
+    /// Adds an encoder to the registry, replacing any existing encoder for the same protocol.
     pub fn register_encoder(mut self, protocol: &str, encoder: Box<dyn SwapEncoder>) -> Self {
         self.encoders
             .insert(protocol.to_string(), encoder);

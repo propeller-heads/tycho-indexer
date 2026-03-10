@@ -35,26 +35,3 @@ pub mod biguint_string {
         deserialize_biguint(deserializer)
     }
 }
-
-pub mod biguint_string_option {
-    use super::*;
-
-    pub fn serialize<S>(value: &Option<BigUint>, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match value {
-            Some(v) => serialize_biguint(v, serializer),
-            None => serializer.serialize_none(),
-        }
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<BigUint>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Option::<String>::deserialize(deserializer)?
-            .map(|s| BigUint::from_str(&s).map_err(serde::de::Error::custom))
-            .transpose()
-    }
-}

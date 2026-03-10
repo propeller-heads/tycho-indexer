@@ -96,23 +96,26 @@ pub fn encode_tycho_router_call(
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
 ) -> Result<Transaction, EncodingError> {
-    let given_amount = biguint_to_u256(&solution.amount_in);
-    let min_amount_out = biguint_to_u256(&solution.min_amount_out);
-    let given_token = bytes_to_address(&solution.token_in)?;
-    let checked_token = bytes_to_address(&solution.token_out)?;
-    let receiver = bytes_to_address(&solution.receiver)?;
-    let n_tokens = U256::from(encoded_solution.n_tokens);
-    let max_client_contribution = biguint_to_u256(&solution.max_client_contribution);
+    let given_amount = biguint_to_u256(solution.amount_in());
+    let min_amount_out = biguint_to_u256(solution.min_amount_out());
+    let given_token = bytes_to_address(solution.token_in())?;
+    let checked_token = bytes_to_address(solution.token_out())?;
+    let receiver = bytes_to_address(solution.receiver())?;
+    let n_tokens = U256::from(encoded_solution.n_tokens());
+    let max_client_contribution = biguint_to_u256(solution.max_client_contribution());
     let deadline = U256::MAX;
-    let (client_fee_receiver, client_signature) = if solution.client_fee_receiver.is_empty() {
+    let (client_fee_receiver, client_signature) = if solution
+        .client_fee_receiver()
+        .is_empty()
+    {
         (Address::ZERO, vec![])
     } else {
-        let router_address = bytes_to_address(&encoded_solution.interacting_with)?;
-        let client_fee_receiver = bytes_to_address(&solution.client_fee_receiver)?;
+        let router_address = bytes_to_address(encoded_solution.interacting_with())?;
+        let client_fee_receiver = bytes_to_address(solution.client_fee_receiver())?;
         let sig = sign_client_fee(
             chain_id,
             router_address,
-            solution.client_fee_bps,
+            solution.client_fee_bps(),
             client_fee_receiver,
             max_client_contribution,
             deadline,
@@ -122,29 +125,30 @@ pub fn encode_tycho_router_call(
 
     // ABI tuple matching ClientFeeParams: (uint16, address, uint256, uint256, bytes)
     let client_fee_params = (
-        solution.client_fee_bps,
+        solution.client_fee_bps(),
         client_fee_receiver,
         max_client_contribution,
         deadline,
         client_signature,
     );
-    let (permit, signature) = if let Some(p) = encoded_solution.permit {
+    let permit_single = encoded_solution.permit().cloned();
+    let (permit, signature) = if let Some(ref p) = permit_single {
         let permit = Some(
-            PermitSingle::try_from(&p)
+            PermitSingle::try_from(p)
                 .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?,
         );
         let signer = signer
             .ok_or(EncodingError::FatalError("Signer must be set to use permit2".to_string()))?;
-        let signature = sign_permit(chain_id, &p, signer)?;
+        let signature = sign_permit(chain_id, p, signer)?;
         (permit, signature.as_bytes().to_vec())
     } else {
         (None, vec![])
     };
 
-    let method_calldata = if encoded_solution
-        .function_signature
-        .contains("singleSwapPermit2")
-    {
+    let function_signature = encoded_solution.function_signature();
+    let swaps = encoded_solution.swaps().to_vec();
+
+    let method_calldata = if function_signature.contains("singleSwapPermit2") {
         (
             given_amount,
             given_token,
@@ -156,15 +160,11 @@ pub fn encode_tycho_router_call(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
             signature,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
-    } else if encoded_solution
-        .function_signature
-        .contains("singleSwapUsingVault") ||
-        encoded_solution
-            .function_signature
-            .contains("singleSwap")
+    } else if function_signature.contains("singleSwapUsingVault") ||
+        function_signature.contains("singleSwap")
     {
         (
             given_amount,
@@ -173,13 +173,10 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             client_fee_params,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
-    } else if encoded_solution
-        .function_signature
-        .contains("sequentialSwapPermit2")
-    {
+    } else if function_signature.contains("sequentialSwapPermit2") {
         (
             given_amount,
             given_token,
@@ -191,15 +188,11 @@ pub fn encode_tycho_router_call(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
             signature,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
-    } else if encoded_solution
-        .function_signature
-        .contains("sequentialSwapUsingVault") ||
-        encoded_solution
-            .function_signature
-            .contains("sequentialSwap")
+    } else if function_signature.contains("sequentialSwapUsingVault") ||
+        function_signature.contains("sequentialSwap")
     {
         (
             given_amount,
@@ -208,13 +201,10 @@ pub fn encode_tycho_router_call(
             min_amount_out,
             receiver,
             client_fee_params,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
-    } else if encoded_solution
-        .function_signature
-        .contains("splitSwapPermit2")
-    {
+    } else if function_signature.contains("splitSwapPermit2") {
         (
             given_amount,
             given_token,
@@ -227,15 +217,11 @@ pub fn encode_tycho_router_call(
                 "permit2 object must be set to use permit2".to_string(),
             ))?,
             signature,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
-    } else if encoded_solution
-        .function_signature
-        .contains("splitSwapUsingVault") ||
-        encoded_solution
-            .function_signature
-            .contains("splitSwap")
+    } else if function_signature.contains("splitSwapUsingVault") ||
+        function_signature.contains("splitSwap")
     {
         (
             given_amount,
@@ -245,20 +231,26 @@ pub fn encode_tycho_router_call(
             n_tokens,
             receiver,
             client_fee_params,
-            encoded_solution.swaps,
+            swaps,
         )
             .abi_encode()
     } else {
         Err(EncodingError::FatalError("Invalid function signature for Tycho router".to_string()))?
     };
 
-    let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.token_in == *native_address {
-        solution.amount_in.clone()
+    let contract_interaction = encode_input(function_signature, method_calldata);
+    let value = if solution.token_in() == native_address {
+        solution.amount_in().clone()
     } else {
         BigUint::ZERO
     };
-    Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+    Ok(Transaction {
+        to: encoded_solution
+            .interacting_with()
+            .clone(),
+        value,
+        data: contract_interaction,
+    })
 }
 
 /// Signs `ClientFeeParams` using EIP-712, with the hardcoded `CLIENT_FEE_RECEIVER_PK`
