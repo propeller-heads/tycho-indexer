@@ -15,6 +15,7 @@ pub struct LiquoriceClientBuilder {
     quote_tokens: Option<HashSet<Bytes>>,
     poll_time: Duration,
     quote_timeout: Duration,
+    quote_expiry_secs: u64,
 }
 
 impl LiquoriceClientBuilder {
@@ -28,6 +29,7 @@ impl LiquoriceClientBuilder {
             quote_tokens: None,
             poll_time: Duration::from_secs(5),
             quote_timeout: Duration::from_secs(5),
+            quote_expiry_secs: 300,
         }
     }
 
@@ -56,6 +58,12 @@ impl LiquoriceClientBuilder {
         self
     }
 
+    /// Set the expiry duration for quote requests in seconds
+    pub fn quote_expiry_secs(mut self, secs: u64) -> Self {
+        self.quote_expiry_secs = secs;
+        self
+    }
+
     pub fn build(self) -> Result<LiquoriceClient, RFQError> {
         let quote_tokens;
         if let Some(tokens) = self.quote_tokens {
@@ -73,6 +81,7 @@ impl LiquoriceClientBuilder {
             self.auth_key,
             self.poll_time,
             self.quote_timeout,
+            self.quote_expiry_secs,
         )
     }
 }

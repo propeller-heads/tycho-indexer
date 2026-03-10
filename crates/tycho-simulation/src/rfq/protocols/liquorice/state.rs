@@ -285,6 +285,7 @@ mod tests {
             "".to_string(),
             Duration::from_secs(0),
             Duration::from_secs(30),
+            300,
         )
         .unwrap()
     }

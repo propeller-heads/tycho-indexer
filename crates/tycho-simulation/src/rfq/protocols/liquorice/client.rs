@@ -42,12 +42,15 @@ pub struct LiquoriceClient {
     // Min tvl value in the quote token.
     tvl: f64,
     // solver header for authentication
+    #[serde(skip_serializing, default)]
     auth_solver: String,
     // key header for authentication
+    #[serde(skip_serializing, default)]
     auth_key: String,
     quote_tokens: HashSet<Bytes>,
     poll_time: Duration,
     quote_timeout: Duration,
+    quote_expiry_secs: u64,
 }
 
 impl LiquoriceClient {
@@ -63,6 +66,7 @@ impl LiquoriceClient {
         auth_key: String,
         poll_time: Duration,
         quote_timeout: Duration,
+        quote_expiry_secs: u64,
     ) -> Result<Self, RFQError> {
         Ok(Self {
             chain,
@@ -75,6 +79,7 @@ impl LiquoriceClient {
             quote_tokens,
             poll_time,
             quote_timeout,
+            quote_expiry_secs,
         })
     }
 
@@ -405,7 +410,7 @@ impl RFQClient for LiquoriceClient {
             .duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|_| RFQError::ParsingError("SystemTime before UNIX EPOCH!".into()))?
             .as_secs() +
-            300;
+            self.quote_expiry_secs;
 
         let rfq_id = uuid::Uuid::new_v4().to_string();
 
@@ -618,6 +623,7 @@ mod tests {
             "test_key".to_string(),
             Duration::from_secs(5),
             Duration::from_secs(5),
+            300,
         )
         .unwrap()
     }
@@ -673,6 +679,7 @@ mod tests {
             quote_tokens: HashSet::new(),
             poll_time: Duration::from_secs(0),
             quote_timeout,
+            quote_expiry_secs: 300,
         }
     }
 
