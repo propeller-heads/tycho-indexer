@@ -45,6 +45,14 @@ use crate::{
     },
 };
 
+pub enum ExtensionType {
+    NoSwapCallPoints,
+    Oracle,
+    Twamm,
+    MevCapture,
+    BoostedFees,
+}
+
 struct TimedStateDetails {
     rate_token0: u128,
     rate_token1: u128,
@@ -136,118 +144,139 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
             ))
         };
 
-        Ok(if has_no_swap_call_points(extension) {
-            match pool_type_config {
-                EvmPoolTypeConfig::FullRange(pool_type_config) => {
-                    Self::FullRange(FullRangePool::new(
-                        FullRangePoolKey {
+        match extension_type(extension) {
+            None => Err(InvalidSnapshotError::ValueError(format!(
+                "unsupported extension {extension:x}"
+            ))),
+            Some(extension_type) => Ok(match extension_type {
+                ExtensionType::NoSwapCallPoints => match pool_type_config {
+                    EvmPoolTypeConfig::FullRange(pool_type_config) => {
+                        Self::FullRange(FullRangePool::new(
+                            FullRangePoolKey {
+                                token0,
+                                token1,
+                                config: PoolConfig { extension, fee, pool_type_config },
+                            },
+                            FullRangePoolState { sqrt_ratio, liquidity },
+                        )?)
+                    }
+                    EvmPoolTypeConfig::Stableswap(pool_type_config) => {
+                        Self::Stableswap(StableswapPool::new(
+                            StableswapPoolKey {
+                                token0,
+                                token1,
+                                config: PoolConfig { extension, fee, pool_type_config },
+                            },
+                            StableswapPoolState { sqrt_ratio, liquidity },
+                        )?)
+                    }
+                    EvmPoolTypeConfig::Concentrated(pool_type_config) => {
+                        let (key, state, tick, ticks) =
+                            concentrated_pool(&state_attrs, pool_type_config)?;
+
+                        Self::Concentrated(ConcentratedPool::new(key, state, tick, ticks)?)
+                    }
+                },
+                ExtensionType::Oracle => Self::Oracle(OraclePool::new(
+                    EvmOraclePoolKey {
+                        token0,
+                        token1,
+                        config: PoolConfig {
+                            extension,
+                            fee,
+                            pool_type_config: FullRangePoolTypeConfig,
+                        },
+                    },
+                    EvmFullRangePoolState { sqrt_ratio, liquidity },
+                )?),
+                ExtensionType::Twamm => {
+                    let TimedStateDetails {
+                        rate_token0: token0_sale_rate,
+                        rate_token1: token1_sale_rate,
+                        last_time: last_execution_time,
+                        rate_deltas: virtual_order_deltas,
+                    } = timed_state_details(state_attrs)?;
+
+                    Self::Twamm(TwammPool::new(
+                        EvmTwammPoolKey {
                             token0,
                             token1,
-                            config: PoolConfig { extension, fee, pool_type_config },
+                            config: PoolConfig {
+                                extension,
+                                fee,
+                                pool_type_config: FullRangePoolTypeConfig,
+                            },
                         },
-                        FullRangePoolState { sqrt_ratio, liquidity },
+                        TwammPoolState {
+                            full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
+                            token0_sale_rate,
+                            token1_sale_rate,
+                            last_execution_time,
+                        },
+                        virtual_order_deltas,
                     )?)
                 }
-                EvmPoolTypeConfig::Stableswap(pool_type_config) => {
-                    Self::Stableswap(StableswapPool::new(
-                        StableswapPoolKey {
-                            token0,
-                            token1,
-                            config: PoolConfig { extension, fee, pool_type_config },
-                        },
-                        StableswapPoolState { sqrt_ratio, liquidity },
-                    )?)
-                }
-                EvmPoolTypeConfig::Concentrated(pool_type_config) => {
-                    let (key, state, tick, ticks) =
+                ExtensionType::MevCapture => {
+                    let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
+                        return Err(InvalidSnapshotError::ValueError(
+                            "expected concentrated pool type config for MEVCapture pool"
+                                .to_string(),
+                        ));
+                    };
+
+                    let (key, concentrated_state, tick, ticks) =
                         concentrated_pool(&state_attrs, pool_type_config)?;
 
-                    Self::Concentrated(ConcentratedPool::new(key, state, tick, ticks)?)
+                    Self::MevCapture(MevCapturePool::new(key, tick, concentrated_state, ticks)?)
                 }
-            }
-        } else if extension == ORACLE_ADDRESS {
-            Self::Oracle(OraclePool::new(
-                EvmOraclePoolKey {
-                    token0,
-                    token1,
-                    config: PoolConfig {
-                        extension,
-                        fee,
-                        pool_type_config: FullRangePoolTypeConfig,
-                    },
-                },
-                EvmFullRangePoolState { sqrt_ratio, liquidity },
-            )?)
-        } else if extension == TWAMM_ADDRESS {
-            let TimedStateDetails {
-                rate_token0: token0_sale_rate,
-                rate_token1: token1_sale_rate,
-                last_time: last_execution_time,
-                rate_deltas: virtual_order_deltas,
-            } = timed_state_details(state_attrs)?;
+                ExtensionType::BoostedFees => {
+                    let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
+                        return Err(InvalidSnapshotError::ValueError(
+                            "expected concentrated pool type config for BoostedFees pool"
+                                .to_string(),
+                        ));
+                    };
 
-            Self::Twamm(TwammPool::new(
-                EvmTwammPoolKey {
-                    token0,
-                    token1,
-                    config: PoolConfig {
-                        extension,
-                        fee,
-                        pool_type_config: FullRangePoolTypeConfig,
-                    },
-                },
-                TwammPoolState {
-                    full_range_pool_state: FullRangePoolState { sqrt_ratio, liquidity },
-                    token0_sale_rate,
-                    token1_sale_rate,
-                    last_execution_time,
-                },
-                virtual_order_deltas,
-            )?)
-        } else if extension == MEV_CAPTURE_ADDRESS {
-            let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
-                return Err(InvalidSnapshotError::ValueError(
-                    "expected concentrated pool type config for MEVCapture pool".to_string(),
-                ));
-            };
+                    let (key, concentrated_pool_state, tick, ticks) =
+                        concentrated_pool(&state_attrs, pool_type_config)?;
 
-            let (key, concentrated_state, tick, ticks) =
-                concentrated_pool(&state_attrs, pool_type_config)?;
+                    let TimedStateDetails {
+                        rate_token0: donate_rate0,
+                        rate_token1: donate_rate1,
+                        last_time: last_donate_time,
+                        rate_deltas: donate_rate_deltas,
+                    } = timed_state_details(state_attrs)?;
 
-            Self::MevCapture(MevCapturePool::new(key, tick, concentrated_state, ticks)?)
-        } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
-            let EvmPoolTypeConfig::Concentrated(pool_type_config) = pool_type_config else {
-                return Err(InvalidSnapshotError::ValueError(
-                    "expected concentrated pool type config for BoostedFees pool".to_string(),
-                ));
-            };
-
-            let (key, concentrated_pool_state, tick, ticks) =
-                concentrated_pool(&state_attrs, pool_type_config)?;
-
-            let TimedStateDetails {
-                rate_token0: donate_rate0,
-                rate_token1: donate_rate1,
-                last_time: last_donate_time,
-                rate_deltas: donate_rate_deltas,
-            } = timed_state_details(state_attrs)?;
-
-            Self::BoostedFees(BoostedFeesPool::new(
-                key,
-                concentrated_pool_state,
-                donate_rate0,
-                donate_rate1,
-                last_donate_time,
-                donate_rate_deltas,
-                ticks,
-                tick,
-            )?)
-        } else {
-            return Err(InvalidSnapshotError::ValueError(format!(
-                "unsupported extension {extension:x}"
-            )))
-        })
+                    Self::BoostedFees(BoostedFeesPool::new(
+                        key,
+                        concentrated_pool_state,
+                        donate_rate0,
+                        donate_rate1,
+                        last_donate_time,
+                        donate_rate_deltas,
+                        ticks,
+                        tick,
+                    )?)
+                }
+            }),
+        }
     }
+}
+
+pub fn extension_type(extension: Address) -> Option<ExtensionType> {
+    Some(if has_no_swap_call_points(extension) {
+        ExtensionType::NoSwapCallPoints
+    } else if extension == ORACLE_ADDRESS {
+        ExtensionType::Oracle
+    } else if extension == TWAMM_ADDRESS {
+        ExtensionType::Twamm
+    } else if extension == MEV_CAPTURE_ADDRESS {
+        ExtensionType::MevCapture
+    } else if extension == BOOSTED_FEES_CONCENTRATED_ADDRESS {
+        ExtensionType::BoostedFees
+    } else {
+        return None;
+    })
 }
 
 fn attribute<'a>(
