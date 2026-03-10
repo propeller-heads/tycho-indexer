@@ -20,9 +20,7 @@ use tycho_simulation::rfq::{
             client::HashflowClient, client_builder::HashflowClientBuilder, state::HashflowState,
         },
         liquorice::{
-            client::LiquoriceClient,
-            client_builder::LiquoriceClientBuilder,
-            state::LiquoriceState,
+            client::LiquoriceClient, client_builder::LiquoriceClientBuilder, state::LiquoriceState,
         },
     },
     stream::RFQStreamBuilder,
