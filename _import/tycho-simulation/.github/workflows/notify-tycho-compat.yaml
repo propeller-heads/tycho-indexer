@@ -6,10 +6,7 @@
 # the compatibility-check workflow in propeller-heads/tycho so the meta-crate
 # is kept in sync automatically.
 #
-# Required repository secret: TYCHO_COMPAT_TOKEN
-#   A fine-grained PAT or GitHub App token with:
-#     - Actions: write  (to trigger workflow_dispatch on propeller-heads/tycho)
-#     - Pull requests: write  (so the receiving workflow can open a PR)
+# Uses the built-in GITHUB_TOKEN secret — no additional configuration required.
 # ---------------------------------------------------------------------------
 
 name: Notify Tycho Compat
@@ -28,7 +25,7 @@ jobs:
     steps:
       - name: Dispatch compatibility-check workflow
         env:
-          GH_TOKEN: ${{ secrets.TYCHO_COMPAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh workflow run compatibility-check.yaml \
             --repo propeller-heads/tycho \
