@@ -614,3 +614,86 @@ impl ProtocolSim for AerodromeSlipstreamsState {
         crate::evm::query_pool_swap::query_pool_swap(self, params)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::{Sign, I256, U256};
+    use tycho_common::simulation::errors::SimulationError;
+
+    use super::*;
+    use crate::evm::protocol::utils::{
+        slipstreams::{dynamic_fee_module::DynamicFeeConfig, observations::Observation},
+        uniswap::{
+            tick_list::TickInfo,
+            tick_math::{
+                get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MIN_SQRT_RATIO,
+                MIN_TICK,
+            },
+        },
+    };
+
+    fn create_basic_test_pool() -> AerodromeSlipstreamsState {
+        let sqrt_price = get_sqrt_ratio_at_tick(0).expect("Failed to calculate sqrt price");
+        let ticks = vec![TickInfo::new(-120, 0).unwrap(), TickInfo::new(120, 0).unwrap()];
+        AerodromeSlipstreamsState::new(
+            "test-pool".to_string(),
+            1_000_000,
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            0,
+            1,
+            3000,
+            1,
+            0,
+            ticks,
+            vec![Observation::default()],
+            DynamicFeeConfig::new(3000, 10_000, 1),
+        )
+        .expect("Failed to create pool")
+    }
+
+    #[test]
+    fn test_swap_price_limit_out_of_range_returns_error() {
+        let pool = create_basic_test_pool();
+        let amount = I256::checked_from_sign_and_abs(Sign::Positive, U256::from(1000u64)).unwrap();
+
+        let result = pool.swap(true, amount, Some(pool.sqrt_price));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(true, amount, Some(MIN_SQRT_RATIO));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(false, amount, Some(pool.sqrt_price));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(false, amount, Some(MAX_SQRT_RATIO));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+    }
+
+    #[test]
+    fn test_swap_at_extreme_price_returns_error() {
+        let sqrt_price = MIN_SQRT_RATIO + U256::from(1u64);
+        let tick = get_tick_at_sqrt_ratio(sqrt_price).expect("Failed to calculate tick");
+        let ticks =
+            vec![TickInfo::new(MIN_TICK, 0).unwrap(), TickInfo::new(MIN_TICK + 1, 0).unwrap()];
+        let pool = AerodromeSlipstreamsState::new(
+            "test-pool".to_string(),
+            1_000_000,
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            0,
+            1,
+            3000,
+            1,
+            tick,
+            ticks,
+            vec![Observation::default()],
+            DynamicFeeConfig::new(3000, 10_000, 1),
+        )
+        .expect("Failed to create pool");
+
+        let amount = I256::checked_from_sign_and_abs(Sign::Positive, U256::from(1000u64)).unwrap();
+        let result = pool.swap(true, amount, None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+    }
+}
