@@ -647,6 +647,80 @@ mod tests {
         );
     }
 
+    #[rstest]
+    fn test_force_update_accounts_overwrites_existing(mock_db: PreCachedDB) {
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+
+        // Simulate a placeholder proxy inserted by another decoder's snapshot loop.
+        mock_db
+            .init_account(address, AccountInfo::default(), None, true)
+            .expect("placeholder init should succeed");
+
+        // Now force-overwrite with the real proxy (authoritative vm_storage data).
+        let storage_slot = U256::from(1);
+        let storage_value = U256::from(42);
+        let mut slots = HashMap::new();
+        slots.insert(storage_slot, storage_value);
+        let update = AccountUpdate::new(
+            address,
+            Chain::Ethereum,
+            slots,
+            Some(U256::from(100)),
+            Some(Vec::<u8>::new()),
+            ChangeType::Creation,
+        );
+        mock_db
+            .force_update_accounts(vec![update])
+            .expect("force update should succeed");
+
+        let info = mock_db
+            .basic_ref(address)
+            .unwrap()
+            .unwrap();
+        assert_eq!(info.balance, U256::from(100));
+        assert_eq!(
+            mock_db
+                .get_storage(&address, &storage_slot)
+                .unwrap(),
+            storage_value
+        );
+    }
+
+    #[rstest]
+    fn test_force_update_accounts_non_creation_ignored(mock_db: PreCachedDB) {
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let original_balance = U256::from(10);
+
+        mock_db
+            .init_account(
+                address,
+                AccountInfo { balance: original_balance, ..Default::default() },
+                None,
+                true,
+            )
+            .expect("init should succeed");
+
+        // A non-Creation update should be ignored by force_update_accounts.
+        let update = AccountUpdate::new(
+            address,
+            Chain::Ethereum,
+            HashMap::new(),
+            Some(U256::from(999)),
+            None,
+            ChangeType::Update,
+        );
+        mock_db
+            .force_update_accounts(vec![update])
+            .expect("force update should succeed");
+
+        // Balance must remain unchanged.
+        let info = mock_db
+            .basic_ref(address)
+            .unwrap()
+            .unwrap();
+        assert_eq!(info.balance, original_balance);
+    }
+
     /// This test requires a running TychoDB instance.
     ///
     /// To run this test, start TychoDB with the following command:

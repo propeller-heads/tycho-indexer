@@ -399,25 +399,34 @@ where
                     }
                 }
 
+                // Split proxy accounts by change type:
+                // - Creation: new proxies that must overwrite any existing placeholder
+                // - Update: existing proxies whose storage is being refreshed (handled normally)
+                let mut proxy_creates: Vec<AccountUpdate> = Vec::new();
+                let mut proxy_updates: HashMap<Address, AccountUpdate> = HashMap::new();
+                for (addr, update) in proxy_token_accounts {
+                    if matches!(update.change, ChangeType::Creation) {
+                        proxy_creates.push(update);
+                    } else {
+                        proxy_updates.insert(addr, update);
+                    }
+                }
+
                 info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     header.clone().block(),
                     Some(storage_by_address),
-                    HashMap::new(),
+                    proxy_updates,
                 )
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
 
-                // Force-overwrite proxy token accounts so that authoritative vm_storage data
+                // Force-overwrite new proxy token accounts so that authoritative vm_storage data
                 // always wins over any empty placeholder previously inserted by another
                 // decoder's snapshot loop (which uses init_account / init-if-not-exists).
-                if !proxy_token_accounts.is_empty() {
+                if !proxy_creates.is_empty() {
                     SHARED_TYCHO_DB
-                        .force_update_accounts(
-                            proxy_token_accounts
-                                .into_values()
-                                .collect(),
-                        )
+                        .force_update_accounts(proxy_creates)
                         .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
                 }
                 info!("Engine updated");
