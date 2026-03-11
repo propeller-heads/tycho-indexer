@@ -141,12 +141,23 @@ pub struct PlansConfig {
 }
 
 impl PlansConfig {
-    pub fn resolve(&self, plan_name: &str) -> Result<&PlanRestrictions, RpcError> {
-        self.plans
-            .get(plan_name)
-            .ok_or_else(|| {
-                RpcError::PlanRestrictionViolation(format!("unknown plan: '{plan_name}'"))
-            })
+    /// Resolves plan restrictions for the given plan name.
+    ///
+    /// Falls back to the "default" plan if the name isn't found. Returns `None`
+    /// (unrestricted) if neither the requested plan nor a "default" plan exists.
+    pub fn resolve(&self, plan_name: &str) -> Option<&PlanRestrictions> {
+        self.plans.get(plan_name).or_else(|| {
+            let default = self.plans.get("default");
+            if default.is_some() {
+                warn!("unknown plan '{plan_name}', falling back to 'default' plan");
+            } else {
+                warn!(
+                    "unknown plan '{plan_name}' and no 'default' plan configured, \
+                     defaulting to unrestricted"
+                );
+            }
+            default
+        })
     }
 
     pub fn is_empty(&self) -> bool {
@@ -334,14 +345,22 @@ plans:
     }
 
     #[test]
-    fn test_resolve_unknown_plan() {
+    fn test_resolve_unknown_plan_falls_back_to_default_plan() {
+        let default_restrictions = PlanRestrictions {
+            component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 500.0 }),
+            ..Default::default()
+        };
+        let config = PlansConfig {
+            plans: HashMap::from([("default".to_string(), default_restrictions.clone())]),
+        };
+        let result = config.resolve("nonexistent").unwrap();
+        assert_eq!(*result, default_restrictions);
+    }
+
+    #[test]
+    fn test_resolve_unknown_plan_unrestricted_without_default() {
         let config = PlansConfig::default();
-        let result = config.resolve("nonexistent");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("unknown plan"));
+        assert!(config.resolve("nonexistent").is_none());
     }
 
     #[test]
