@@ -100,12 +100,13 @@ impl VelodromeSlipstreamsState {
             safe_sub_u256(MAX_SQRT_RATIO, U256::from(1u64))?
         };
 
-        if zero_for_one {
-            assert!(price_limit > MIN_SQRT_RATIO);
-            assert!(price_limit < self.sqrt_price);
+        let price_limit_valid = if zero_for_one {
+            price_limit > MIN_SQRT_RATIO && price_limit < self.sqrt_price
         } else {
-            assert!(price_limit < MAX_SQRT_RATIO);
-            assert!(price_limit > self.sqrt_price);
+            price_limit < MAX_SQRT_RATIO && price_limit > self.sqrt_price
+        };
+        if !price_limit_valid {
+            return Err(SimulationError::InvalidInput("Price limit out of range".into(), None));
         }
 
         let exact_input = amount_specified > I256::from_raw(U256::from(0u64));
