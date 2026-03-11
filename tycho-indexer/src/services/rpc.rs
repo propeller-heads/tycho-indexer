@@ -186,7 +186,14 @@ where
             .and_then(|plan_name| self.plans_config.resolve(plan_name))
     }
 
-    /// Returns whether a versioned request targets a historical (fully committed) block.
+    /// Returns whether a versioned request targets a historical block.
+    ///
+    /// A block is considered "historical" when it exists only in the database and has no
+    /// corresponding entry in the pending deltas buffer — i.e., `calculate_versions` returns
+    /// `deltas_version = None`, meaning the block is fully committed and behind the finality
+    /// horizon. Blocks that are still in the pending buffer (uncommitted or unseen) are not
+    /// historical.
+    ///
     /// When no pending deltas buffer is active, returns `false` (can't distinguish).
     async fn is_historical(
         &self,
@@ -1135,10 +1142,15 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
-        let historical = handler
-            .is_historical(&body.version, &body.protocol_system, body.chain)
-            .await?;
-        restrictions.check_historical_allowed(historical)?;
+        if !restrictions.allow_historical &&
+            handler
+                .is_historical(&body.version, &body.protocol_system, body.chain)
+                .await?
+        {
+            return Err(RpcError::PlanRestrictionViolation(
+                "historical queries are not available on this plan".into(),
+            ));
+        }
     }
 
     // Call the handler to get the state
@@ -1275,10 +1287,16 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
-        let historical = handler
-            .is_historical(&body.version, &body.protocol_system, body.chain)
-            .await?;
-        restrictions.check_historical_allowed(historical)?;
+        // only check historical if the plan rejects them (i.e. allow_historical is false)
+        if !restrictions.allow_historical &&
+            handler
+                .is_historical(&body.version, &body.protocol_system, body.chain)
+                .await?
+        {
+            return Err(RpcError::PlanRestrictionViolation(
+                "historical queries are not available on this plan".into(),
+            ));
+        }
     }
 
     // Call the handler to get protocol states

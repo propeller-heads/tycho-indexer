@@ -125,15 +125,6 @@ impl PlanRestrictions {
         Ok(())
     }
 
-    pub fn check_historical_allowed(&self, is_historical: bool) -> Result<(), RpcError> {
-        if is_historical && !self.allow_historical {
-            return Err(RpcError::PlanRestrictionViolation(
-                "historical queries are not available on this plan".into(),
-            ));
-        }
-        Ok(())
-    }
-
     pub fn check_numeric(
         &self,
         param_name: &str,
@@ -651,27 +642,6 @@ plans:
         assert!(request
             .validate_restrictions(&plan)
             .is_ok());
-    }
-
-    #[rstest]
-    #[case::allowed_not_historical(true, false, false)]
-    #[case::allowed_historical(true, true, false)]
-    #[case::disallowed_not_historical(false, false, false)]
-    #[case::disallowed_historical(false, true, true)]
-    fn test_check_historical_allowed(
-        #[case] allow_historical: bool,
-        #[case] is_historical: bool,
-        #[case] should_fail: bool,
-    ) {
-        let restrictions = PlanRestrictions { allow_historical, ..Default::default() };
-        let result = restrictions.check_historical_allowed(is_historical);
-        assert_eq!(result.is_err(), should_fail);
-        if should_fail {
-            assert!(result
-                .unwrap_err()
-                .to_string()
-                .contains("historical"));
-        }
     }
 
     #[test]
