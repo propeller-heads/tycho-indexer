@@ -27,7 +27,7 @@ tracing = { workspace = true }
 tycho-client = { workspace = true }
 tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
-tycho-execution = { workspace = true }
+tycho-contracts = { workspace = true }
 tycho-simulation = { path = "..", features = ["evm"] }
 urlencoding = "2.1.3"
 tracing-subscriber = { workspace = true }

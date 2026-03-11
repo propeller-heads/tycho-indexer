@@ -14,21 +14,26 @@ use tycho_common::{
     traits::{AllowanceSlotDetector, BalanceSlotDetector},
     Bytes,
 };
-use tycho_execution::encoding::{
+use tycho_contracts::encoding::{
     evm::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
-    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap},
 };
 use tycho_simulation::{
     evm::protocol::u256_num::biguint_to_u256, protocol::models::ProtocolComponent,
 };
 
-use crate::{execution::tenderly::OverwriteMetadata, rpc_tools::RPCTools};
+use crate::{
+    execution::{models::Transaction, tenderly::OverwriteMetadata},
+    rpc_tools::RPCTools,
+};
 
 const USER_ADDR: &str = "0xf847a638E44186F3287ee9F8cAF73FF4d4B80784";
 pub const EXECUTOR_ADDRESS: &str = "0xaE04CA7E9Ed79cBD988f6c536CE11C621166f41B";
+// Fixed address used to plant FeeCalculator bytecode in state overrides.
+pub const FEE_CALCULATOR_ADDRESS: &str = "0xfEEcA1C0fEEcA1C0fEEcA1C0fEEcA1C0fEEcA1C0";
 
 /// Contains the detected storage slots for a token.
 #[derive(Debug, Clone, Default)]
@@ -48,7 +53,6 @@ pub fn encode_swap(
     amount_in: BigUint,
     chain: Chain,
     executors_json: Option<String>,
-    historical_trade: bool,
 ) -> miette::Result<(Solution, Transaction)> {
     let solution = create_solution(
         component.clone(),
@@ -61,14 +65,9 @@ pub fn encode_swap(
         .add_default_encoders(executors_json)
         .into_diagnostic()?;
     let encoded_solution = {
-        let mut builder = TychoRouterEncoderBuilder::new()
+        let builder = TychoRouterEncoderBuilder::new()
             .chain(chain)
-            .user_transfer_type(UserTransferType::TransferFrom)
             .swap_encoder_registry(swap_encoder_registry);
-
-        if historical_trade {
-            builder = builder.historical_trade();
-        }
 
         builder
             .build()
@@ -97,28 +96,26 @@ fn create_solution(
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
-            .estimated_amount_in(amount_in.clone());
+        let mut swap = Swap::new(component, sell_token.clone(), buy_token.clone())
+            .with_estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
-            swap = swap.protocol_state(state);
+            swap = swap.with_protocol_state(state);
         }
         swap
     };
 
-    Ok(Solution {
-        sender: user_address.clone(),
-        receiver: user_address,
-        given_token: sell_token.address,
-        given_amount: amount_in,
-        checked_token: buy_token.address,
-        exact_out: false, // it's an exact in solution
+    Ok(Solution::new(
+        user_address.clone(),
+        user_address,
+        sell_token.address,
+        buy_token.address,
+        amount_in,
         // We want to keep track of how bad the slippage really is and not just error at execution
         // time. NEVER DO THIS IN PRODUCTION!
-        checked_amount: BigUint::from(1u64),
-        swaps: vec![simple_swap],
-        ..Default::default()
-    })
+        BigUint::from(1u64),
+        vec![simple_swap],
+    ))
 }
 
 fn encoded_transaction(
@@ -126,32 +123,38 @@ fn encoded_transaction(
     solution: &Solution,
     native_address: Bytes,
 ) -> miette::Result<Transaction> {
-    let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&solution.checked_amount);
-    let given_token = Address::from_slice(&solution.given_token);
-    let checked_token = Address::from_slice(&solution.checked_token);
-    let receiver = Address::from_slice(&solution.receiver);
+    let amount_in = biguint_to_u256(solution.amount_in());
+    let min_amount_out = biguint_to_u256(solution.min_amount_out());
+    let token_in = Address::from_slice(solution.token_in());
+    let token_out = Address::from_slice(solution.token_out());
+    let receiver = Address::from_slice(solution.receiver());
+    let client_fee_params: (u16, Address, U256, U256, Vec<u8>) =
+        (0, Address::ZERO, U256::ZERO, U256::ZERO, vec![]);
 
     let method_calldata = (
-        given_amount,
-        given_token,
-        checked_token,
+        amount_in,
+        token_in,
+        token_out,
         min_amount_out,
-        false,
-        false,
         receiver,
-        true,
-        encoded_solution.swaps,
+        client_fee_params,
+        encoded_solution.swaps(),
     )
         .abi_encode();
 
-    let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.given_token == native_address {
-        solution.given_amount.clone()
+    let contract_interaction = encode_input(encoded_solution.function_signature(), method_calldata);
+    let value = if *solution.token_in() == native_address {
+        solution.amount_in().clone()
     } else {
         BigUint::ZERO
     };
-    Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+    Ok(Transaction::new(
+        encoded_solution
+            .interacting_with()
+            .clone(),
+        value,
+        contract_interaction,
+    ))
 }
 
 /// Encodes the input data for a function call to the given function selector.
@@ -341,9 +344,9 @@ pub(crate) fn swap_request(
     let (max_fee_per_gas, max_priority_fee_per_gas) = calculate_gas_fees(block)?;
     let user_address = Address::from_str(USER_ADDR).expect("Valid user address");
     Ok(TransactionRequest::default()
-        .to(Address::from_slice(&transaction.to[..20]))
-        .input(transaction.data.clone().into())
-        .value(U256::from_str(&transaction.value.to_string()).unwrap_or_default())
+        .to(Address::from_slice(&transaction.to()[..20]))
+        .input(transaction.data().clone().into())
+        .value(U256::from_str(&transaction.value().to_string()).unwrap_or_default())
         .from(user_address)
         .gas_limit(100_000_000)
         .max_fee_per_gas(
@@ -384,11 +387,15 @@ pub fn calculate_executor_storage_slot(key: Address) -> FixedBytes<32> {
     let mut key_bytes = [0u8; 32];
     key_bytes[12..].copy_from_slice(key.as_slice());
 
-    // The base of the executor storage slot is 1, since there is only one
-    // variable that is initialized before it (which is _roles in AccessControl.sol).
-    // In this case, _roles gets slot 0.
-    // The slots are given in order to the parent contracts' variables first and foremost.
-    let slot = U256::from(1);
+    // Storage layout (from `forge inspect TychoRouter storageLayout`):
+    //   slot 0: _roles             (AccessControl)
+    //   slot 1: _balances          (ERC6909)
+    //   slot 2: _operatorApprovals (ERC6909)
+    //   slot 3: _allowances        (ERC6909)
+    //   slot 4: _paused            (Pausable)
+    //   slot 5: _vaultBalances     (Vault)
+    //   slot 6: executorsActivationTimestamp (Dispatcher)
+    let slot = U256::from(6);
 
     // Convert U256 slot to 32-byte big-endian array
     let slot_bytes = slot.to_be_bytes::<32>();
@@ -475,26 +482,40 @@ pub async fn setup_router_overwrites(
     router_address: Address,
     router_bytecode: Vec<u8>,
     executor_bytecode: Vec<u8>,
+    fee_calculator_bytecode: Vec<u8>,
 ) -> miette::Result<AddressHashMap<AccountOverride>> {
-    // Start with the router bytecode override
     let mut state_overwrites = AddressHashMap::default();
-    let mut tycho_router_override = AccountOverride::default().with_code(router_bytecode);
 
     let executor_address = Address::from_str(EXECUTOR_ADDRESS).into_diagnostic()?;
+    let fee_calculator_address = Address::from_str(FEE_CALCULATOR_ADDRESS).into_diagnostic()?;
 
-    // Find executor address approval storage slot
-    let storage_slot = calculate_executor_storage_slot(executor_address);
+    // Router override: bytecode + executor approval slot + _feeCalculator slot
+    let executor_storage_slot = calculate_executor_storage_slot(executor_address);
+    // Storage layout slot 9 = _feeCalculator (see `forge inspect TychoRouter storageLayout`)
+    let fee_calculator_slot = FixedBytes::<32>::from(U256::from(9));
+    let fee_calculator_slot_value = {
+        let mut v = [0u8; 32];
+        v[12..].copy_from_slice(fee_calculator_address.as_slice());
+        FixedBytes::<32>::from(v)
+    };
 
-    // The executors mapping starts at storage value 1
-    let storage_value = FixedBytes::<32>::from(U256::ONE);
-
-    tycho_router_override =
-        tycho_router_override.with_state_diff(vec![(storage_slot, storage_value)]);
-
+    let tycho_router_override = AccountOverride::default()
+        .with_code(router_bytecode)
+        .with_state_diff(vec![
+            (executor_storage_slot, FixedBytes::<32>::from(U256::ONE)),
+            (fee_calculator_slot, fee_calculator_slot_value),
+        ]);
     state_overwrites.insert(router_address, tycho_router_override);
 
-    // Add bytecode overwrite for the executor
+    // Executor bytecode override
     state_overwrites
-        .insert(executor_address, AccountOverride::default().with_code(executor_bytecode.to_vec()));
+        .insert(executor_address, AccountOverride::default().with_code(executor_bytecode));
+
+    // FeeCalculator bytecode override (returns zero fees for all clients)
+    state_overwrites.insert(
+        fee_calculator_address,
+        AccountOverride::default().with_code(fee_calculator_bytecode),
+    );
+
     Ok(state_overwrites)
 }

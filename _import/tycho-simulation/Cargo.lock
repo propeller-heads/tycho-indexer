@@ -2771,6 +2771,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7407,6 +7413,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88debbd05b68617ed04ff856eb4660846b9eeefbe68c4947ad453128afb2604e"
 dependencies = [
  "alloy",
+ "chrono",
+ "clap",
+ "dotenvy",
+ "hex",
+ "num-bigint",
+ "once_cell",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tycho-common",
+]
+
+[[package]]
+name = "tycho-ethereum"
+version = "0.147.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5f2f4ccd25c6fa0308e94dbd2248ba6d8a760042b3cd2bcf862963f1774416f"
+dependencies = [
+ "alloy",
  "async-trait",
  "backoff",
  "chrono",
@@ -7420,27 +7447,6 @@ dependencies = [
  "tracing",
  "tycho-common",
  "unicode-segmentation",
-]
-
-[[package]]
-name = "tycho-execution"
-version = "0.165.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89406dc3ce6e8b851ad8ca9794070e236cee4378d110a89470eda067a6056ded"
-dependencies = [
- "alloy",
- "chrono",
- "clap",
- "dotenv",
- "hex",
- "num-bigint",
- "once_cell",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tycho-common",
 ]
 
 [[package]]
@@ -7524,8 +7530,9 @@ dependencies = [
  "tracing-subscriber 0.3.20",
  "tycho-client",
  "tycho-common",
+ "tycho-contracts",
  "tycho-ethereum",
- "tycho-execution",
+ "tycho-test",
  "typetag",
  "unicode-width 0.1.14",
  "uuid",
@@ -7558,8 +7565,8 @@ dependencies = [
  "tracing-subscriber 0.3.20",
  "tycho-client",
  "tycho-common",
+ "tycho-contracts",
  "tycho-ethereum",
- "tycho-execution",
  "tycho-simulation",
  "urlencoding",
 ]

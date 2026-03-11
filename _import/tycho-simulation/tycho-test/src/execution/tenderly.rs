@@ -3,7 +3,8 @@ use alloy::{
     primitives::{map::AddressHashMap, Address, B256, U256},
     rpc::types::{state::AccountOverride, Block},
 };
-use tycho_execution::encoding::models::Transaction;
+
+use crate::execution::models::Transaction;
 
 /// Metadata about storage slot overwrites to enable human-readable logging
 #[derive(Debug, Clone, Default)]
@@ -87,9 +88,9 @@ pub fn build_tenderly_url(
 ) -> String {
     // Extract transaction data
     let (tx_to, tx_value, tx_data) = if let Some(transaction) = tx {
-        let to_addr = format!("0x{}", hex::encode(&transaction.to));
-        let value = transaction.value.to_string();
-        let data = format!("0x{}", hex::encode(&transaction.data));
+        let to_addr = format!("0x{}", hex::encode(transaction.to()));
+        let value = transaction.value().to_string();
+        let data = format!("0x{}", hex::encode(transaction.data()));
         (Some(to_addr), Some(value), Some(data))
     } else {
         (None, None, None)
@@ -229,17 +230,16 @@ pub fn get_overwrites_string(
 #[cfg(test)]
 mod tests {
     use alloy::primitives::address;
-    use tycho_execution::encoding::models::Transaction;
 
     use super::*;
 
     #[test]
     fn test_build_url_with_transaction() {
-        let tx = Transaction {
-            to: vec![0xde, 0xad, 0xbe, 0xef].into(),
-            value: num_bigint::BigUint::from(1000u32),
-            data: vec![0x12, 0x34, 0x56, 0x78],
-        };
+        let tx = Transaction::new(
+            vec![0xde, 0xad, 0xbe, 0xef].into(),
+            num_bigint::BigUint::from(1000u32),
+            vec![0x12, 0x34, 0x56, 0x78],
+        );
 
         let caller = address!("f847a638E44186F3287ee9F8cAF73FF4d4B80784");
         let overrides = TenderlySimParams::default();
