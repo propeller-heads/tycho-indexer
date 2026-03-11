@@ -179,21 +179,11 @@ where
 
     /// Resolves plan restrictions from the `X-User-Plan` header.
     /// Returns `None` when no header is present (no restrictions apply).
-    fn resolve_plan_restrictions(
-        &self,
-        req: &actix_web::HttpRequest,
-    ) -> Result<Option<&PlanRestrictions>, RpcError> {
-        match req
-            .headers()
+    fn resolve_plan_restrictions(&self, req: &actix_web::HttpRequest) -> Option<&PlanRestrictions> {
+        req.headers()
             .get("X-User-Plan")
             .and_then(|v| v.to_str().ok())
-        {
-            Some(plan_name) => self
-                .plans_config
-                .resolve(plan_name)
-                .map(Some),
-            None => Ok(None),
-        }
+            .and_then(|plan_name| self.plans_config.resolve(plan_name))
     }
 
     #[instrument(skip(self, request))]
@@ -1125,7 +1115,7 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1170,7 +1160,7 @@ pub async fn tokens<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1216,7 +1206,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1261,7 +1251,7 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("protocol_system", &body.protocol_system);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1307,7 +1297,7 @@ pub async fn protocol_systems<G: Gateway, T: EntryPointTracer>(
     body.validate_pagination(&req)?;
 
     let allowed_systems = handler
-        .resolve_plan_restrictions(&req)?
+        .resolve_plan_restrictions(&req)
         .and_then(|r| r.allowed_protocol_systems.clone());
 
     match handler
@@ -1348,7 +1338,7 @@ pub async fn component_tvl<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1392,7 +1382,7 @@ pub async fn traced_entry_points<G: Gateway, T: EntryPointTracer>(
     tracing::Span::current().record("page_size", body.pagination.page_size);
 
     body.validate_pagination(&req)?;
-    if let Some(restrictions) = handler.resolve_plan_restrictions(&req)? {
+    if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
         body.validate_restrictions(restrictions)?;
     }
 
@@ -2826,7 +2816,7 @@ mod tests {
     #[case::plan_rejects_missing_tvl(Some("restricted"), None, false)]
     #[case::plan_rejects_below_threshold(Some("restricted"), Some(500.0), false)]
     #[case::plan_accepts_above_threshold(Some("restricted"), Some(1500.0), true)]
-    #[case::unknown_plan_rejects(Some("nonexistent"), Some(5000.0), false)]
+    #[case::unknown_plan_unrestricted(Some("nonexistent"), Some(5000.0), true)]
     #[actix_web::test]
     async fn test_protocol_components_plan_restrictions(
         #[case] plan_header: Option<&str>,
@@ -2978,7 +2968,6 @@ plans:
                     .insert_header(("X-User-Plan", "free"))
                     .to_http_request(),
             )
-            .unwrap()
             .unwrap();
         assert_eq!(
             restrictions
@@ -2995,7 +2984,6 @@ plans:
                     .insert_header(("X-User-Plan", "pro"))
                     .to_http_request(),
             )
-            .unwrap()
             .unwrap();
         assert_eq!(
             restrictions
@@ -3006,9 +2994,8 @@ plans:
             100.0
         );
 
-        let no_plan = handler_free
-            .resolve_plan_restrictions(&test::TestRequest::default().to_http_request())
-            .unwrap();
+        let no_plan =
+            handler_free.resolve_plan_restrictions(&test::TestRequest::default().to_http_request());
         assert!(no_plan.is_none());
     }
 
