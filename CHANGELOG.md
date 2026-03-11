@@ -1,3 +1,11 @@
+## [0.147.2](https://github.com/propeller-heads/tycho-indexer/compare/0.147.1...0.147.2) (2026-03-11)
+
+
+### Bug Fixes
+
+* fall back to default plan for unknown X-User-Plan values ([ea687df](https://github.com/propeller-heads/tycho-indexer/commit/ea687dfd06a46e9aefc680d955b1942b9558b8a0))
+* fall back to default plan for unknown X-User-Plan values ([#875](https://github.com/propeller-heads/tycho-indexer/issues/875)) ([97827ee](https://github.com/propeller-heads/tycho-indexer/commit/97827eebe1d94de244a1e53a621000e404e62722))
+
 ## [0.147.1](https://github.com/propeller-heads/tycho-indexer/compare/0.147.0...0.147.1) (2026-03-09)
 
 
