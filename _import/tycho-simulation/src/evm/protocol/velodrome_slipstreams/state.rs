@@ -100,12 +100,13 @@ impl VelodromeSlipstreamsState {
             safe_sub_u256(MAX_SQRT_RATIO, U256::from(1u64))?
         };
 
-        if zero_for_one {
-            assert!(price_limit > MIN_SQRT_RATIO);
-            assert!(price_limit < self.sqrt_price);
+        let price_limit_valid = if zero_for_one {
+            price_limit > MIN_SQRT_RATIO && price_limit < self.sqrt_price
         } else {
-            assert!(price_limit < MAX_SQRT_RATIO);
-            assert!(price_limit > self.sqrt_price);
+            price_limit < MAX_SQRT_RATIO && price_limit > self.sqrt_price
+        };
+        if !price_limit_valid {
+            return Err(SimulationError::InvalidInput("Price limit out of range".into(), None));
         }
 
         let exact_input = amount_specified > I256::from_raw(U256::from(0u64));
@@ -474,5 +475,75 @@ impl ProtocolSim for VelodromeSlipstreamsState {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy::primitives::{Sign, I256, U256};
+    use tycho_common::simulation::errors::SimulationError;
+
+    use super::*;
+    use crate::evm::protocol::utils::uniswap::{
+        tick_list::TickInfo,
+        tick_math::{
+            get_sqrt_ratio_at_tick, get_tick_at_sqrt_ratio, MAX_SQRT_RATIO, MIN_SQRT_RATIO,
+            MIN_TICK,
+        },
+    };
+
+    fn create_basic_test_pool() -> VelodromeSlipstreamsState {
+        let sqrt_price = get_sqrt_ratio_at_tick(0).expect("Failed to calculate sqrt price");
+        let ticks = vec![TickInfo::new(-120, 0).unwrap(), TickInfo::new(120, 0).unwrap()];
+        VelodromeSlipstreamsState::new(
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            3000,
+            0,
+            1,
+            0,
+            ticks,
+        )
+        .expect("Failed to create pool")
+    }
+
+    #[test]
+    fn test_swap_price_limit_out_of_range_returns_error() {
+        let pool = create_basic_test_pool();
+        let amount = I256::checked_from_sign_and_abs(Sign::Positive, U256::from(1000u64)).unwrap();
+
+        let result = pool.swap(true, amount, Some(pool.sqrt_price));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(true, amount, Some(MIN_SQRT_RATIO));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(false, amount, Some(pool.sqrt_price));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        let result = pool.swap(false, amount, Some(MAX_SQRT_RATIO));
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+    }
+
+    #[test]
+    fn test_swap_at_extreme_price_returns_error() {
+        let sqrt_price = MIN_SQRT_RATIO + U256::from(1u64);
+        let tick = get_tick_at_sqrt_ratio(sqrt_price).expect("Failed to calculate tick");
+        let ticks =
+            vec![TickInfo::new(MIN_TICK, 0).unwrap(), TickInfo::new(MIN_TICK + 1, 0).unwrap()];
+        let pool = VelodromeSlipstreamsState::new(
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            3000,
+            0,
+            1,
+            tick,
+            ticks,
+        )
+        .expect("Failed to create pool");
+
+        let amount = I256::checked_from_sign_and_abs(Sign::Positive, U256::from(1000u64)).unwrap();
+        let result = pool.swap(true, amount, None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
     }
 }
