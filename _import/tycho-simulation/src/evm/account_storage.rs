@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry::Vacant, HashMap};
 
 use alloy::primitives::{Address, U256};
 use revm::state::AccountInfo;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 /// Represents an account in the account storage.
 ///
@@ -75,7 +75,7 @@ impl AccountStorage {
                 address
             );
         } else {
-            debug!("Skipped init for already-existing account {:x?}", address);
+            trace!("Skipped init for already-existing account {:x?}", address);
         }
     }
 
