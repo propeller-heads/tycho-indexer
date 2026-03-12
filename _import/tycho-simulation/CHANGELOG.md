@@ -1,3 +1,10 @@
+## [0.248.2](https://github.com/propeller-heads/tycho-simulation/compare/0.248.1...0.248.2) (2026-03-12)
+
+
+### Bug Fixes
+
+* replace assert! panics with SimulationError in swap price limit checks ([bcaa584](https://github.com/propeller-heads/tycho-simulation/commit/bcaa58407ac68698153d1e303ba8a2ae1074c39f))
+
 ## [0.248.1](https://github.com/propeller-heads/tycho-simulation/compare/0.248.0...0.248.1) (2026-03-06)
 
 
