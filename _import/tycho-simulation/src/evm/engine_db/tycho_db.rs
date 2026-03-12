@@ -142,6 +142,38 @@ impl PreCachedDB {
         Ok(())
     }
 
+    /// Like [`update`] but unconditionally overwrites existing accounts on `Creation` updates.
+    ///
+    /// Use only for authoritative proxy-token accounts that must win over placeholder entries
+    /// inserted by other decoders' snapshot loops. Generic callers should use [`update`].
+    pub fn force_update_accounts(
+        &self,
+        account_updates: Vec<AccountUpdate>,
+    ) -> Result<(), PreCachedDBError> {
+        let mut write_guard = self.write_inner()?;
+
+        for update in account_updates {
+            if matches!(update.change, ChangeType::Creation) {
+                let code =
+                    Bytecode::new_raw(AlloyBytes::from(update.code.clone().ok_or_else(|| {
+                        error!(%update.address, "MissingCode");
+                        PreCachedDBError::BadUpdate("MissingCode".into(), Box::new(update.clone()))
+                    })?));
+                let balance = update.balance.unwrap_or(U256::ZERO);
+
+                write_guard.accounts.overwrite_account(
+                    update.address,
+                    AccountInfo::new(balance, 0, code.hash_slow(), code),
+                    Some(update.slots.clone()),
+                    true,
+                );
+            } else {
+                warn!(%update.address, "force_update_accounts called with non-Creation update; ignoring");
+            }
+        }
+        Ok(())
+    }
+
     /// Retrieves the storage value at the specified index for the given account, if it exists.
     ///
     /// If the account exists in the storage, the storage value at the specified `index` is returned
@@ -613,6 +645,80 @@ mod tests {
                 .number,
             1
         );
+    }
+
+    #[rstest]
+    fn test_force_update_accounts_overwrites_existing(mock_db: PreCachedDB) {
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+
+        // Simulate a placeholder proxy inserted by another decoder's snapshot loop.
+        mock_db
+            .init_account(address, AccountInfo::default(), None, true)
+            .expect("placeholder init should succeed");
+
+        // Now force-overwrite with the real proxy (authoritative vm_storage data).
+        let storage_slot = U256::from(1);
+        let storage_value = U256::from(42);
+        let mut slots = HashMap::new();
+        slots.insert(storage_slot, storage_value);
+        let update = AccountUpdate::new(
+            address,
+            Chain::Ethereum,
+            slots,
+            Some(U256::from(100)),
+            Some(Vec::<u8>::new()),
+            ChangeType::Creation,
+        );
+        mock_db
+            .force_update_accounts(vec![update])
+            .expect("force update should succeed");
+
+        let info = mock_db
+            .basic_ref(address)
+            .unwrap()
+            .unwrap();
+        assert_eq!(info.balance, U256::from(100));
+        assert_eq!(
+            mock_db
+                .get_storage(&address, &storage_slot)
+                .unwrap(),
+            storage_value
+        );
+    }
+
+    #[rstest]
+    fn test_force_update_accounts_non_creation_ignored(mock_db: PreCachedDB) {
+        let address = Address::from_str("0xb4e16d0168e52d35cacd2c6185b44281ec28c9dc").unwrap();
+        let original_balance = U256::from(10);
+
+        mock_db
+            .init_account(
+                address,
+                AccountInfo { balance: original_balance, ..Default::default() },
+                None,
+                true,
+            )
+            .expect("init should succeed");
+
+        // A non-Creation update should be ignored by force_update_accounts.
+        let update = AccountUpdate::new(
+            address,
+            Chain::Ethereum,
+            HashMap::new(),
+            Some(U256::from(999)),
+            None,
+            ChangeType::Update,
+        );
+        mock_db
+            .force_update_accounts(vec![update])
+            .expect("force update should succeed");
+
+        // Balance must remain unchanged.
+        let info = mock_db
+            .basic_ref(address)
+            .unwrap()
+            .unwrap();
+        assert_eq!(info.balance, original_balance);
     }
 
     /// This test requires a running TychoDB instance.
