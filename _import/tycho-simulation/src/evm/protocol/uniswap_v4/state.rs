@@ -191,12 +191,13 @@ impl UniswapV4State {
             safe_sub_u256(MAX_SQRT_RATIO, U256::from(1u64))?
         };
 
-        if zero_for_one {
-            assert!(price_limit > MIN_SQRT_RATIO);
-            assert!(price_limit < self.sqrt_price);
+        let price_limit_valid = if zero_for_one {
+            price_limit > MIN_SQRT_RATIO && price_limit < self.sqrt_price
         } else {
-            assert!(price_limit < MAX_SQRT_RATIO);
-            assert!(price_limit > self.sqrt_price);
+            price_limit < MAX_SQRT_RATIO && price_limit > self.sqrt_price
+        };
+        if !price_limit_valid {
+            return Err(SimulationError::InvalidInput("Price limit out of range".into(), None));
         }
 
         let exact_input = amount_specified < I256::ZERO;
@@ -2360,5 +2361,55 @@ mod tests {
             expected_amount_out,
             "amount_out should match expected value"
         );
+    }
+
+    #[test]
+    fn test_swap_price_limit_out_of_range_returns_error() {
+        let pool = create_basic_v4_test_pool();
+        let amount = -I256::from_raw(U256::from(1000u64)); // V4 uses negative for exact input
+
+        // zero_for_one: price_limit equal to sqrt_price is invalid (must be strictly less)
+        let result = pool.swap(true, amount, Some(pool.sqrt_price), None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        // zero_for_one: price_limit at MIN_SQRT_RATIO is invalid (must be strictly greater)
+        let result = pool.swap(true, amount, Some(MIN_SQRT_RATIO), None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        // one_for_zero: price_limit equal to sqrt_price is invalid (must be strictly greater)
+        let result = pool.swap(false, amount, Some(pool.sqrt_price), None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+
+        // one_for_zero: price_limit at MAX_SQRT_RATIO is invalid (must be strictly less)
+        let result = pool.swap(false, amount, Some(MAX_SQRT_RATIO), None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
+    }
+
+    #[test]
+    fn test_swap_at_extreme_price_returns_error() {
+        // Simulates the depth calculation scenario: pool sqrt_price is at MIN_SQRT_RATIO + 1,
+        // so the default price limit for zero_for_one equals sqrt_price and fails validation.
+        let sqrt_price = MIN_SQRT_RATIO + U256::from(1u64);
+        let tick = get_tick_at_sqrt_ratio(sqrt_price).expect("Failed to calculate tick");
+        // tick_spacing 60; ticks must be aligned
+        let aligned_tick = (MIN_TICK / 60) * 60 + 60; // first multiple of 60 above MIN_TICK
+        let ticks = vec![
+            TickInfo::new(aligned_tick, 0).unwrap(),
+            TickInfo::new(aligned_tick + 60, 0).unwrap(),
+        ];
+        let pool = UniswapV4State::new(
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 3000 },
+            tick,
+            60,
+            ticks,
+        )
+        .unwrap();
+
+        let amount = -I256::from_raw(U256::from(1000u64));
+        // Default price limit for zero_for_one is MIN_SQRT_RATIO + 1 == sqrt_price, so invalid
+        let result = pool.swap(true, amount, None, None);
+        assert!(matches!(result, Err(SimulationError::InvalidInput(_, None))));
     }
 }
