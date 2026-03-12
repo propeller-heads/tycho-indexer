@@ -189,16 +189,10 @@ impl TychoEncoder for TychoRouterEncoder {
     /// Raises an `EncodingError` if the solution is not considered valid.
     ///
     /// A solution is considered valid if all the following conditions are met:
-    /// * The solution is not exact out.
     /// * The solution has at least one swap.
     /// * The token cannot appear more than once in the solution unless it is the first and last
     ///   token (i.e. a true cyclical swap).
     fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out() {
-            return Err(EncodingError::FatalError(
-                "Currently only exact input solutions are supported".to_string(),
-            ));
-        }
         if solution.swaps().is_empty() {
             return Err(EncodingError::FatalError("No swaps found in solution".to_string()));
         }
@@ -287,7 +281,6 @@ impl TychoExecutorEncoder {
             })?;
 
         let encoding_context = EncodingContext {
-            exact_out: solution.exact_out(),
             router_address: None,
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
@@ -332,15 +325,7 @@ impl TychoEncoder for TychoExecutorEncoder {
     }
 
     /// Raises an `EncodingError` if the solution is not considered valid.
-    ///
-    /// A solution is considered valid if all the following conditions are met:
-    /// * The solution is not exact out.
-    fn validate_solution(&self, solution: &Solution) -> Result<(), EncodingError> {
-        if solution.exact_out() {
-            return Err(EncodingError::FatalError(
-                "Currently only exact input solutions are supported".to_string(),
-            ));
-        }
+    fn validate_solution(&self, _solution: &Solution) -> Result<(), EncodingError> {
         Ok(())
     }
 }
@@ -602,30 +587,6 @@ mod tests {
             let solution = encoder.add_weth_swaps(&solution, &encoder.chain);
             assert_eq!(solution.swaps().len(), 2);
             assert_eq!(solution.swaps(), input_swaps.as_slice());
-        }
-
-        #[test]
-        fn test_validate_fails_for_exact_out() {
-            let encoder = get_tycho_router_encoder();
-            let solution = Solution::new(
-                Bytes::default(),
-                Bytes::default(),
-                Bytes::default(),
-                Bytes::default(),
-                BigUint::default(),
-                BigUint::default(),
-                vec![],
-            )
-            .with_exact_out(true);
-            let result = encoder.validate_solution(&solution);
-
-            assert!(result.is_err());
-            assert_eq!(
-                result.err().unwrap(),
-                EncodingError::FatalError(
-                    "Currently only exact input solutions are supported".to_string()
-                )
-            );
         }
 
         #[test]

@@ -188,7 +188,6 @@ mod tests {
         .with_protocol_state(Arc::new(bebop_state));
 
         let encoding_context = EncodingContext {
-            exact_out: false,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),

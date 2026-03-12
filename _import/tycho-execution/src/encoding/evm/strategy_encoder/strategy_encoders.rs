@@ -84,7 +84,6 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
             })?;
 
         let encoding_context = EncodingContext {
-            exact_out: solution.exact_out(),
             router_address: Some(self.router_address.clone()),
             group_token_in: grouped_swap.token_in.clone(),
             group_token_out: grouped_swap.token_out.clone(),
@@ -185,7 +184,6 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
                 })?;
 
             let encoding_context = EncodingContext {
-                exact_out: solution.exact_out(),
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),
@@ -324,7 +322,6 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
                 })?;
 
             let encoding_context = EncodingContext {
-                exact_out: solution.exact_out(),
                 router_address: Some(self.router_address.clone()),
                 group_token_in: grouped_swap.token_in.clone(),
                 group_token_out: grouped_swap.token_out.clone(),

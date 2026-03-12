@@ -36,10 +36,6 @@ impl SwapEncoder for EkuboV3SwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        if encoding_context.exact_out {
-            return Err(EncodingError::InvalidInput("exact out swaps not implemented".to_string()));
-        }
-
         let fee = u64::from_be_bytes(
             get_static_attribute(swap, "fee")?
                 .try_into()
@@ -106,7 +102,6 @@ mod tests {
         let encoding_context = EncodingContext {
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
-            exact_out: false,
             router_address: Some(Bytes::default()),
         };
 
@@ -142,7 +137,6 @@ mod tests {
         let encoding_context = EncodingContext {
             group_token_in: group_token_in.clone(),
             group_token_out: group_token_out.clone(),
-            exact_out: false,
             router_address: Some(Bytes::default()),
         };
 
