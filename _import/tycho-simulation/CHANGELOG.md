@@ -1,3 +1,12 @@
+## [0.248.3](https://github.com/propeller-heads/tycho-simulation/compare/0.248.2...0.248.3) (2026-03-12)
+
+
+### Bug Fixes
+
+* force-overwrite proxy token accounts to prevent stale placeholders ([45f87ae](https://github.com/propeller-heads/tycho-simulation/commit/45f87aed01c01dcbb81fc026704f421edf00007f))
+* overwrite existing accounts on ChangeType::Creation ([af6bb78](https://github.com/propeller-heads/tycho-simulation/commit/af6bb787fbe8aab240ab379d703a71c915eeac59))
+* split proxy account updates by change type for proper handling ([1061193](https://github.com/propeller-heads/tycho-simulation/commit/1061193bf05b56e02d3c98bacdbda48410d7b440))
+
 ## [0.248.2](https://github.com/propeller-heads/tycho-simulation/compare/0.248.1...0.248.2) (2026-03-12)
 
 
