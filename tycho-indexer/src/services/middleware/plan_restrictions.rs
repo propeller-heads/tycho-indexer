@@ -663,8 +663,7 @@ plans:
         #[case] age: TimeDelta,
         #[case] should_fail: bool,
     ) {
-        let restrictions =
-            PlanRestrictions { max_version_age_minutes, ..Default::default() };
+        let restrictions = PlanRestrictions { max_version_age_minutes, ..Default::default() };
         let ts = Utc::now().naive_utc() - age;
         let version = dto::VersionParam { timestamp: Some(ts), block: None };
         let result = restrictions.check_version_recency(&version);
@@ -673,12 +672,12 @@ plans:
 
     #[test]
     fn test_check_version_recency_no_timestamp_rejected() {
-        let restrictions = PlanRestrictions {
-            max_version_age_minutes: Some(5),
-            ..Default::default()
-        };
+        let restrictions =
+            PlanRestrictions { max_version_age_minutes: Some(5), ..Default::default() };
         let version = dto::VersionParam { timestamp: None, block: None };
-        assert!(restrictions.check_version_recency(&version).is_err());
+        assert!(restrictions
+            .check_version_recency(&version)
+            .is_err());
     }
 
     #[test]
