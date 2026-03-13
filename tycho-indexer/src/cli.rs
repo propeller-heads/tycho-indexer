@@ -104,17 +104,14 @@ pub struct RPCArgs {
     pub max_backoff_ms: u64,
 
     /// Maximum number of requests per RPC batch call. Set to 0 to disable batching.
-    #[clap(long = "rpc-max-batch-size", env = "RPC_MAX_BATCH_SIZE", default_value = "50")]
-    pub max_batch_size: usize,
+    /// If not set, uses the client default.
+    #[clap(long = "rpc-max-batch-size", env = "RPC_MAX_BATCH_SIZE")]
+    pub max_batch_size: Option<usize>,
 
     /// Maximum number of eth_getStorageAt requests per batch. Overrides max_batch_size for storage
-    /// slot queries.
-    #[clap(
-        long = "rpc-storage-slot-max-batch-size",
-        env = "RPC_STORAGE_SLOT_MAX_BATCH_SIZE",
-        default_value = "1000"
-    )]
-    pub storage_slot_max_batch_size: usize,
+    /// slot queries. If not set, falls back to max_batch_size.
+    #[clap(long = "rpc-storage-slot-max-batch-size", env = "RPC_STORAGE_SLOT_MAX_BATCH_SIZE")]
+    pub storage_slot_max_batch_size: Option<usize>,
 }
 
 impl RPCArgs {
@@ -122,18 +119,24 @@ impl RPCArgs {
         let retry_config =
             RPCRetryConfig::new(self.max_retries, self.initial_backoff_ms, self.max_backoff_ms);
 
-        let batching_config = if self.max_batch_size == 0 {
-            RPCBatchingConfig::Disabled
-        } else {
-            RPCBatchingConfig::Enabled {
-                max_batch_size: self.max_batch_size,
-                storage_slot_max_batch_size_override: Some(self.storage_slot_max_batch_size),
-            }
+        let batching_config = match self.max_batch_size {
+            Some(0) => Some(RPCBatchingConfig::Disabled),
+            Some(max_batch_size) => Some(RPCBatchingConfig::Enabled {
+                max_batch_size,
+                storage_slot_max_batch_size_override: self.storage_slot_max_batch_size,
+            }),
+            None => None,
         };
 
         EthereumRpcClient::new(&self.url)
             .map_err(|e| ExtractionError::Setup(format!("Failed to create RPC client: {e}")))
-            .map(|client| client.with_retry(retry_config).with_batching(batching_config))
+            .map(|client| {
+                let client = client.with_retry(retry_config);
+                match batching_config {
+                    Some(config) => client.with_batching(config),
+                    None => client,
+                }
+            })
     }
 }
 
@@ -302,8 +305,8 @@ mod cli_tests {
                     max_retries: 5,
                     initial_backoff_ms: 150,
                     max_backoff_ms: 5000,
-                    max_batch_size: 50,
-                    storage_slot_max_batch_size: 1000,
+                    max_batch_size: None,
+                    storage_slot_max_batch_size: None,
                 },
             },
             command: Command::Run(RunSpkgArgs {
@@ -366,8 +369,8 @@ mod cli_tests {
                     max_retries: 10,
                     initial_backoff_ms: 200,
                     max_backoff_ms: 10000,
-                    max_batch_size: 50,
-                    storage_slot_max_batch_size: 1000,
+                    max_batch_size: None,
+                    storage_slot_max_batch_size: None,
                 },
             },
             command: Command::Index(IndexArgs {
@@ -399,14 +402,13 @@ mod cli_tests {
 
     #[test]
     fn test_rpc_args_conversion_to_rpc() {
-        // Test conversion from RPCArgs (CLI) to RPCConfig (domain)
         let rpc_args = RPCArgs {
             url: "https://eth.example.com".to_string(),
             max_retries: 7,
             initial_backoff_ms: 250,
             max_backoff_ms: 8000,
-            max_batch_size: 100,
-            storage_slot_max_batch_size: 2000,
+            max_batch_size: Some(100),
+            storage_slot_max_batch_size: Some(2000),
         };
 
         let rpc_client = rpc_args.build_client().unwrap();
@@ -420,5 +422,39 @@ mod cli_tests {
         let batching_config = rpc_client.get_batching_config();
         assert_eq!(batching_config.max_batch_size(), Some(100));
         assert_eq!(batching_config.storage_slot_max_batch_size(), Some(2000));
+    }
+
+    #[test]
+    fn test_rpc_args_storage_slot_falls_back_to_max_batch_size() {
+        let rpc_args = RPCArgs {
+            url: "https://eth.example.com".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+            max_batch_size: Some(10),
+            storage_slot_max_batch_size: None,
+        };
+
+        let rpc_client = rpc_args.build_client().unwrap();
+        let batching_config = rpc_client.get_batching_config();
+        assert_eq!(batching_config.max_batch_size(), Some(10));
+        assert_eq!(batching_config.storage_slot_max_batch_size(), Some(10));
+    }
+
+    #[test]
+    fn test_rpc_args_batching_disabled() {
+        let rpc_args = RPCArgs {
+            url: "https://eth.example.com".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+            max_batch_size: Some(0),
+            storage_slot_max_batch_size: None,
+        };
+
+        let rpc_client = rpc_args.build_client().unwrap();
+        let batching_config = rpc_client.get_batching_config();
+        assert_eq!(batching_config.max_batch_size(), None);
+        assert_eq!(batching_config.storage_slot_max_batch_size(), None);
     }
 }
