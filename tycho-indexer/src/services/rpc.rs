@@ -186,6 +186,56 @@ where
             .and_then(|plan_name| self.plans_config.resolve(plan_name))
     }
 
+    /// Resolves a block-only [`VersionParam`] into one with a timestamp by looking up the block in
+    /// the pending deltas buffer first, then falling back to the database. If the version
+    /// already has a timestamp, it is returned unchanged.
+    async fn resolve_version_timestamp(
+        &self,
+        version: &dto::VersionParam,
+        protocol_system: &str,
+    ) -> Result<dto::VersionParam, RpcError> {
+        if version.timestamp.is_some() || version.block.is_none() {
+            return Ok(version.clone());
+        }
+        let block_or_ts = BlockOrTimestamp::try_from(version)?;
+        let block_id = match block_or_ts {
+            BlockOrTimestamp::Block(id) => id,
+            BlockOrTimestamp::Timestamp(_) => return Ok(version.clone()),
+        };
+        // Check pending buffer first — the block may not be committed to DB yet.
+        let pending_ts = self
+            .pending_deltas
+            .as_ref()
+            .and_then(|pending| {
+                let predicate: Box<dyn Fn(&BlockAggregatedChanges) -> bool> = match &block_id {
+                    BlockIdentifier::Hash(hash) => {
+                        let hash = hash.clone();
+                        Box::new(move |b: &BlockAggregatedChanges| b.block.hash == hash)
+                    }
+                    BlockIdentifier::Number((_, no)) => {
+                        let no = *no as u64;
+                        Box::new(move |b: &BlockAggregatedChanges| b.block.number == no)
+                    }
+                    _ => return None,
+                };
+                pending
+                    .search_block(&predicate, protocol_system)
+                    .ok()
+                    .flatten()
+                    .map(|b| b.block.ts)
+            });
+        let ts = match pending_ts {
+            Some(ts) => ts,
+            None => {
+                self.db_gateway
+                    .get_block(&block_id)
+                    .await?
+                    .ts
+            }
+        };
+        Ok(dto::VersionParam { timestamp: Some(ts), block: version.block.clone() })
+    }
+
     #[instrument(skip(self, request))]
     async fn get_contract_state(
         &self,
@@ -1103,7 +1153,7 @@ where
 #[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
     req: actix_web::HttpRequest,
-    body: web::Json<dto::StateRequestBody>,
+    mut body: web::Json<dto::StateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
     // Note - filtering by protocol system is not supported on this endpoint. This is due to the
@@ -1116,6 +1166,9 @@ pub async fn contract_state<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
+        body.version = handler
+            .resolve_version_timestamp(&body.version, &body.protocol_system)
+            .await?;
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1242,7 +1295,7 @@ pub async fn protocol_components<G: Gateway, T: EntryPointTracer>(
 #[instrument(skip_all, fields(page, page_size, protocol_system))]
 pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
     req: actix_web::HttpRequest,
-    body: web::Json<dto::ProtocolStateRequestBody>,
+    mut body: web::Json<dto::ProtocolStateRequestBody>,
     handler: web::Data<RpcHandler<G, T>>,
 ) -> Result<HttpResponse, RpcError> {
     // Tracing and metrics
@@ -1252,6 +1305,9 @@ pub async fn protocol_state<G: Gateway, T: EntryPointTracer>(
 
     body.validate_pagination(&req)?;
     if let Some(restrictions) = handler.resolve_plan_restrictions(&req) {
+        body.version = handler
+            .resolve_version_timestamp(&body.version, &body.protocol_system)
+            .await?;
         body.validate_restrictions(restrictions)?;
     }
 
@@ -1457,7 +1513,7 @@ mod tests {
     use std::{collections::HashMap, env, str::FromStr};
 
     use actix_web::{test, App};
-    use chrono::NaiveDateTime;
+    use chrono::{NaiveDateTime, TimeDelta};
     use mockall::{mock, predicate::eq};
     use rstest::rstest;
     use tycho_common::{
@@ -2802,6 +2858,7 @@ mod tests {
             component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
             token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
             traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+            ..Default::default()
         };
         let mut plans = std::collections::HashMap::new();
         plans.insert("restricted".to_string(), restrictions);
@@ -3204,5 +3261,155 @@ plans:
         let body: dto::ProtocolSystemsRequestResponse = test::read_body_json(resp).await;
         assert_eq!(body.protocol_systems, vec!["ambient", "sushiswap", "uniswap_v3"]);
         assert_eq!(body.pagination.total, 3);
+    }
+
+    fn plans_config_restricted_history() -> PlansConfig {
+        let yaml = r#"
+plans:
+  no_history:
+    max_version_age_minutes: 5
+"#;
+        serde_yaml::from_str(yaml).unwrap()
+    }
+
+    #[rstest]
+    #[case::recent_passes(TimeDelta::minutes(0), true)]
+    #[case::old_rejects(TimeDelta::minutes(10), false)]
+    #[actix_web::test]
+    async fn test_contract_state_historical_restriction(
+        #[case] age: TimeDelta,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_contracts()
+                .return_once(|_, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        mock_buffer
+            .expect_get_block_commit_status()
+            .returning(move |_, _| Ok(Some(CommitStatus::Uncommitted)));
+        if should_pass {
+            mock_buffer
+                .expect_update_vm_states()
+                .return_once(|_, _, _, _| Ok(()));
+        }
+
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            plans_config_restricted_history(),
+            vec![],
+            vec![],
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/contract_state",
+                    web::post().to(contract_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let ts = Utc::now().naive_utc() - age;
+        let request_body = dto::StateRequestBody::new(
+            None,
+            "test_system".to_string(),
+            dto::VersionParam { timestamp: Some(ts), block: None },
+            dto::Chain::Ethereum,
+            dto::PaginationParams::new(0, 10),
+        );
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/contract_state")
+                .insert_header(("X-User-Plan", "no_history"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        if should_pass {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        } else {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        }
+    }
+
+    #[rstest]
+    #[case::recent_passes(TimeDelta::minutes(0), true)]
+    #[case::old_rejects(TimeDelta::minutes(10), false)]
+    #[actix_web::test]
+    async fn test_protocol_state_historical_restriction(
+        #[case] age: TimeDelta,
+        #[case] should_pass: bool,
+    ) {
+        let mut gw = MockGateway::new();
+        if should_pass {
+            let mock_response = Ok(WithTotal { entity: vec![], total: Some(0) });
+            gw.expect_get_protocol_states()
+                .return_once(|_, _, _, _, _, _| Box::pin(async move { mock_response }));
+        }
+
+        let mut mock_buffer = MockPendingDeltas::new();
+        mock_buffer
+            .expect_get_block_commit_status()
+            .returning(move |_, _| Ok(Some(CommitStatus::Uncommitted)));
+        if should_pass {
+            mock_buffer
+                .expect_merge_native_states()
+                .return_once(|_, _, _, _| Ok(()));
+        }
+
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(mock_buffer)),
+            MockEntryPointTracer::new(),
+            plans_config_restricted_history(),
+            vec![],
+            vec![],
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_state",
+                    web::post().to(protocol_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+
+        let ts = Utc::now().naive_utc() - age;
+        let request_body = serde_json::json!({
+            "protocol_ids": ["comp1"],
+            "protocol_system": "test_system",
+            "include_balances": true,
+            "version": { "timestamp": ts.format("%Y-%m-%dT%H:%M:%S").to_string() },
+            "chain": "ethereum",
+            "pagination": { "page": 0, "page_size": 10 }
+        });
+
+        let resp = test::call_service(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_state")
+                .insert_header(("X-User-Plan", "no_history"))
+                .set_json(&request_body)
+                .to_request(),
+        )
+        .await;
+
+        if should_pass {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::OK);
+        } else {
+            assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+        }
     }
 }
