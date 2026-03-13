@@ -82,10 +82,18 @@ fn test_sequential_swap_usx() {
         .unwrap()[0]
         .clone();
 
-    let tycho_calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let tycho_calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     // Uniswap X specific part
     let filler_address = bytes_to_address(&filler).unwrap();
