@@ -5,7 +5,6 @@
   * [Motivation](motivation.md)
   * [Concepts](concepts.md)
   * [How to Contribute](how-to-contribute/README.md)
-    * [Bounties](how-to-contribute/bounties.md)
   * [Transparency](overview/transparency.md)
   * [Tycho Fellows](overview/tycho-fellows.md)
 

@@ -6,7 +6,6 @@ Tycho Fellows are Solvers, Searchers, and Market Makers who work with the Propel
 
 #### Benefits as a Tycho Fellow
 
-* **Bounty programs**: Earn bounties from protocol, chains and auctions to help them settle more flow and improve their prices.
 * **Early Access to DEXs**: Be first to access new DEXs on our development endpoint before they goes live in production.
 * **Shape the future of Tycho**: Give input and prioritize new features.
 
