@@ -1,3 +1,10 @@
+## [0.39.2](https://github.com/propeller-heads/tycho-contracts/compare/0.39.1...0.39.2) (2026-03-13)
+
+
+### Bug Fixes
+
+* Remove exact_out from Solution ([d73b812](https://github.com/propeller-heads/tycho-contracts/commit/d73b8124b0ae500b4182a283c79c9f0dea17519e))
+
 ## [0.39.1](https://github.com/propeller-heads/tycho-contracts/compare/0.39.0...0.39.1) (2026-03-10)
 
 
