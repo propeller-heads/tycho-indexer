@@ -81,6 +81,11 @@ const CLIENT_FEE_RECEIVER_PK: &str =
 /// - `token_in_already_in_router`: Whether the input token is already present in the router.
 /// - `router_address`: The address of the Tycho Router contract.
 /// - `native_address`: The address used to represent the native token
+/// - `client_fee_bps`: Fee in basis points to be paid to the client (0-10000, where 10000 = 100%)
+/// - `client_fee_receiver`: Address to receive the client fee
+/// - `max_client_contribution`: Maximum amount the client is willing to pay out of pocket to
+///   subsidize this trade. This represents the maximum slippage the client will cover. If
+///   (min_amount_out - actual_swap_output) > max_client_contribution, the tx reverts.
 ///
 /// # Returns
 /// A `Result<Transaction, EncodingError>` that either contains the full transaction data (to,
@@ -89,12 +94,16 @@ const CLIENT_FEE_RECEIVER_PK: &str =
 /// # Errors
 /// - Returns `EncodingError::FatalError` if the function signature is unsupported or required
 ///   fields (e.g., permit or signature) are missing.
+#[allow(clippy::too_many_arguments)]
 pub fn encode_tycho_router_call(
     chain_id: u64,
     encoded_solution: EncodedSolution,
     solution: &Solution,
     native_address: &Bytes,
     signer: Option<PrivateKeySigner>,
+    client_fee_bps: u16,
+    client_fee_receiver: Bytes,
+    max_client_contribution: BigUint,
 ) -> Result<Transaction, EncodingError> {
     let given_amount = biguint_to_u256(solution.amount_in());
     let min_amount_out = biguint_to_u256(solution.min_amount_out());
@@ -102,20 +111,17 @@ pub fn encode_tycho_router_call(
     let checked_token = bytes_to_address(solution.token_out())?;
     let receiver = bytes_to_address(solution.receiver())?;
     let n_tokens = U256::from(encoded_solution.n_tokens());
-    let max_client_contribution = biguint_to_u256(solution.max_client_contribution());
+    let max_client_contribution = biguint_to_u256(&max_client_contribution);
     let deadline = U256::MAX;
-    let (client_fee_receiver, client_signature) = if solution
-        .client_fee_receiver()
-        .is_empty()
-    {
+    let (client_fee_receiver, client_signature) = if client_fee_receiver == Bytes::zero(20) {
         (Address::ZERO, vec![])
     } else {
         let router_address = bytes_to_address(encoded_solution.interacting_with())?;
-        let client_fee_receiver = bytes_to_address(solution.client_fee_receiver())?;
+        let client_fee_receiver = bytes_to_address(&client_fee_receiver)?;
         let sig = sign_client_fee(
             chain_id,
             router_address,
-            solution.client_fee_bps(),
+            client_fee_bps,
             client_fee_receiver,
             max_client_contribution,
             deadline,
@@ -124,13 +130,8 @@ pub fn encode_tycho_router_call(
     };
 
     // ABI tuple matching ClientFeeParams: (uint16, address, uint256, uint256, bytes)
-    let client_fee_params = (
-        solution.client_fee_bps(),
-        client_fee_receiver,
-        max_client_contribution,
-        deadline,
-        client_signature,
-    );
+    let client_fee_params =
+        (client_fee_bps, client_fee_receiver, max_client_contribution, deadline, client_signature);
     let permit_single = encoded_solution.permit().cloned();
     let (permit, signature) = if let Some(ref p) = permit_single {
         let permit = Some(

@@ -54,17 +54,6 @@ pub struct Solution {
     min_amount_out: BigUint,
     /// List of swaps to fulfill the solution.
     swaps: Vec<Swap>,
-    /// Fee in basis points to be paid to the client (0-10000, where 10000 = 100%).
-    #[serde(default)]
-    client_fee_bps: u16,
-    /// Address to receive the client fee.
-    #[serde(default)]
-    client_fee_receiver: Bytes,
-    /// Maximum amount the client is willing to pay out of pocket to subsidize this trade.
-    /// This represents the maximum slippage the client will cover.
-    /// If (min_amount_out - actual_swap_output) > max_client_contribution, the tx reverts.
-    #[serde(with = "biguint_string")]
-    max_client_contribution: BigUint,
     /// The transfer type to be used in this swap for user's funds (token in)
     user_transfer_type: UserTransferType,
 }
@@ -87,9 +76,6 @@ impl Solution {
             amount_in,
             min_amount_out,
             swaps,
-            client_fee_bps: 0,
-            client_fee_receiver: Bytes::default(),
-            max_client_contribution: BigUint::default(),
             user_transfer_type: UserTransferType::TransferFrom,
         }
     }
@@ -118,18 +104,6 @@ impl Solution {
 
     pub fn swaps(&self) -> &[Swap] {
         &self.swaps
-    }
-
-    pub fn client_fee_bps(&self) -> u16 {
-        self.client_fee_bps
-    }
-
-    pub fn client_fee_receiver(&self) -> &Bytes {
-        &self.client_fee_receiver
-    }
-
-    pub fn max_client_contribution(&self) -> &BigUint {
-        &self.max_client_contribution
     }
 
     pub fn user_transfer_type(&self) -> &UserTransferType {
@@ -168,21 +142,6 @@ impl Solution {
 
     pub fn with_swaps(mut self, swaps: Vec<Swap>) -> Self {
         self.swaps = swaps;
-        self
-    }
-
-    pub fn with_client_fee_bps(mut self, client_fee_bps: u16) -> Self {
-        self.client_fee_bps = client_fee_bps;
-        self
-    }
-
-    pub fn with_client_fee_receiver(mut self, client_fee_receiver: Bytes) -> Self {
-        self.client_fee_receiver = client_fee_receiver;
-        self
-    }
-
-    pub fn with_max_client_contribution(mut self, max_client_contribution: BigUint) -> Self {
-        self.max_client_contribution = max_client_contribution;
         self
     }
 

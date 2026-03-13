@@ -62,10 +62,18 @@ fn test_single_encoding_strategy_ekubo() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo", hex_calldata.as_str());
 }
@@ -111,10 +119,18 @@ fn test_single_encoding_strategy_ekubo_erc20() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo_erc20", hex_calldata.as_str());
 }
@@ -160,10 +176,18 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo_mev_resist", hex_calldata.as_str());
 }
@@ -198,10 +222,18 @@ fn test_single_encoding_strategy_maverick() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_maverick", hex_calldata.as_str());
 }
@@ -256,6 +288,9 @@ fn test_single_encoding_strategy_usv4_eth_in() {
         &solution,
         &eth,
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -319,6 +354,9 @@ fn test_single_encoding_strategy_usv4_eth_out() {
         &solution,
         &eth,
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -399,6 +437,9 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
         &solution,
         &eth,
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -526,6 +567,9 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
         &solution,
         &eth,
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -602,10 +646,18 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_ekubo_grouped_swap", hex_calldata.as_str());
@@ -655,10 +707,18 @@ fn test_single_encoding_strategy_curve() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_curve", hex_calldata.as_str());
@@ -708,10 +768,18 @@ fn test_single_encoding_strategy_curve_st_eth() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_curve_st_eth", hex_calldata.as_str());
@@ -770,10 +838,18 @@ fn test_single_encoding_strategy_curve_protocol_will_debit_from_vault() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
@@ -812,10 +888,18 @@ fn test_single_encoding_strategy_balancer_v3() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_balancer_v3", hex_calldata.as_str());
 }
@@ -881,10 +965,18 @@ fn test_single_encoding_strategy_bebop() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = hex::encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_bebop", hex_calldata.as_str());
 }
@@ -943,10 +1035,18 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = hex::encode(&calldata);
 
     write_calldata_to_file("test_single_encoding_strategy_bebop_aggregate", hex_calldata.as_str());
@@ -1038,10 +1138,18 @@ fn test_single_encoding_strategy_hashflow() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_hashflow", hex_calldata.as_str());
@@ -1077,10 +1185,18 @@ fn test_single_encoding_strategy_fluid() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_fluid_v1", hex_calldata.as_str());
 }
@@ -1123,10 +1239,18 @@ fn test_sequential_encoding_strategy_fluid() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_fluid_v1", hex_calldata.as_str());
 }
@@ -1166,10 +1290,18 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
         "test_single_encoding_strategy_rocketpool_deposit",
@@ -1213,10 +1345,18 @@ fn test_single_encoding_strategy_rocketpool_burn() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_rocketpool_burn", hex_calldata.as_str());
 }
@@ -1260,10 +1400,18 @@ fn test_single_encoding_strategy_slipstreams() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_slipstreams", hex_calldata.as_str());
 }
@@ -1320,10 +1468,18 @@ fn test_sequential_encoding_strategy_slipstreams() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_slipstreams", hex_calldata.as_str());
 }
@@ -1358,10 +1514,18 @@ fn test_single_encoding_strategy_erc4626() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_erc4626", hex_calldata.as_str());
 }
@@ -1402,10 +1566,18 @@ fn test_sequential_encoding_strategy_erc4626() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_sequential_encoding_strategy_erc4626", hex_calldata.as_str());
 }
@@ -1460,6 +1632,9 @@ fn test_single_swap_with_univ4_angstrom() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -1497,10 +1672,18 @@ fn test_single_encoding_strategy_weth_wrap() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_weth_wrapping", hex_calldata.as_str());
 }
@@ -1531,10 +1714,18 @@ fn test_single_encoding_strategy_weth_unwrap() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_weth_unwrapping", hex_calldata.as_str());
 }
@@ -1571,10 +1762,18 @@ fn test_sequential_encoding_strategy_weth_wrap_added() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
         "test_sequential_encoding_strategy_weth_wrap_added",
@@ -1623,10 +1822,18 @@ fn test_single_encoding_strategy_ekubo_v3() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_ekubo_v3", hex_calldata.as_str());
 }
@@ -1692,10 +1899,18 @@ fn test_single_ekubo_v3_grouped_swap() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_ekubo_v3_grouped_swap", hex_calldata.as_str());
@@ -1739,10 +1954,18 @@ fn test_sequential_encoding_strategy_etherfi_unwrap_weeth() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
         "test_sequential_encoding_strategy_etherfi_unwrap_weeth",
@@ -1786,10 +2009,18 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let hex_calldata = encode(&calldata);
     write_calldata_to_file(
         "test_sequential_encoding_strategy_etherfi_wrap_eeth",
@@ -1855,6 +2086,9 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .expect("calldata generation failed for TWIF fee token")
     .data;
@@ -1927,6 +2161,9 @@ fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .expect("calldata generation failed for TWIF output fee token")
     .data;
@@ -2020,6 +2257,9 @@ fn test_single_encoding_strategy_usv4_grouped_twif_intermediary() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .expect("calldata generation failed for grouped TWIF intermediary swap")
     .data;

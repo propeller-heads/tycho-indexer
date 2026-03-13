@@ -56,6 +56,9 @@ fn test_single_swap_strategy_encoder() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -128,10 +131,18 @@ fn test_single_swap_strategy_encoder_transfer_from() {
         .encode_solutions(vec![solution.clone()])
         .unwrap()[0]
         .clone();
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
     let expected_min_amount_encoded = encode(U256::abi_encode(&expected_min_amount));
     let expected_input = [
         "ce25e49e", // Function selector (singleSwap)
@@ -199,8 +210,6 @@ fn test_single_swap_with_client_fees() {
         checked_amount.clone(),
         vec![swap],
     )
-    .with_client_fee_bps(100)
-    .with_client_fee_receiver(client_fee_receiver())
     .with_user_transfer_type(UserTransferType::TransferFrom);
 
     let encoded_solutions = encoder
@@ -213,6 +222,9 @@ fn test_single_swap_with_client_fees() {
         &solution,
         &eth(),
         None,
+        100,
+        client_fee_receiver(),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -253,9 +265,6 @@ fn test_single_swap_with_fees_and_client_contribution() {
         checked_amount.clone(),
         vec![swap],
     )
-    .with_client_fee_bps(100)
-    .with_client_fee_receiver(client_fee_receiver())
-    .with_max_client_contribution(BigUint::from_str("22_000000000000000000").unwrap())
     .with_user_transfer_type(UserTransferType::TransferFrom);
 
     let encoded_solutions = encoder
@@ -268,6 +277,9 @@ fn test_single_swap_with_fees_and_client_contribution() {
         &solution,
         &eth(),
         None,
+        100,
+        client_fee_receiver(),
+        BigUint::from_str("22_000000000000000000").unwrap(),
     )
     .unwrap()
     .data;

@@ -69,6 +69,9 @@ fn test_sequential_swap_strategy_encoder() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -122,10 +125,18 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         .unwrap()[0]
         .clone();
 
-    let calldata =
-        encode_tycho_router_call(eth_chain().id(), encoded_solution, &solution, &eth(), None)
-            .unwrap()
-            .data;
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
 
     let hex_calldata = encode(&calldata);
 
@@ -250,6 +261,9 @@ fn test_sequential_strategy_cyclic_swap() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -370,6 +384,9 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
         &solution,
         &eth(),
         Some(get_signer()),
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
@@ -454,9 +471,7 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
         BigUint::from_str("1_000000000000000000").unwrap(),
         BigUint::from_str("26173932").unwrap(),
         vec![swap_weth_wbtc, swap_wbtc_usdc],
-    )
-    .with_client_fee_bps(100) // 1% fee
-    .with_client_fee_receiver(client_fee_receiver());
+    );
 
     let encoded_solution = encoder
         .encode_solutions(vec![solution.clone()])
@@ -469,6 +484,9 @@ fn test_sequential_swap_strategy_encoder_with_fees() {
         &solution,
         &eth(),
         Some(get_signer()),
+        100,
+        client_fee_receiver(),
+        BigUint::ZERO,
     )
     .unwrap()
     .data;
