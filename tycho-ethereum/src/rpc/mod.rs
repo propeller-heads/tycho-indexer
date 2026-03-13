@@ -94,6 +94,10 @@ impl EthereumRpcClient {
         (&self.retry_policy).into()
     }
 
+    pub fn get_batching_config(&self) -> &RPCBatchingConfig {
+        &self.batching
+    }
+
     pub fn with_batching(mut self, batching_config: RPCBatchingConfig) -> Self {
         self.batching = batching_config;
         self
