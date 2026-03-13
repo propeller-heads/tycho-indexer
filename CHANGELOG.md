@@ -1,3 +1,17 @@
+## [0.148.0](https://github.com/propeller-heads/tycho-indexer/compare/0.147.2...0.148.0) (2026-03-13)
+
+
+### Features
+
+* expose RPC batching config as CLI arguments ([00996e4](https://github.com/propeller-heads/tycho-indexer/commit/00996e43ddada753d49acd95f7ad3712fe93d837))
+* expose RPC batching config as CLI arguments ([#876](https://github.com/propeller-heads/tycho-indexer/issues/876)) ([78e7acb](https://github.com/propeller-heads/tycho-indexer/commit/78e7acba4169912462688489468713ea0c2f00a7))
+
+
+### Bug Fixes
+
+* make batching args optional, keep default client behavior ([ff7956c](https://github.com/propeller-heads/tycho-indexer/commit/ff7956c6d109b18303def95782d60ce2379f1e9d))
+* panic on startup if storage slot batch size is 0 ([363a406](https://github.com/propeller-heads/tycho-indexer/commit/363a406c2e190da2ccbdcaeaa921390757bc4943))
+
 ## [0.147.2](https://github.com/propeller-heads/tycho-indexer/compare/0.147.1...0.147.2) (2026-03-11)
 
 
