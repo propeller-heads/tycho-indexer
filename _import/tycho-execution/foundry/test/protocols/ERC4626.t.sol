@@ -17,6 +17,24 @@ contract ERC4626ExecutorExposed is ERC4626Executor {
     }
 }
 
+/// Malicious vault that takes input tokens but returns a false amount without
+/// minting anything.
+contract FakeERC4626Vault is Constants {
+    function asset() external view returns (address) {
+        return WETH_ADDR;
+    }
+
+    function balanceOf(address) external pure returns (uint256) {
+        return 0;
+    }
+
+    function deposit(uint256 assets, address) external returns (uint256) {
+        IERC20(WETH_ADDR).transferFrom(msg.sender, address(this), assets);
+        // Lie: claim 999e18 shares minted, but send nothing
+        return 999e18;
+    }
+}
+
 contract ERC4626ExecutorTest is Constants, TestUtils {
     using SafeERC20 for IERC20;
 
@@ -93,6 +111,25 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, WETH_ADDR);
+    }
+
+    function testFakeVault() public {
+        FakeERC4626Vault fakeVault = new FakeERC4626Vault();
+        uint256 amountIn = 1e18;
+        deal(WETH_ADDR, address(ERC4626Exposed), amountIn);
+
+        vm.prank(address(ERC4626Exposed));
+        IERC20(WETH_ADDR).approve(address(fakeVault), amountIn);
+
+        bytes memory protocolData =
+            abi.encodePacked(WETH_ADDR, address(fakeVault));
+
+        (uint256 amountOut, address tokenOut) =
+            ERC4626Exposed.swap(amountIn, protocolData, BOB);
+
+        // Balance check produces 0 — fake vault sent nothing
+        assertEq(amountOut, 0);
+        assertEq(tokenOut, address(fakeVault));
     }
 }
 
