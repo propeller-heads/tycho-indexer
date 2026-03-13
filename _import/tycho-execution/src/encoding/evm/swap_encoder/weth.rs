@@ -64,7 +64,6 @@ mod tests {
         let swap =
             Swap::new(pool, default_token(token_in.clone()), default_token(token_out.clone()));
         let encoding_context = EncodingContext {
-            exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -99,7 +98,6 @@ mod tests {
         let swap =
             Swap::new(pool, default_token(token_in.clone()), default_token(token_out.clone()));
         let encoding_context = EncodingContext {
-            exact_out: false,
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),

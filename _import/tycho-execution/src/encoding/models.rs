@@ -49,10 +49,6 @@ pub struct Solution {
     amount_in: BigUint,
     /// The token being bought
     token_out: Bytes,
-    /// False if the solution is an exact input solution. Currently only exact input solutions are
-    /// supported.
-    #[serde(default)]
-    exact_out: bool,
     /// Minimum amount that the receiver must receive at the end of the transaction.
     #[serde(with = "biguint_string")]
     min_amount_out: BigUint,
@@ -91,7 +87,6 @@ impl Solution {
             amount_in,
             min_amount_out,
             swaps,
-            exact_out: false,
             client_fee_bps: 0,
             client_fee_receiver: Bytes::default(),
             max_client_contribution: BigUint::default(),
@@ -115,10 +110,6 @@ impl Solution {
 
     pub fn token_out(&self) -> &Bytes {
         &self.token_out
-    }
-
-    pub fn exact_out(&self) -> bool {
-        self.exact_out
     }
 
     pub fn min_amount_out(&self) -> &BigUint {
@@ -167,11 +158,6 @@ impl Solution {
 
     pub fn with_token_out(mut self, token_out: Bytes) -> Self {
         self.token_out = token_out;
-        self
-    }
-
-    pub fn with_exact_out(mut self, exact_out: bool) -> Self {
-        self.exact_out = exact_out;
         self
     }
 
@@ -458,14 +444,12 @@ impl PartialEq for PermitDetails {
 ///
 /// # Fields
 ///
-/// * `exact_out`: true if the solution is a buy order, false if it is a sell order.
 /// * `router_address`: Address of the router contract to be used for the swaps. Zero address if
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
-    pub exact_out: bool,
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
