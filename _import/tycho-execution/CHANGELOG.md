@@ -1,3 +1,10 @@
+## [0.39.3](https://github.com/propeller-heads/tycho-contracts/compare/0.39.2...0.39.3) (2026-03-13)
+
+
+### Bug Fixes
+
+* Remove client params from Solution ([32b04b7](https://github.com/propeller-heads/tycho-contracts/commit/32b04b7aadcc50c02b88d7d51cae686f5338486c))
+
 ## [0.39.2](https://github.com/propeller-heads/tycho-contracts/compare/0.39.1...0.39.2) (2026-03-13)
 
 
