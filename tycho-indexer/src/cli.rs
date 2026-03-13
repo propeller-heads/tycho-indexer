@@ -119,6 +119,10 @@ impl RPCArgs {
         let retry_config =
             RPCRetryConfig::new(self.max_retries, self.initial_backoff_ms, self.max_backoff_ms);
 
+        if self.storage_slot_max_batch_size == Some(0) {
+            panic!("--rpc-storage-slot-max-batch-size must be greater than 0");
+        }
+
         let batching_config = match self.max_batch_size {
             Some(0) => Some(RPCBatchingConfig::Disabled),
             Some(max_batch_size) => Some(RPCBatchingConfig::Enabled {
@@ -456,5 +460,20 @@ mod cli_tests {
         let batching_config = rpc_client.get_batching_config();
         assert_eq!(batching_config.max_batch_size(), None);
         assert_eq!(batching_config.storage_slot_max_batch_size(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "--rpc-storage-slot-max-batch-size must be greater than 0")]
+    fn test_rpc_args_zero_storage_slot_batch_size_panics() {
+        let rpc_args = RPCArgs {
+            url: "https://eth.example.com".to_string(),
+            max_retries: 3,
+            initial_backoff_ms: 100,
+            max_backoff_ms: 5000,
+            max_batch_size: Some(50),
+            storage_slot_max_batch_size: Some(0),
+        };
+
+        rpc_args.build_client().unwrap();
     }
 }
