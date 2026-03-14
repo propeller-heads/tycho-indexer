@@ -21,8 +21,10 @@ interface IFluidV1Dex {
 }
 
 error FluidV1Executor__ZeroLiquidityAddress();
+error FluidV1Executor__ZeroDexFactoryAddress();
 error FluidV1Executor__InvalidDataLength();
 error FluidV1Executor__InvalidCallback();
+error FluidV1Executor__InvalidDex(address dex);
 
 contract FluidV1Executor is IExecutor, ICallback {
     // keccak(FluidV1Executor#CURRENT_DEX)
@@ -33,12 +35,17 @@ contract FluidV1Executor is IExecutor, ICallback {
     bytes4 private constant _CALLBACK_SELECTOR = 0x9410ae88;
 
     address public immutable liquidity;
+    address public immutable dexFactory;
 
-    constructor(address liquidity_) {
+    constructor(address liquidity_, address dexFactory_) {
         if (liquidity_ == address(0)) {
             revert FluidV1Executor__ZeroLiquidityAddress();
         }
+        if (dexFactory_ == address(0)) {
+            revert FluidV1Executor__ZeroDexFactoryAddress();
+        }
         liquidity = liquidity_;
+        dexFactory = dexFactory_;
     }
 
     function fundsExpectedAddress(
@@ -59,8 +66,10 @@ contract FluidV1Executor is IExecutor, ICallback {
         IFluidV1Dex dex;
         bool zero2one;
         bool isNativeSell;
+        uint32 dexId;
 
-        (dex, zero2one, tokenOut, isNativeSell) = _decodeData(data);
+        (dex, zero2one, tokenOut, isNativeSell, dexId) = _decodeData(data);
+        _verifyDex(address(dex), dexId);
 
         if (!isNativeSell) {
             _setCurrentDex(dex);
@@ -95,7 +104,8 @@ contract FluidV1Executor is IExecutor, ICallback {
             IFluidV1Dex dex,
             bool zero2one,
             address tokenOut,
-            bool isNativeSell
+            bool isNativeSell,
+            uint32 dexId
         )
     {
         // expected calldata layout
@@ -104,14 +114,72 @@ contract FluidV1Executor is IExecutor, ICallback {
         // 20 | zero2one
         // 21 | tokenOut
         // 41 | is_native
-        // 42 | EOF
-        if (data.length != 42) {
+        // 42 | dexId (uint32)
+        // 46 | EOF
+        if (data.length != 46) {
             revert FluidV1Executor__InvalidDataLength();
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
         tokenOut = address(bytes20(data[21:41]));
         isNativeSell = uint8(data[41]) > 0;
+        dexId = uint32(bytes4(data[42:46]));
+    }
+
+    /// @dev Verifies a dex address by recomputing the address from (dexFactory, dexId).
+    function _verifyDex(address dex, uint32 dexId) internal view {
+        // The nonce is equal to the dexId
+        // source: https://github.com/Instadapp/fluid-contracts-public/blob/a9949b48ba1247d4f478cd0acb40896b5c8bf3f8/contracts/protocols/dex/factory/main.sol#L246
+        if (dex != _addressCalc(dexFactory, dexId)) {
+            revert FluidV1Executor__InvalidDex(dex);
+        }
+    }
+
+    /// @dev Computes the address for a given deployer and nonce.
+    ///      Mirrors Fluid's AddressCalcs.addressCalc:
+    ///      https://github.com/Instadapp/fluid-contracts-public/blob/a9949b48ba1247d4f478cd0acb40896b5c8bf3f8/contracts/libraries/addressCalcs.sol
+    function _addressCalc(address deployer, uint256 nonce)
+        internal
+        pure
+        returns (address)
+    {
+        bytes memory data;
+        if (nonce == 0x00) {
+            return address(0);
+        } else if (nonce <= 0x7f) {
+            data = abi.encodePacked(
+                bytes1(0xd6), bytes1(0x94), deployer, uint8(nonce)
+            );
+        } else if (nonce <= 0xff) {
+            data = abi.encodePacked(
+                bytes1(0xd7), bytes1(0x94), deployer, bytes1(0x81), uint8(nonce)
+            );
+        } else if (nonce <= 0xffff) {
+            data = abi.encodePacked(
+                bytes1(0xd8),
+                bytes1(0x94),
+                deployer,
+                bytes1(0x82),
+                uint16(nonce)
+            );
+        } else if (nonce <= 0xffffff) {
+            data = abi.encodePacked(
+                bytes1(0xd9),
+                bytes1(0x94),
+                deployer,
+                bytes1(0x83),
+                uint24(nonce)
+            );
+        } else {
+            data = abi.encodePacked(
+                bytes1(0xda),
+                bytes1(0x94),
+                deployer,
+                bytes1(0x84),
+                uint32(nonce)
+            );
+        }
+        return address(uint160(uint256(keccak256(data))));
     }
 
     function handleCallback(bytes calldata data)
