@@ -509,7 +509,7 @@ mod tests {
             if let MetadataValue::Balances(balances) = parsed {
                 assert_eq!(balances.len(), 1, "Each response should have one token balance");
                 // Verify the balance is non-zero (pools have >30k USD in rehypo)
-                for (_, balance_bytes) in &balances {
+                for balance_bytes in balances.values() {
                     let balance_hex = balance_bytes.to_string();
                     let is_zero = balance_hex
                         .trim_start_matches("0x")
