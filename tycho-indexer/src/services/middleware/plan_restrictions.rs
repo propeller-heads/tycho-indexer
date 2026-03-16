@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use chrono::{TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 use tycho_common::dto;
@@ -77,7 +78,7 @@ impl NumericRestriction {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Default)]
 pub struct PlanRestrictions {
     #[serde(default)]
     pub allowed_protocol_systems: Option<HashSet<String>>,
@@ -87,6 +88,10 @@ pub struct PlanRestrictions {
     pub token_quality: Option<NumericRestriction>,
     #[serde(default)]
     pub traded_n_days_ago: Option<NumericRestriction>,
+    /// Maximum age in minutes for version timestamps. When set, requests with a
+    /// version older than this threshold are rejected. `None` means unrestricted.
+    #[serde(default)]
+    pub max_version_age_minutes: Option<u64>,
 }
 
 impl PlanRestrictions {
@@ -105,6 +110,25 @@ impl PlanRestrictions {
             }
         }
         Ok(())
+    }
+
+    /// Rejects requests whose version timestamp exceeds `max_version_age_minutes`.
+    ///
+    /// When the restriction is `None`, all versions are allowed. When set, the
+    /// version must have a timestamp within the threshold — requests without a
+    /// timestamp are rejected since their age cannot be verified.
+    pub fn check_version_recency(&self, version: &dto::VersionParam) -> Result<(), RpcError> {
+        let max_minutes = match self.max_version_age_minutes {
+            Some(m) => m,
+            None => return Ok(()),
+        };
+        let max_age = TimeDelta::minutes(max_minutes as i64);
+        match version.timestamp {
+            Some(ts) if Utc::now().naive_utc() - ts <= max_age => Ok(()),
+            _ => Err(RpcError::PlanRestrictionViolation(format!(
+                "version is older than the {max_minutes} minute limit on this plan"
+            ))),
+        }
     }
 
     pub fn check_numeric(
@@ -221,7 +245,8 @@ impl ValidateRestrictions for dto::TokensRequestBody {
 
 impl ValidateRestrictions for dto::ProtocolStateRequestBody {
     fn validate_restrictions(&self, restrictions: &PlanRestrictions) -> Result<(), RpcError> {
-        restrictions.check_protocol_system(&self.protocol_system)
+        restrictions.check_protocol_system(&self.protocol_system)?;
+        restrictions.check_version_recency(&self.version)
     }
 }
 
@@ -231,7 +256,7 @@ impl ValidateRestrictions for dto::StateRequestBody {
         if !self.protocol_system.is_empty() {
             restrictions.check_protocol_system(&self.protocol_system)?;
         }
-        Ok(())
+        restrictions.check_version_recency(&self.version)
     }
 }
 
@@ -269,6 +294,7 @@ mod tests {
             component_tvl: Some(NumericRestriction { op: Operator::Gte, value: 1000.0 }),
             token_quality: Some(NumericRestriction { op: Operator::Gte, value: 50.0 }),
             traded_n_days_ago: Some(NumericRestriction { op: Operator::Lte, value: 30.0 }),
+            ..Default::default()
         }
     }
 
@@ -623,5 +649,56 @@ plans:
         assert!(request
             .validate_restrictions(&plan)
             .is_ok());
+    }
+
+    #[rstest]
+    #[case::recent_allowed(Some(5), TimeDelta::minutes(0), false)]
+    #[case::old_rejected(Some(5), TimeDelta::minutes(10), true)]
+    #[case::boundary_allowed(Some(5), TimeDelta::minutes(4), false)]
+    #[case::no_restriction_old_allowed(None, TimeDelta::minutes(10), false)]
+    #[case::custom_threshold(Some(30), TimeDelta::minutes(20), false)]
+    #[case::custom_threshold_exceeded(Some(30), TimeDelta::minutes(31), true)]
+    fn test_check_version_recency(
+        #[case] max_version_age_minutes: Option<u64>,
+        #[case] age: TimeDelta,
+        #[case] should_fail: bool,
+    ) {
+        let restrictions = PlanRestrictions { max_version_age_minutes, ..Default::default() };
+        let ts = Utc::now().naive_utc() - age;
+        let version = dto::VersionParam { timestamp: Some(ts), block: None };
+        let result = restrictions.check_version_recency(&version);
+        assert_eq!(result.is_err(), should_fail);
+    }
+
+    #[test]
+    fn test_check_version_recency_no_timestamp_rejected() {
+        let restrictions =
+            PlanRestrictions { max_version_age_minutes: Some(5), ..Default::default() };
+        let version = dto::VersionParam { timestamp: None, block: None };
+        assert!(restrictions
+            .check_version_recency(&version)
+            .is_err());
+    }
+
+    #[test]
+    fn test_yaml_max_version_age() {
+        let yaml = r#"
+plans:
+  free:
+    max_version_age_minutes: 5
+  pro: {}
+  custom:
+    max_version_age_minutes: 30
+"#;
+        let config: PlansConfig = serde_yaml::from_str(yaml).unwrap();
+
+        let free = config.resolve("free").unwrap();
+        assert_eq!(free.max_version_age_minutes, Some(5));
+
+        let pro = config.resolve("pro").unwrap();
+        assert_eq!(pro.max_version_age_minutes, None);
+
+        let custom = config.resolve("custom").unwrap();
+        assert_eq!(custom.max_version_age_minutes, Some(30));
     }
 }
