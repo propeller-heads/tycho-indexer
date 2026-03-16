@@ -1,3 +1,12 @@
+## [0.39.4](https://github.com/propeller-heads/tycho-contracts/compare/0.39.3...0.39.4) (2026-03-16)
+
+
+### Bug Fixes
+
+* Add target verification for Fluid ([4cd0d83](https://github.com/propeller-heads/tycho-contracts/commit/4cd0d83b7674f44ddce6c368c1cc8c28c1238143))
+* False ERC4626 vault exploit ([4a7b53f](https://github.com/propeller-heads/tycho-contracts/commit/4a7b53f40f68ccee74775f212b87fe89319f42ea))
+* Use balance check for FluidV1 instead of validation ([1b34ac3](https://github.com/propeller-heads/tycho-contracts/commit/1b34ac3dbff85532691596a47efa341a2fe73fe9))
+
 ## [0.39.3](https://github.com/propeller-heads/tycho-contracts/compare/0.39.2...0.39.3) (2026-03-13)
 
 
