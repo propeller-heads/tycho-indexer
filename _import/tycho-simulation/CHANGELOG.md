@@ -1,3 +1,11 @@
+## [0.249.0](https://github.com/propeller-heads/tycho-simulation/compare/0.248.3...0.249.0) (2026-03-16)
+
+
+### Features
+
+* add TVL buffer ratio to integration test CLI ([647875a](https://github.com/propeller-heads/tycho-simulation/commit/647875a4ca625d3524656a4a7cb1d3a859c67282))
+* expose token quality and traded days filtering on integration test CLI ([0fa87c0](https://github.com/propeller-heads/tycho-simulation/commit/0fa87c0699375e046bc63d1e2fe0af28f8a52abb))
+
 ## [0.248.3](https://github.com/propeller-heads/tycho-simulation/compare/0.248.2...0.248.3) (2026-03-12)
 
 
