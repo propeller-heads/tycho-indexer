@@ -117,6 +117,15 @@ struct Cli {
     /// Maximum number of blocks to process before exiting (0 = run indefinitely)
     #[arg(long, default_value_t = 0)]
     max_blocks: u64,
+
+    /// Minimum token quality to filter by (defaults to 100 if not provided)
+    #[arg(long)]
+    min_token_quality: Option<i32>,
+
+    /// Maximum number of days since a token was last traded (chain-specific defaults if not
+    /// provided)
+    #[arg(long)]
+    max_days_since_last_trade: Option<u64>,
 }
 
 impl Debug for Cli {
@@ -224,8 +233,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
         Some(cli.tycho_api_key.as_str()),
         true,
         chain,
-        None,
-        None,
+        cli.min_token_quality,
+        cli.max_days_since_last_trade,
     )
     .await
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
