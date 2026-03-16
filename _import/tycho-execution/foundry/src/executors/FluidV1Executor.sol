@@ -2,6 +2,10 @@ pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
+import {
+    SafeERC20,
+    IERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {TransferManager} from "../TransferManager.sol";
 
 interface IFluidV1Dex {
@@ -51,6 +55,7 @@ contract FluidV1Executor is IExecutor, ICallback {
         return msg.sender;
     }
 
+    // slither-disable-next-line locked-ether
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
@@ -62,15 +67,26 @@ contract FluidV1Executor is IExecutor, ICallback {
 
         (dex, zero2one, tokenOut, isNativeSell) = _decodeData(data);
 
+        // Balance check: measure actual output instead of trusting
+        // the pool's reported amount.
+        uint256 balanceBefore = tokenOut == address(0)
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
+
         if (!isNativeSell) {
             _setCurrentDex(dex);
-            amountOut = dex.swapInWithCallback(zero2one, amountIn, 0, receiver);
+            // slither-disable-next-line unused-return
+            dex.swapInWithCallback(zero2one, amountIn, 0, receiver);
         } else {
-            // This is safe since the router asserts that we received the required output token in return
-            // slither-disable-next-line arbitrary-send-eth
-            amountOut =
-                dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
+            // slither-disable-next-line arbitrary-send-eth,unused-return
+            dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
         }
+
+        uint256 balanceAfter = tokenOut == address(0)
+            ? receiver.balance
+            : IERC20(tokenOut).balanceOf(receiver);
+
+        amountOut = balanceAfter - balanceBefore;
     }
 
     // Stores dex address in transient storage

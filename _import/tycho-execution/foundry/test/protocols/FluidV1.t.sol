@@ -5,6 +5,24 @@ import {FluidV1Executor, IFluidV1Dex} from "@src/executors/FluidV1Executor.sol";
 import {Constants} from "../Constants.sol";
 import "forge-std/Test.sol";
 
+/// Fake pool that lies about its output amount but sends nothing.
+contract FakeFluidPool {
+    uint256 public immutable bogusAmount;
+
+    constructor(uint256 bogusAmount_) {
+        bogusAmount = bogusAmount_;
+    }
+
+    function swapInWithCallback(bool, uint256, uint256, address)
+        external
+        pure
+        returns (uint256)
+    {
+        // No tokens are transferred, but we claim a large output.
+        return 1000e6;
+    }
+}
+
 contract FluidV1ExecutorExposed is FluidV1Executor {
     constructor(address _liquidity) FluidV1Executor(_liquidity) {}
 
@@ -44,8 +62,6 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
 }
 
 contract FluidV1ExecutorTest is Test, Constants {
-    using SafeERC20 for IERC20;
-
     FluidV1ExecutorExposed executor;
 
     function setUp() public {
@@ -179,6 +195,17 @@ contract FluidV1ExecutorTest is Test, Constants {
         uint256 balanceAfter = ezETH.balanceOf(BOB);
         assertEq(balanceAfter - balanceBefore, amountOut);
         assertEq(tokenOut, address(ezETH));
+    }
+
+    function testSwapFakePool() public {
+        address tokenOut = USDT_ADDR;
+        FakeFluidPool fakePool = new FakeFluidPool(1000e6);
+        bytes memory params =
+            abi.encodePacked(address(fakePool), true, tokenOut, false);
+
+        (uint256 amountOut,) = executor.swap(1e18, params, BOB);
+
+        assertEq(amountOut, 0, "fake pool should produce zero output");
     }
 
     function testBuyNative() public {

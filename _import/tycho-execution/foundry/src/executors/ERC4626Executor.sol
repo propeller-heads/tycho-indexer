@@ -38,18 +38,31 @@ contract ERC4626Executor is IExecutor {
 
         (tokenIn, target) = _decodeData(data);
 
-        if (address(tokenIn) == target) {
-            // shares --> asset
-            tokenOut = IERC4626(target).asset();
-            amountOut =
-                IERC4626(target).redeem(amountIn, receiver, address(this));
-        } else if (address(tokenIn) == IERC4626(target).asset()) {
-            // asset --> shares
+        address asset = IERC4626(target).asset();
+        bool isRedeem = (address(tokenIn) == target);
+
+        if (isRedeem) {
+            tokenOut = asset;
+        } else if (address(tokenIn) == asset) {
             tokenOut = target;
-            amountOut = IERC4626(target).deposit(amountIn, receiver);
         } else {
             revert ERC4626Executor__InvalidTarget();
         }
+
+        // Since there is no way to validate target address,
+        // we rely on balance checks to determine the amountOut instead
+        // of trusting the amount reported by the target.
+        uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
+
+        if (isRedeem) {
+            // slither-disable-next-line unused-return
+            IERC4626(target).redeem(amountIn, receiver, address(this));
+        } else {
+            // slither-disable-next-line unused-return
+            IERC4626(target).deposit(amountIn, receiver);
+        }
+
+        amountOut = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
     }
 
     function _decodeData(bytes calldata data)

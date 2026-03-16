@@ -118,7 +118,7 @@ mod tests {
                 // outputToken
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // isNativeSell
-                "00"
+                "00",
             ))
             .to_lowercase()
         );
