@@ -83,7 +83,7 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
         );
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             curveExecutorExposed.getTransferData(data);
 
         assertEq(tokenIn, WETH_ADDR);

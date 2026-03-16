@@ -83,14 +83,25 @@ contract ERC4626Executor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 40) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
+        address target = address(bytes20(data[20:40]));
+        receiver = target;
         transferType = TransferManager.TransferType.ProtocolWillDebit;
+        outputToRouter = false;
+
+        bool isRedeem = (tokenIn == target);
+        if (isRedeem) {
+            tokenOut = IERC4626(target).asset();
+        } else {
+            tokenOut = target;
+        }
     }
 }

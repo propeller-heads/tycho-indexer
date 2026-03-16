@@ -178,7 +178,9 @@ contract UniswapV2Executor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 61) {
@@ -186,8 +188,10 @@ contract UniswapV2Executor is IExecutor {
         }
         address target = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
+        tokenOut = address(bytes20(data[40:60]));
 
         receiver = target;
         transferType = TransferManager.TransferType.Transfer;
+        outputToRouter = false;
     }
 }

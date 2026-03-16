@@ -91,7 +91,9 @@ contract WethExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 1) {
@@ -103,13 +105,16 @@ contract WethExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             tokenIn = address(0);
+            tokenOut = address(weth);
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(weth);
+            tokenOut = address(0);
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
 
+        outputToRouter = true;
         // Since unwrapping withdraws the funds from the msg.sender, the user's funds need to be sent to the
         // TychoRouter initially. This does not require an actual approval since our
         // router is interacting directly with the token contract.

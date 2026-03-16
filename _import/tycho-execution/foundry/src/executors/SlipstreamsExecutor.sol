@@ -187,18 +187,27 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         }
     }
 
-    function getTransferData(
-        bytes calldata /* data */
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
-        return (TransferManager.TransferType.None, address(0), address(0));
+        if (data.length >= 40) {
+            tokenOut = address(bytes20(data[20:40]));
+        }
+        return (
+            TransferManager.TransferType.None,
+            address(0),
+            address(0),
+            tokenOut,
+            false
+        );
     }
 
     function getCallbackTransferData(bytes calldata data)

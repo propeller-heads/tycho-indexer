@@ -90,7 +90,8 @@ contract FluidV1ExecutorTest is Test, Constants {
     function testGetTransferData() public {
         bytes memory params = "";
 
-        (, address receiver, address tokenIn) = executor.getTransferData(params);
+        (, address receiver, address tokenIn,,) =
+            executor.getTransferData(params);
 
         assertEq(tokenIn, address(0));
         assertEq(receiver, address(0));

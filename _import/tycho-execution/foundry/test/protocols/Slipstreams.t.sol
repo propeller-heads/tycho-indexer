@@ -95,7 +95,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             slipstreamsExposed.getTransferData(params);
 
         assertEq(receiver, address(0));

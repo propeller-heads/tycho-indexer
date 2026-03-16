@@ -75,7 +75,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,,
         ) = rocketpoolExecutor.getTransferData(params);
 
         // receiver is msg.sender (this test contract) since getTransferData
@@ -96,7 +96,7 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,,
         ) = rocketpoolExecutor.getTransferData(params);
 
         // receiver is msg.sender (this test contract) since getTransferData

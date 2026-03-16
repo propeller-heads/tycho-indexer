@@ -53,7 +53,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory params =
             abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             maverickV2Exposed.getTransferData(params);
 
         assertEq(tokenIn, GHO_ADDR);

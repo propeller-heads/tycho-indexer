@@ -178,10 +178,13 @@ contract CurveExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
         if (tokenIn == nativeToken) {
             // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
             // to update the delta accounting accordingly.
@@ -190,8 +193,12 @@ contract CurveExecutor is IExecutor {
         } else {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
+        if (tokenOut == nativeToken) {
+            tokenOut = address(0);
+        }
         // The receiver of the funds will be the pool contract. This is only relevant
         // for performing an approval in the case of ProtocolWillDebit.
         receiver = address(bytes20(data[40:60]));
+        outputToRouter = true;
     }
 }

@@ -140,39 +140,33 @@ contract EtherfiExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         EtherfiDirection direction = _decodeData(data);
 
+        outputToRouter = true;
+
         if (direction == EtherfiDirection.EthToEeth) {
-            return (
-                TransferManager.TransferType.TransferNativeInExecutor,
-                address(0),
-                address(0)
-            );
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
+            tokenOut = eethAddress;
         } else if (direction == EtherfiDirection.EethToEth) {
-            // redemptionManager pulls eETH from router via transferFrom
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                redemptionManagerAddress,
-                eethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = redemptionManagerAddress;
+            tokenIn = eethAddress;
+            tokenOut = address(0);
         } else if (direction == EtherfiDirection.EethToWeeth) {
-            // weETH.wrap() pulls eETH from router via transferFrom
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                weethAddress,
-                eethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = weethAddress;
+            tokenIn = eethAddress;
+            tokenOut = weethAddress;
         } else if (direction == EtherfiDirection.WeethToEeth) {
-            // weETH.unwrap() burns from router (no transferFrom), so no approval
-            // needed — receiver=msg.sender skips _approveIfNeeded
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                msg.sender,
-                weethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = msg.sender;
+            tokenIn = weethAddress;
+            tokenOut = eethAddress;
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }

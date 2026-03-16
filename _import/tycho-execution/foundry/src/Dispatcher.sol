@@ -121,9 +121,10 @@ contract Dispatcher is TransferManager {
         (
             TransferManager.TransferType transferType,
             address transferReceiver,
-            address tokenIn
+            address tokenIn,,
         ) = abi.decode(
-            transferData, (TransferManager.TransferType, address, address)
+            transferData,
+            (TransferManager.TransferType, address, address, address, bool)
         );
 
         _transfer(

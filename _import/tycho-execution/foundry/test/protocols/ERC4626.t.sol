@@ -69,7 +69,7 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = abi.encodePacked(WETH_ADDR, address(spETH));
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             ERC4626Exposed.getTransferData(params);
 
         assertEq(tokenIn, WETH_ADDR);

@@ -48,7 +48,7 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         bytes memory params =
             abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             balancerV2Exposed.getTransferData(params);
 
         assertEq(address(tokenIn), WETH_ADDR);

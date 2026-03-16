@@ -5,7 +5,6 @@ import "../src/TransferManager.sol";
 
 pragma abicoder v2;
 
-
 interface IExecutor {
     /**
      * @notice Performs a swap on a liquidity pool.
@@ -39,11 +38,20 @@ interface IExecutor {
      * @return transferType The transfer type for this executor (None, ProtocolWillDebit, Transfer or TransferNativeInExecutor).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol).
      * @return tokenIn The address of the input token to transfer.
+     * @return tokenOut The address of the output token.
+     * @return outputToRouter Whether the protocol sends output to msg.sender
+     *  rather than accepting a receiver parameter.
      */
     function getTransferData(bytes calldata data)
         external
         payable
-        returns (TransferManager.TransferType transferType, address receiver, address tokenIn);
+        returns (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        );
 
     /**
      * @dev Returns where funds from the previous swap should be sent in a sequential swap case.
@@ -56,9 +64,7 @@ interface IExecutor {
      * @return receiver Address where to send the funds to. Returns msg.sender if funds should stay in router,
      * or the target address (e.g., pool) if direct transfer is supported.
      */
-    function fundsExpectedAddress(bytes calldata data)
-    external returns (address receiver);
-
+    function fundsExpectedAddress(bytes calldata data) external returns (address receiver);
 }
 
 interface IExecutorErrors {

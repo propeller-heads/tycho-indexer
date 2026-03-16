@@ -134,7 +134,9 @@ contract HashflowExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 325) {
@@ -143,7 +145,8 @@ contract HashflowExecutor is IExecutor {
 
         transferType = TransferManager.TransferType.ProtocolWillDebit;
         tokenIn = address(bytes20(data[60:80]));
-        // The receiver of the funds will be the Hashflow Router.
+        tokenOut = address(bytes20(data[80:100]));
         receiver = hashflowRouter;
+        outputToRouter = true;
     }
 }

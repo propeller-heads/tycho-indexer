@@ -101,7 +101,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             uniswapV3Exposed.getTransferData(params);
 
         assertEq(receiver, address(0));

@@ -104,7 +104,7 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bytes memory params =
             abi.encodePacked(DAI_WETH_UNIV2_POOL, DAI_ADDR, WETH_ADDR, false);
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             uniswapV2Exposed.getTransferData(params);
 
         assertEq(tokenIn, DAI_ADDR);

@@ -70,7 +70,7 @@ contract WethExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,,
         ) = wethExecutor.getTransferData(params);
 
         assertEq(receiver, address(this));
@@ -89,7 +89,7 @@ contract WethExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,,
         ) = wethExecutor.getTransferData(params);
 
         assertEq(receiver, address(this));

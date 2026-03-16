@@ -182,7 +182,9 @@ contract BebopExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length < 73) {
@@ -190,7 +192,9 @@ contract BebopExecutor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
         transferType = TransferManager.TransferType.ProtocolWillDebit;
         receiver = bebopSettlement;
+        outputToRouter = true;
     }
 }

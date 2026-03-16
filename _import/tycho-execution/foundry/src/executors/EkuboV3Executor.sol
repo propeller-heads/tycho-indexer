@@ -61,20 +61,30 @@ contract EkuboV3Executor is IExecutor, ICallback {
         _;
     }
 
-    function getTransferData(
-        bytes calldata /* data */
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
+        uint256 hopsLength =
+            (data.length - _POOL_DATA_OFFSET + 36) / _HOP_BYTE_LEN;
+        uint256 lastHopOffset = 20 + (hopsLength - 1) * _HOP_BYTE_LEN;
+        tokenOut = address(bytes20(data[lastHopOffset:lastHopOffset + 20]));
         // Ekubo uses flash accounting: no pre-swap transfer needed.
         // Tokens are paid during the callback in the Dispatcher
-        return (TransferManager.TransferType.None, address(0), address(0));
+        return (
+            TransferManager.TransferType.None,
+            address(0),
+            address(0),
+            tokenOut,
+            false
+        );
     }
 
     function fundsExpectedAddress(

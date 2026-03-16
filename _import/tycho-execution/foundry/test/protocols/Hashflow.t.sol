@@ -112,7 +112,7 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function testGetTransferData() public {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             executor.getTransferData(encodedQuote);
 
         assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");

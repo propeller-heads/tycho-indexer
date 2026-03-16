@@ -69,7 +69,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = "";
 
-        (, address receiver, address tokenIn) =
+        (, address receiver, address tokenIn,,) =
             balancerV3Exposed.getTransferData(params);
 
         assertEq(tokenIn, address(0));
