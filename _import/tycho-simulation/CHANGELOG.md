@@ -1,3 +1,10 @@
+## [0.250.0](https://github.com/propeller-heads/tycho-simulation/compare/0.249.0...0.250.0) (2026-03-16)
+
+
+### Features
+
+* update lru dependency ([87a6694](https://github.com/propeller-heads/tycho-simulation/commit/87a6694caa703bf27e89439c9c1e6b82e7af3c23))
+
 ## [0.249.0](https://github.com/propeller-heads/tycho-simulation/compare/0.248.3...0.249.0) (2026-03-16)
 
 
