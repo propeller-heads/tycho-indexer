@@ -1,3 +1,11 @@
+## [0.149.0](https://github.com/propeller-heads/tycho-indexer/compare/0.148.0...0.149.0) (2026-03-16)
+
+
+### Features
+
+* add allow_historical plan restriction to reject historical RPC queries ([aa362cb](https://github.com/propeller-heads/tycho-indexer/commit/aa362cb329d38c9664f8e6b3978d561b369780de))
+* add allow_historical plan restriction to reject historical RPC queries ([#872](https://github.com/propeller-heads/tycho-indexer/issues/872)) ([82611a1](https://github.com/propeller-heads/tycho-indexer/commit/82611a11d5a079032a5d6e1d1f02350f2ad3a659))
+
 ## [0.148.0](https://github.com/propeller-heads/tycho-indexer/compare/0.147.2...0.148.0) (2026-03-13)
 
 
