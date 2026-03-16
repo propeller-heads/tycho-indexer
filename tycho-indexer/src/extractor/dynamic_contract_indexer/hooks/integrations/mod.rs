@@ -2,6 +2,7 @@ use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
     MetadataGeneratorRegistry, MetadataResponseParserRegistry, ProviderRegistry,
 };
 
+pub(super) mod alphix;
 pub(super) mod euler;
 
 pub(super) fn register_integrations(
@@ -11,6 +12,12 @@ pub(super) fn register_integrations(
     rpc_url: String,
 ) {
     euler::register_euler_integrations(
+        generator_registry,
+        parser_registry,
+        provider_registry,
+        rpc_url.clone(),
+    );
+    alphix::register_alphix_integrations(
         generator_registry,
         parser_registry,
         provider_registry,
