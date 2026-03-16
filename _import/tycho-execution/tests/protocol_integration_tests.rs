@@ -1157,12 +1157,9 @@ fn test_single_encoding_strategy_hashflow() {
 
 #[test]
 fn test_single_encoding_strategy_fluid() {
-    let mut static_attributes: HashMap<String, Bytes> = HashMap::new();
-    static_attributes.insert("dex_id".into(), Bytes::from(vec![15u8]));
     let fluid_dex = ProtocolComponent {
         id: String::from("0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b"),
         protocol_system: String::from("fluid_v1"),
-        static_attributes,
         ..Default::default()
     };
     let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");
@@ -1206,20 +1203,14 @@ fn test_single_encoding_strategy_fluid() {
 
 #[test]
 fn test_sequential_encoding_strategy_fluid() {
-    let mut static_attributes_1: HashMap<String, Bytes> = HashMap::new();
-    static_attributes_1.insert("dex_id".into(), Bytes::from(vec![15u8]));
     let fluid_dex_1 = ProtocolComponent {
         id: String::from("0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b"),
         protocol_system: String::from("fluid_v1"),
-        static_attributes: static_attributes_1,
         ..Default::default()
     };
-    let mut static_attributes_2: HashMap<String, Bytes> = HashMap::new();
-    static_attributes_2.insert("dex_id".into(), Bytes::from(vec![34u8]));
     let fluid_dex_2 = ProtocolComponent {
         id: String::from("0xea734B615888c669667038D11950f44b177F15C0"),
         protocol_system: String::from("fluid_v1"),
-        static_attributes: static_attributes_2,
         ..Default::default()
     };
     let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");

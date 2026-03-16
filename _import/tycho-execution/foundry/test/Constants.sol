@@ -182,8 +182,6 @@ contract Constants is Test, BaseConstants {
 
     // Fluid liquidity contract on mainnet
     address FLUIDV1_LIQUIDITY = 0x52Aa899454998Be5b000Ad077a46Bbe360F4e497;
-    // Fluid DEX factory on mainnet
-    address FLUIDV1_DEX_FACTORY = 0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085;
 
     // Angstrom hook address
     address ANGSTROM_HOOK = 0x0000000aa232009084Bd71A5797d089AA4Edfad4;

@@ -84,11 +84,10 @@ const executors_to_deploy = {
             exchange: "HashflowExecutor",
             args: ["0x55084eE0fEf03f14a305cd24286359A35D735151"]
         },
-        // Args: liquidity, dexFactory
+        // Args: liquidity
         {
             exchange: "FluidV1Executor", args: [
-                "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497",
-                "0x91716C4EDA1Fb55e84Bf8b4c7085f84285c19085"
+                "0x52Aa899454998Be5b000Ad077a46Bbe360F4e497"
             ]
         },
         // Args:

@@ -195,8 +195,7 @@ contract TychoRouterTestSetup is
         balancerV3Executor = new BalancerV3Executor();
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT);
         hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER);
-        fluidV1Executor =
-            new FluidV1Executor(FLUIDV1_LIQUIDITY, FLUIDV1_DEX_FACTORY);
+        fluidV1Executor = new FluidV1Executor(FLUIDV1_LIQUIDITY);
         slipstreamsExecutor = new SlipstreamsExecutor(
             SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
         );

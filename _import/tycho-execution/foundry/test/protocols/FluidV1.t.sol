@@ -1,18 +1,30 @@
 pragma solidity ^0.8.26;
 
 import "../TychoRouterTestSetup.sol";
-import {
-    FluidV1Executor,
-    IFluidV1Dex,
-    FluidV1Executor__InvalidDex
-} from "@src/executors/FluidV1Executor.sol";
+import {FluidV1Executor, IFluidV1Dex} from "@src/executors/FluidV1Executor.sol";
 import {Constants} from "../Constants.sol";
 import "forge-std/Test.sol";
 
+/// Fake pool that lies about its output amount but sends nothing.
+contract FakeFluidPool {
+    uint256 public immutable bogusAmount;
+
+    constructor(uint256 bogusAmount_) {
+        bogusAmount = bogusAmount_;
+    }
+
+    function swapInWithCallback(bool, uint256, uint256, address)
+        external
+        pure
+        returns (uint256)
+    {
+        // No tokens are transferred, but we claim a large output.
+        return 1000e6;
+    }
+}
+
 contract FluidV1ExecutorExposed is FluidV1Executor {
-    constructor(address _liquidity, address _dexFactory)
-        FluidV1Executor(_liquidity, _dexFactory)
-    {}
+    constructor(address _liquidity) FluidV1Executor(_liquidity) {}
 
     function decodeData(bytes calldata data)
         external
@@ -21,8 +33,7 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
             IFluidV1Dex dex,
             bool zero2one,
             address outputToken,
-            bool isNative,
-            uint32 dexId
+            bool isNative
         )
     {
         return _decodeData(data);
@@ -53,36 +64,27 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
 contract FluidV1ExecutorTest is Test, Constants {
     FluidV1ExecutorExposed executor;
 
-    // dexId for 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b
-    uint32 constant SUSDE_USDT_DEX_ID = 15;
-    // dexId for 0xDD72157A021804141817d46D9852A97addfB9F59
-    uint32 constant EZETH_ETH_DEX_ID = 21;
-
     function setUp() public {
         uint256 forkBlock = 23748828;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        executor =
-            new FluidV1ExecutorExposed(FLUIDV1_LIQUIDITY, FLUIDV1_DEX_FACTORY);
+        executor = new FluidV1ExecutorExposed(FLUIDV1_LIQUIDITY);
     }
 
     function testDecodeData() public view {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        bytes memory params =
-            abi.encodePacked(dex, true, outputToken, false, SUSDE_USDT_DEX_ID);
+        bytes memory params = abi.encodePacked(dex, true, outputToken, false);
         IFluidV1Dex dexVal;
         bool zero2oneVal;
         address outputTokenVal;
         bool isNative;
-        uint32 dexId;
 
-        (dexVal, zero2oneVal, outputTokenVal, isNative, dexId) =
+        (dexVal, zero2oneVal, outputTokenVal, isNative) =
             executor.decodeData(params);
 
         assertEq(address(dexVal), dex);
         assert(zero2oneVal);
         assertEq(outputTokenVal, outputToken);
-        assertEq(dexId, SUSDE_USDT_DEX_ID);
     }
 
     function testGetTransferData() public {
@@ -167,9 +169,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         IERC20 sUSDe = IERC20(0x9D39A5DE30e57443BfF2A8307A4256c8797A3497);
         IERC20 USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
         uint256 amountIn = 10e18;
-        bytes memory params = abi.encodePacked(
-            dex, true, address(USDT), false, SUSDE_USDT_DEX_ID
-        );
+        bytes memory params = abi.encodePacked(dex, true, address(USDT), false);
         deal(address(sUSDe), address(executor), amountIn);
         uint256 balanceBefore = USDT.balanceOf(BOB);
 
@@ -181,39 +181,11 @@ contract FluidV1ExecutorTest is Test, Constants {
         assertEq(tokenOut, USDT_ADDR);
     }
 
-    function testSwapInvalidDex() public {
-        address fakeDex = makeAddr("fakeDex");
-        bytes memory params = abi.encodePacked(
-            fakeDex, true, USDT_ADDR, false, SUSDE_USDT_DEX_ID
-        );
-
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                FluidV1Executor__InvalidDex.selector, fakeDex
-            )
-        );
-        executor.swap(1, params, BOB);
-    }
-
-    function testSwapWrongDexId() public {
-        address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
-        uint32 wrongDexId = 999;
-        bytes memory params =
-            abi.encodePacked(dex, true, USDT_ADDR, false, wrongDexId);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(FluidV1Executor__InvalidDex.selector, dex)
-        );
-        executor.swap(1, params, BOB);
-    }
-
     function testSellNative() public {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params = abi.encodePacked(
-            dex, false, address(ezETH), true, EZETH_ETH_DEX_ID
-        );
+        bytes memory params = abi.encodePacked(dex, false, address(ezETH), true);
         deal(address(executor), amountIn);
         uint256 balanceBefore = ezETH.balanceOf(BOB);
 
@@ -225,12 +197,22 @@ contract FluidV1ExecutorTest is Test, Constants {
         assertEq(tokenOut, address(ezETH));
     }
 
+    function testSwapFakePool() public {
+        address tokenOut = USDT_ADDR;
+        FakeFluidPool fakePool = new FakeFluidPool(1000e6);
+        bytes memory params =
+            abi.encodePacked(address(fakePool), true, tokenOut, false);
+
+        (uint256 amountOut,) = executor.swap(1e18, params, BOB);
+
+        assertEq(amountOut, 0, "fake pool should produce zero output");
+    }
+
     function testBuyNative() public {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params =
-            abi.encodePacked(dex, true, address(0), false, EZETH_ETH_DEX_ID);
+        bytes memory params = abi.encodePacked(dex, true, address(0), false);
         deal(address(ezETH), address(executor), amountIn);
         uint256 balanceBefore = BOB.balance;
 
