@@ -118,6 +118,12 @@ struct Cli {
     #[arg(long, default_value_t = 0)]
     max_blocks: u64,
 
+    /// Ratio used to define the lower bound of the TVL filter for hysteresis.
+    /// Components are added when TVL >= tvl_threshold and removed when TVL drops below
+    /// tvl_threshold / tvl_buffer_ratio.
+    #[arg(long, default_value_t = 1.1)]
+    tvl_buffer_ratio: f64,
+
     /// Minimum token quality to filter by (defaults to 100 if not provided)
     #[arg(long)]
     min_token_quality: Option<i32>,
@@ -251,6 +257,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
             cli.tvl_threshold,
+            cli.tvl_buffer_ratio,
             cli.protocols.clone(),
         ) {
             protocol_handle = Some(
