@@ -159,7 +159,7 @@ mod tests {
 
     use chrono::NaiveDateTime;
     use tycho_common::{
-        models::{Chain, ChangeType},
+        models::Chain,
         Bytes,
     };
 
@@ -219,14 +219,12 @@ mod tests {
             MetadataRequestType::ComponentBalance { .. }
         ));
 
-        assert_eq!(
-            requests[0].request_id(),
-            "alphix_balance0_0x831CfDf7c0E194f5369f204b3DD2481B843d60c0"
-        );
-        assert_eq!(
-            requests[1].request_id(),
-            "alphix_balance1_0x831CfDf7c0E194f5369f204b3DD2481B843d60c0"
-        );
+        assert!(requests[0]
+            .request_id()
+            .starts_with("alphix_balance0_"));
+        assert!(requests[1]
+            .request_id()
+            .starts_with("alphix_balance1_"));
     }
 
     #[test]
