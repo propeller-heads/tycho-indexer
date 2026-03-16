@@ -18,9 +18,8 @@ Example, for Mainnet: [https://tycho-beta.propellerheads.xyz/docs/](https://tych
 
 All API keys have the following default limits:
 
-&#x20; \- 50 requests per second with burst support up to 300/s (6x multiplier)
-
-&#x20; \- 2 concurrent WebSocket connections
+* 50 requests per second with burst support up to 300/s (6x multiplier)
+* 2 concurrent WebSocket connections
 
 {% hint style="info" %}
 Need higher limits? Contact @tanay\_j on Telegram.
