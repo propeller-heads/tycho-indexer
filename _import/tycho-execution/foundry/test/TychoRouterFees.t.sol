@@ -7,7 +7,6 @@ import {
     Vault__UnexpectedInputDelta
 } from "@src/Vault.sol";
 import {
-    TychoRouter__AmountOutNotFullyReceived,
     TychoRouter__InvalidClientSignature,
     TychoRouter__ExpiredClientSignature,
     ClientFeeParams
@@ -370,5 +369,42 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             clientFeeReceiver, uint256(uint160(USDC_ADDR))
         );
         assertEq(clientFeeReceiverBalance, expectedFeeAmount);
+    }
+
+    function testSingleSwapFeeOnTransferTokenSTA() public {
+        // STA is a fee token that takes a fee in ALL transfers (by protocols or direct from user to user)
+        address STA_ADDR = address(0xa7DE087329BFcda5639247F96140f9DAbe3DeED1);
+        address STA_WETH_UNIV2_POOL = 0x59F96b8571E3B11f859A09Eaf5a790A138FC64D0;
+
+        uint256 amountIn = 1 ether;
+
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(STA_WETH_UNIV2_POOL, WETH_ADDR, STA_ADDR, true);
+
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(1, 20, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, STA_ADDR, 1, ALICE, feeParams, swap
+        );
+
+        // Pool transfer to router 1284621860562858120776317
+        // router actually received 1271775641957229539568553
+        // client takes 127177564195722953956
+        // so ALICE should get 1271648464393033816614597
+        // but actually gets 1258931979749103478448451
+
+        assertEq(amountOut, 1258931979749103478448451);
+        assertEq(IERC20(STA_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
+
+        vm.stopPrank();
     }
 }

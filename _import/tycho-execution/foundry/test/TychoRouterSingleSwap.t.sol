@@ -384,7 +384,10 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             amountIn, WETH_ADDR, ZKML_ADDR, 1, ALICE, noClientFee(), swap
         );
 
-        assertGt(amountOut, 0);
+        // Pool transfer to router 18455652180922777663091
+        // router actually received 18086539137304322109830
+
+        assertEq(amountOut, 18086539137304322109830);
         assertEq(IERC20(ZKML_ADDR).balanceOf(ALICE), amountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 0);
 

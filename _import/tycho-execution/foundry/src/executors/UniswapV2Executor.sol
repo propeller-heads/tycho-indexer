@@ -50,11 +50,7 @@ contract UniswapV2Executor is IExecutor {
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
 
-        if (isFoT) {
-            _swapFoT(pool, tokenIn, zeroForOne, receiver);
-        } else {
-            _swap(pool, amountIn, zeroForOne, receiver);
-        }
+        _swap(pool, amountIn, zeroForOne, receiver);
     }
 
     function _swap(
@@ -95,7 +91,6 @@ contract UniswapV2Executor is IExecutor {
 
         uint256 calculatedAmount =
             _getAmountOut(actualAmountIn, reserveIn, reserveOut);
-
         if (zeroForOne) {
             pool.swap(0, calculatedAmount, receiver, "");
         } else {

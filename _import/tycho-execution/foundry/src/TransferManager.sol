@@ -134,12 +134,12 @@ contract TransferManager is Vault {
         bool isFirstSwap,
         bool isSplitSwap,
         bool inCallback
-    ) internal {
+    ) internal returns (uint256) {
         // Scenario 1: No transfer needed. Likely called from outside the callback,
         // when funds are only transferred in callback for this protocol (e.g.
         // UniswapV3).
         if (transferType == TransferType.None) {
-            return;
+            return amount;
         }
 
         // Scenario 2: Native ETH sent via executor - accounting only
@@ -147,7 +147,7 @@ contract TransferManager is Vault {
             // Protocols like Fluid or Lido require us to send the ETH as
             // msg.value when calling the swap function from inside the executor.
             _updateDeltaAccounting(tokenIn, -int256(amount));
-            return;
+            return amount;
         }
 
         // Determine if we need to transfer from user wallet (first swap + not using vault)
@@ -162,14 +162,14 @@ contract TransferManager is Vault {
         if (transferType == TransferType.ProtocolWillDebit) {
             if (needsTransferFromUser) {
                 // Scenario 3: First swap with user funds - transfer to router, then approve
-                _transferFromUser(tokenIn, address(this), amount);
+                amount = _transferFromUser(tokenIn, address(this), amount);
                 _approveIfNeeded(tokenIn, receiver, amount);
             } else {
                 // Scenario 4: Funds already in router (from vault or previous swap)
                 _updateDeltaAccounting(tokenIn, -int256(amount));
                 _approveIfNeeded(tokenIn, receiver, amount);
             }
-            return;
+            return amount;
         }
 
         if (transferType == TransferType.Transfer) {
@@ -182,20 +182,20 @@ contract TransferManager is Vault {
             bool canUseSequentialSwapOptimization =
                 !isFirstSwap && !isSplitSwap && !inCallback;
             if (canUseSequentialSwapOptimization) {
-                return;
+                return amount;
             }
 
             if (needsTransferFromUser) {
                 // Scenario 5: First swap with user funds - transfer directly to pool
-                _transferFromUser(tokenIn, receiver, amount);
+                amount = _transferFromUser(tokenIn, receiver, amount);
             } else {
                 // Scenario 6: Transfer from router balance to pool
                 // This could mean the funds come from the user's vault (first swap with vault)
                 // or funds are in the router from the previous swap.
                 _updateDeltaAccounting(tokenIn, -int256(amount));
-                IERC20(tokenIn).safeTransfer(receiver, amount);
+                amount = _transferOut(tokenIn, receiver, amount);
             }
-            return;
+            return amount;
         }
 
         revert TransferManager__UnknownTransferType();
@@ -238,9 +238,13 @@ contract TransferManager is Vault {
     /**
      * @dev Transfers tokens from user wallet using either Permit2 or regular transferFrom.
      * Validates the transfer doesn't exceed allowed amount and updates allowance tracking.
+     * @return The actual amount received by the receiver, measured as the balance
+     * difference before and after the transfer. This may differ from `amount` for
+     * rebasing or fee-on-transfer tokens.
      */
     function _transferFromUser(address token, address receiver, uint256 amount)
         internal
+        returns (uint256)
     {
         // Validate and track allowance to prevent badly encoded split swaps from
         // taking more than the input amount out of the user's wallet
@@ -272,6 +276,7 @@ contract TransferManager is Vault {
             tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
         }
 
+        uint256 balanceBefore = _balanceOf(token, receiver);
         // Perform the actual transfer
         if (isPermit2) {
             // Permit2.permit is already called from the TychoRouter
@@ -281,5 +286,42 @@ contract TransferManager is Vault {
             // slither-disable-next-line arbitrary-send-erc20
             IERC20(token).safeTransferFrom(sender, receiver, amount);
         }
+        uint256 balanceAfter = _balanceOf(token, receiver);
+        return balanceAfter - balanceBefore;
+    }
+
+    /**
+     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
+     */
+    function _balanceOf(address token, address owner)
+        internal
+        view
+        returns (uint256)
+    {
+        return token == address(0)
+            ? owner.balance
+            : IERC20(token).balanceOf(owner);
+    }
+
+    /**
+     * @dev Transfers tokens from this contract to a recipient. Supports both
+     * native ETH (via `sendValue`) and ERC20 tokens (via `safeTransfer`).
+     * @return The actual amount received by `to`, measured as the balance
+     * difference before and after the transfer. This may differ from `amount`
+     * for rebasing or fee-on-transfer tokens.
+     */
+    function _transferOut(address token, address to, uint256 amount)
+        internal
+        returns (uint256)
+    {
+        // measuring the balance again is needed for rebase/fee tokens
+        uint256 balanceBefore = _balanceOf(token, to);
+        if (token == address(0)) {
+            Address.sendValue(payable(to), amount);
+        } else {
+            IERC20(token).safeTransfer(to, amount);
+        }
+        uint256 balanceAfter = _balanceOf(token, to);
+        return balanceAfter - balanceBefore;
     }
 }

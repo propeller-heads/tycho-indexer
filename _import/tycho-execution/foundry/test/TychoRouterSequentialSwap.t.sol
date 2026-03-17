@@ -338,6 +338,51 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
     }
 
+    function testCurveUSV2SequentialSwap() public {
+        // ETH → stETH (Curve stETH pool) → WETH (UniV2 stETH/WETH)
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        bytes memory curveStEthData = abi.encodePacked(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            uint8(1), // poolType = stable
+            uint8(0), // i = 0 (ETH)
+            uint8(1) // j = 1 (stETH)
+        );
+
+        address stethWethV2Pool = 0x4028DAAC072e492d34a3Afdbef0ba7e35D8b55C4;
+        bytes memory usv2StethWethData =
+            encodeUniswapV2Swap(stethWethV2Pool, STETH_ADDR, WETH_ADDR);
+
+        bytes[] memory swaps = new bytes[](2);
+        swaps[0] = encodeSequentialSwap(address(curveExecutor), curveStEthData);
+        swaps[1] =
+            encodeSequentialSwap(address(usv2Executor), usv2StethWethData);
+
+        uint256 amountOut = tychoRouter.sequentialSwap{value: amountIn}(
+            amountIn,
+            address(0), // tokenIn = native ETH
+            WETH_ADDR,
+            1, // min amount out
+            ALICE,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+        // curve pool transfers 999958043830457008 stETH to router
+        // router actually got 999958043830457007 stETH
+        // univ2 pool only gets 999958043830457006 stETH
+        assertEq(amountOut, 993908205983850532);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(ALICE.balance, 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+
+        vm.stopPrank();
+    }
+
     function testBalancerV2USV2Integration() public {
         // Performs a sequential swap from WETH to USDC though WBTC using Balancer v2 and USV2 pools
         //
