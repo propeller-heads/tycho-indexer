@@ -11,33 +11,18 @@ import {
 import {TransferManager} from "../TransferManager.sol";
 
 error UniswapV2Executor__InvalidDataLength();
-error UniswapV2Executor__InvalidTarget();
-error UniswapV2Executor__InvalidFactory();
-error UniswapV2Executor__InvalidInitCode();
 error UniswapV2Executor__InvalidFee();
 
 contract UniswapV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable factory;
-    bytes32 public immutable initCode;
     uint256 public immutable feeBps;
-    address private immutable _self;
 
-    constructor(address factory_, bytes32 initCode_, uint256 feeBps_) {
-        if (factory_ == address(0)) {
-            revert UniswapV2Executor__InvalidFactory();
-        }
-        if (initCode_ == bytes32(0)) {
-            revert UniswapV2Executor__InvalidInitCode();
-        }
-        factory = factory_;
-        initCode = initCode_;
+    constructor(uint256 feeBps_) {
         if (feeBps_ > 30) {
             revert UniswapV2Executor__InvalidFee();
         }
         feeBps = feeBps_;
-        _self = address(this);
     }
 
     function fundsExpectedAddress(bytes calldata data)
@@ -62,10 +47,6 @@ contract UniswapV2Executor is IExecutor {
         (target, tokenIn, tokenOut, isFoT) = _decodeData(data);
 
         bool zeroForOne = (tokenIn < tokenOut);
-        address token0 = zeroForOne ? tokenIn : tokenOut;
-        address token1 = zeroForOne ? tokenOut : tokenIn;
-
-        _verifyPairAddress(target, token0, token1);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
 
@@ -146,25 +127,6 @@ contract UniswapV2Executor is IExecutor {
         uint256 numerator = amountInWithFee * uint256(reserveOut);
         uint256 denominator = (uint256(reserveIn) * 10000) + amountInWithFee;
         amount = numerator / denominator;
-    }
-
-    function _verifyPairAddress(address target, address token0, address token1)
-        internal
-        view
-    {
-        bytes32 salt = keccak256(abi.encodePacked(token0, token1));
-        address pair = address(
-            uint160(
-                uint256(
-                    keccak256(
-                        abi.encodePacked(hex"ff", factory, salt, initCode)
-                    )
-                )
-            )
-        );
-        if (pair != target) {
-            revert UniswapV2Executor__InvalidTarget();
-        }
     }
 
     function getTransferData(bytes calldata data)

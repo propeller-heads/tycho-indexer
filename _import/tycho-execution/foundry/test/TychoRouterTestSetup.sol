@@ -172,33 +172,24 @@ contract TychoRouterTestSetup is
     }
 
     function deployExecutors() public returns (address[] memory) {
-        address factoryV2 = USV2_FACTORY_ETHEREUM;
-        address factoryV3 = USV3_FACTORY_ETHEREUM;
-        address factoryPancakeV3 = PANCAKESWAPV3_DEPLOYER_ETHEREUM;
-        bytes32 initCodeV2 = USV2_POOL_CODE_INIT_HASH;
-        bytes32 initCodeV3 = USV3_POOL_CODE_INIT_HASH;
-        bytes32 initCodePancakeV3 = PANCAKEV3_POOL_CODE_INIT_HASH;
         address poolManagerAddress = 0x000000000004444c5dc75cB358380D2e3dE08A90;
         address ekuboCore = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
         address ekuboMevResist = 0x553a2EFc570c9e104942cEC6aC1c18118e54C091;
 
         IPoolManager poolManager = IPoolManager(poolManagerAddress);
-        usv2Executor = new UniswapV2Executor(factoryV2, initCodeV2, 30);
-        usv3Executor = new UniswapV3Executor(factoryV3, initCodeV3);
+        usv2Executor = new UniswapV2Executor(30);
+        usv3Executor = new UniswapV3Executor();
         usv4Executor = new UniswapV4Executor(poolManager, ANGSTROM_HOOK);
-        pancakev3Executor =
-            new UniswapV3Executor(factoryPancakeV3, initCodePancakeV3);
+        pancakev3Executor = new UniswapV3Executor();
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore, ekuboMevResist);
         curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, STETH_ADDR);
-        maverickv2Executor = new MaverickV2Executor(MAVERICK_V2_FACTORY);
+        maverickv2Executor = new MaverickV2Executor();
         balancerV3Executor = new BalancerV3Executor();
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT);
         hashflowExecutor = new HashflowExecutor(HASHFLOW_ROUTER);
         fluidV1Executor = new FluidV1Executor(FLUIDV1_LIQUIDITY);
-        slipstreamsExecutor = new SlipstreamsExecutor(
-            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
-        );
+        slipstreamsExecutor = new SlipstreamsExecutor();
         rocketpoolExecutor = new RocketpoolExecutor(ROCKET_DEPOSIT_POOL);
         erc4626Executor = new ERC4626Executor();
         wethExecutor = new WethExecutor(WETH_ADDR);

@@ -8,9 +8,7 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
-    constructor(address _factory, bytes32 _initCode)
-        UniswapV3Executor(_factory, _initCode)
-    {}
+    constructor() UniswapV3Executor() {}
 
     function decodeData(bytes calldata data)
         external
@@ -24,15 +22,6 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
         )
     {
         return _decodeData(data);
-    }
-
-    function verifyPairAddress(
-        address tokenA,
-        address tokenB,
-        uint24 fee,
-        address target
-    ) external view {
-        _verifyPairAddress(tokenA, tokenB, fee, target);
     }
 
     function uniswapV3SwapCallback(
@@ -70,12 +59,8 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
 
-        uniswapV3Exposed = new UniswapV3ExecutorExposed(
-            USV3_FACTORY_ETHEREUM, USV3_POOL_CODE_INIT_HASH
-        );
-        pancakeV3Exposed = new UniswapV3ExecutorExposed(
-            PANCAKESWAPV3_DEPLOYER_ETHEREUM, PANCAKEV3_POOL_CODE_INIT_HASH
-        );
+        uniswapV3Exposed = new UniswapV3ExecutorExposed();
+        pancakeV3Exposed = new UniswapV3ExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -167,18 +152,6 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         uniswapV3Exposed.decodeData(invalidParams);
     }
 
-    function testVerifyPairAddress() public view {
-        uniswapV3Exposed.verifyPairAddress(
-            WETH_ADDR, DAI_ADDR, 3000, DAI_WETH_USV3
-        );
-    }
-
-    function testVerifyPairAddressPancake() public view {
-        pancakeV3Exposed.verifyPairAddress(
-            WETH_ADDR, USDT_ADDR, 500, PANCAKESWAPV3_WETH_USDT_POOL
-        );
-    }
-
     function testUSV3Callback() public {
         uint24 poolFee = 3000;
         uint256 amountOwed = 1000000000000000000;
@@ -208,20 +181,6 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
 
         uint256 finalPoolReserve = IERC20(WETH_ADDR).balanceOf(DAI_WETH_USV3);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    }
-
-    function testSwapFailureInvalidTarget() public {
-        uint256 amountIn = 10 ** 18;
-        deal(WETH_ADDR, address(uniswapV3Exposed), amountIn);
-        bool zeroForOne = false;
-        address fakePool = DUMMY; // Contract with minimal code
-
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, DAI_ADDR, uint24(3000), fakePool, zeroForOne
-        );
-
-        vm.expectRevert(UniswapV3Executor__InvalidTarget.selector);
-        uniswapV3Exposed.swap(amountIn, protocolData, BOB);
     }
 
     function encodeUniswapV3Swap(
@@ -281,9 +240,8 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         vm.rollFork(38001287);
 
         // Deploy the executor specifically on this Base fork
-        UniswapV3ExecutorExposed basePancakeV3Exposed = new UniswapV3ExecutorExposed(
-            PANCAKESWAPV3_DEPLOYER, PANCAKEV3_POOL_CODE_INIT_HASH
-        );
+        UniswapV3ExecutorExposed basePancakeV3Exposed =
+            new UniswapV3ExecutorExposed();
 
         uint256 amountIn = 1000 * 10 ** 6;
         bool zeroForOne = true;

@@ -6,7 +6,7 @@ import "@src/executors/MaverickV2Executor.sol";
 import {Constants} from "../Constants.sol";
 
 contract MaverickV2ExecutorExposed is MaverickV2Executor {
-    constructor(address _factory) MaverickV2Executor(_factory) {}
+    constructor() MaverickV2Executor() {}
 
     function decodeParams(bytes calldata data)
         external
@@ -27,7 +27,7 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
     function setUp() public {
         uint256 forkBlock = 22096000;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        maverickV2Exposed = new MaverickV2ExecutorExposed(MAVERICK_V2_FACTORY);
+        maverickV2Exposed = new MaverickV2ExecutorExposed();
     }
 
     function testDecodeParams() public view {

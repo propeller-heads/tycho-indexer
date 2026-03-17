@@ -10,12 +10,8 @@ import {
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
 import {TransferManager} from "../TransferManager.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error UniswapV3Executor__InvalidDataLength();
-error UniswapV3Executor__InvalidFactory();
-error UniswapV3Executor__InvalidTarget();
-error UniswapV3Executor__InvalidInitCode();
 
 contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
@@ -24,21 +20,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
     uint160 private constant _MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
 
-    address public immutable factory;
-    bytes32 public immutable initCode;
-    address private immutable _self;
-
-    constructor(address factory_, bytes32 initCode_) {
-        if (factory_ == address(0)) {
-            revert UniswapV3Executor__InvalidFactory();
-        }
-        if (initCode_ == bytes32(0)) {
-            revert UniswapV3Executor__InvalidInitCode();
-        }
-        factory = factory_;
-        initCode = initCode_;
-        _self = address(this);
-    }
+    constructor() {}
 
     function fundsExpectedAddress(
         bytes calldata /* data */
@@ -62,8 +44,6 @@ contract UniswapV3Executor is IExecutor, ICallback {
         bool zeroForOne;
         (tokenIn, tokenOut, fee, target, zeroForOne) = _decodeData(data);
 
-        _verifyPairAddress(tokenIn, tokenOut, fee, target);
-
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
         bytes memory callbackData = _extractV3CallbackData(data);
@@ -81,7 +61,7 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
     function handleCallback(bytes calldata msgData)
         public
-        view
+        pure
         returns (bytes memory result)
     {
         // The data has the following layout:
@@ -97,20 +77,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
         address tokenIn = address(bytes20(msgData[132:152]));
 
-        verifyCallback(msgData[132:]);
-
         uint256 amountOwed =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
 
         return abi.encode(amountOwed, tokenIn);
-    }
-
-    function verifyCallback(bytes calldata data) public view {
-        address tokenIn = address(bytes20(data[0:20]));
-        address tokenOut = address(bytes20(data[20:40]));
-        uint24 poolFee = uint24(bytes3(data[40:43]));
-
-        _verifyPairAddress(tokenIn, tokenOut, poolFee, msg.sender);
     }
 
     function _decodeData(bytes calldata data)
@@ -143,33 +113,6 @@ contract UniswapV3Executor is IExecutor, ICallback {
         returns (bytes calldata)
     {
         return data[0:43];
-    }
-
-    function _verifyPairAddress(
-        address tokenA,
-        address tokenB,
-        uint24 fee,
-        address target
-    ) internal view {
-        (address token0, address token1) =
-            tokenA < tokenB ? (tokenA, tokenB) : (tokenB, tokenA);
-        address pool = address(
-            uint160(
-                uint256(
-                    keccak256(
-                        abi.encodePacked(
-                            hex"ff",
-                            factory,
-                            keccak256(abi.encode(token0, token1, fee)),
-                            initCode
-                        )
-                    )
-                )
-            )
-        );
-        if (pool != target) {
-            revert UniswapV3Executor__InvalidTarget();
-        }
     }
 
     function getTransferData(bytes calldata data)

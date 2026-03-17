@@ -5,27 +5,14 @@ import {
     SafeERC20,
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {TransferManager} from "../TransferManager.sol";
-import {
-    RefundEscrow
-} from "../../lib/permit2/lib/openzeppelin-contracts/contracts/utils/escrow/RefundEscrow.sol";
 
 error MaverickV2Executor__InvalidDataLength();
-error MaverickV2Executor__InvalidTarget();
-error MaverickV2Executor__InvalidFactory();
 
 contract MaverickV2Executor is IExecutor {
     using SafeERC20 for IERC20;
 
-    address public immutable factory;
-
-    constructor(address factory_) {
-        if (factory_ == address(0)) {
-            revert MaverickV2Executor__InvalidFactory();
-        }
-        factory = factory_;
-    }
+    constructor() {}
 
     function fundsExpectedAddress(bytes calldata data)
         external
@@ -46,7 +33,6 @@ contract MaverickV2Executor is IExecutor {
 
         (target, tokenIn,) = _decodeData(data);
 
-        _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
 
         bool isTokenAIn = pool.tokenA() == tokenIn;
@@ -75,13 +61,6 @@ contract MaverickV2Executor is IExecutor {
         tokenOut = address(bytes20(data[40:60]));
     }
 
-    function _verifyPairAddress(address target) internal view {
-        if (!IMaverickV2Factory(factory).isFactoryPool(IMaverickV2Pool(target)))
-        {
-            revert MaverickV2Executor__InvalidTarget();
-        }
-    }
-
     function getTransferData(bytes calldata data)
         external
         payable
@@ -102,10 +81,6 @@ contract MaverickV2Executor is IExecutor {
         transferType = TransferManager.TransferType.Transfer;
         outputToRouter = false;
     }
-}
-
-interface IMaverickV2Factory {
-    function isFactoryPool(IMaverickV2Pool pool) external view returns (bool);
 }
 
 interface IMaverickV2Pool {

@@ -5,7 +5,6 @@ import {
     UniswapV2Executor,
     TransferManager,
     UniswapV2Executor__InvalidDataLength,
-    UniswapV2Executor__InvalidTarget,
     IUniswapV2Pair
 } from "@src/executors/UniswapV2Executor.sol";
 import {Constants} from "../Constants.sol";
@@ -17,9 +16,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract UniswapV2ExecutorExposed is UniswapV2Executor {
-    constructor(address _factory, bytes32 _initCode, uint256 _feeBps)
-        UniswapV2Executor(_factory, _initCode, _feeBps)
-    {}
+    constructor(uint256 _feeBps) UniswapV2Executor(_feeBps) {}
 
     function decodeParams(bytes calldata data)
         external
@@ -40,22 +37,6 @@ contract UniswapV2ExecutorExposed is UniswapV2Executor {
         uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
         return _getAmountOut(amountIn, reserveIn, reserveOut);
     }
-
-    function verifyPairAddress(address target) external view {
-        address token0 = IUniswapV2Pair(target).token0();
-        address token1 = IUniswapV2Pair(target).token1();
-        _verifyPairAddress(target, token0, token1);
-    }
-}
-
-contract FakeUniswapV2Pool {
-    address public token0;
-    address public token1;
-
-    constructor(address _tokenA, address _tokenB) {
-        token0 = _tokenA < _tokenB ? _tokenA : _tokenB;
-        token1 = _tokenA < _tokenB ? _tokenB : _tokenA;
-    }
 }
 
 contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
@@ -70,15 +51,9 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
     function setUp() public {
         uint256 forkBlock = 17323404;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
-        uniswapV2Exposed = new UniswapV2ExecutorExposed(
-            USV2_FACTORY_ETHEREUM, USV2_POOL_CODE_INIT_HASH, 30
-        );
-        sushiswapV2Exposed = new UniswapV2ExecutorExposed(
-            SUSHISWAPV2_FACTORY_ETHEREUM, SUSHIV2_POOL_CODE_INIT_HASH, 30
-        );
-        pancakeswapV2Exposed = new UniswapV2ExecutorExposed(
-            PANCAKESWAPV2_FACTORY_ETHEREUM, PANCAKEV2_POOL_CODE_INIT_HASH, 25
-        );
+        uniswapV2Exposed = new UniswapV2ExecutorExposed(30);
+        sushiswapV2Exposed = new UniswapV2ExecutorExposed(30);
+        pancakeswapV2Exposed = new UniswapV2ExecutorExposed(25);
     }
 
     function testDecodeParams() public view {
@@ -109,24 +84,6 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         assertEq(tokenIn, DAI_ADDR);
         assertEq(receiver, DAI_WETH_UNIV2_POOL);
-    }
-
-    function testVerifyPairAddress() public view {
-        uniswapV2Exposed.verifyPairAddress(DAI_WETH_UNIV2_POOL);
-    }
-
-    function testVerifyPairAddressSushi() public view {
-        sushiswapV2Exposed.verifyPairAddress(SUSHISWAP_WBTC_WETH_POOL);
-    }
-
-    function testVerifyPairAddressPancake() public view {
-        pancakeswapV2Exposed.verifyPairAddress(PANCAKESWAP_WBTC_WETH_POOL);
-    }
-
-    function testInvalidTarget() public {
-        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
-        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
-        uniswapV2Exposed.verifyPairAddress(fakePool);
     }
 
     function testAmountOut() public view {
@@ -205,17 +162,6 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 finalBalance = dai.balanceOf(BOB);
         assertGe(finalBalance, amountOut);
-    }
-
-    function testSwapFailureInvalidTarget() public {
-        uint256 amountIn = 10 ** 18;
-        address fakePool = address(new FakeUniswapV2Pool(WETH_ADDR, DAI_ADDR));
-        bytes memory protocolData =
-            abi.encodePacked(fakePool, WETH_ADDR, DAI_ADDR, false);
-
-        deal(WETH_ADDR, address(uniswapV2Exposed), amountIn);
-        vm.expectRevert(UniswapV2Executor__InvalidTarget.selector);
-        uniswapV2Exposed.swap(amountIn, protocolData, BOB);
     }
 
     // Base Network Tests

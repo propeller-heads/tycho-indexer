@@ -8,9 +8,7 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
-    constructor(address _factory1, address _factory2)
-        SlipstreamsExecutor(_factory1, _factory2)
-    {}
+    constructor() SlipstreamsExecutor() {}
 
     function decodeData(bytes calldata data)
         external
@@ -24,15 +22,6 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
         )
     {
         return _decodeData(data);
-    }
-
-    function verifyPairAddress(
-        address tokenA,
-        address tokenB,
-        int24 tick_spacing,
-        address target
-    ) external view {
-        _verifyPairAddress(tokenA, tokenB, tick_spacing, target);
     }
 
     function uniswapV3SwapCallback(
@@ -67,9 +56,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 forkBlock = 38086214;
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
-        slipstreamsExposed = new SlipstreamsExecutorExposed(
-            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
-        );
+        slipstreamsExposed = new SlipstreamsExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -181,12 +168,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         slipstreamsExposed.decodeData(invalidParams);
     }
 
-    function testVerifyPairAddress() public view {
-        slipstreamsExposed.verifyPairAddress(
-            BASE_WETH, BASE_USDC, 100, SLIPSTREAMS_WETH_USDC_POOL
-        );
-    }
-
     function testSlipstreamsCallback() public {
         uint24 poolTickSpacing = 100;
         uint256 amountOwed = 1000000000000000000;
@@ -217,20 +198,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 finalPoolReserve =
             IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    }
-
-    function testSwapFailureInvalidTarget() public {
-        uint256 amountIn = 10 ** 18;
-        deal(BASE_WETH, address(slipstreamsExposed), amountIn);
-        bool zeroForOne = false;
-        address fakePool = DUMMY; // Contract with minimal code
-
-        bytes memory protocolData = abi.encodePacked(
-            BASE_WETH, BASE_USDC, uint24(100), fakePool, zeroForOne
-        );
-
-        vm.expectRevert(SlipstreamsExecutor__InvalidTarget.selector);
-        slipstreamsExposed.swap(amountIn, protocolData, BOB);
     }
 }
 
