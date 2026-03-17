@@ -183,7 +183,11 @@ contract Dispatcher is TransferManager {
 
         // Forward if output landed at router but needs to go elsewhere
         if (outputToRouter && receiver != address(this)) {
+            // measuring the balance again is needed for rebase/fee tokens
+            uint256 balanceBefore = _balanceOf(tokenOut, receiver);
             _transferOut(tokenOut, receiver, amountOut);
+            uint256 balanceAfter = _balanceOf(tokenOut, receiver);
+            amountOut = balanceAfter - balanceBefore;
         }
 
         // Delta accounting if tokens stay at router

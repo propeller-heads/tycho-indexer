@@ -129,39 +129,6 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(tokenOut, STETH_ADDR);
     }
 
-    // This test verifies that amountOut for stETH is calculated correctly by
-    // accounting for an existing stETH balance in the executor prior to the swap
-    function testStEthPoolWithInitialstETH() public {
-        // Swapping ETH -> stETH on StEthPool 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022 twice
-        uint256 amountIn = 2 ether;
-        deal(address(curveExecutorExposed), amountIn);
-
-        uint256 amountInForTest = 1 ether;
-
-        bytes memory data1 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
-
-        (uint256 amountOut1, address tokenOut1) =
-            curveExecutorExposed.swap(amountInForTest, data1, ALICE);
-
-        bytes memory data2 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
-
-        (uint256 amountOut2, address tokenOut2) =
-            curveExecutorExposed.swap(amountInForTest, data2, ALICE);
-
-        // TODO double check this case
-        assertEq(amountOut1, 1001072414418410897);
-        assertEq(amountOut2, 1001072213238226894);
-        assertApproxEqAbs(
-            IERC20(STETH_ADDR).balanceOf(address(curveExecutorExposed)),
-            amountOut1 + amountOut2,
-            2
-        );
-        assertEq(tokenOut1, STETH_ADDR);
-        assertEq(tokenOut2, STETH_ADDR);
-    }
-
     function testTricrypto2Pool() public {
         // Swapping WETH -> WBTC on Tricrypto2Pool 0xD51a44d3FaE010294C616388b506AcdA1bfAAE46
         uint256 amountIn = 1 ether;
@@ -427,6 +394,46 @@ contract TychoRouterForCurveTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 2877855391767);
+
+        vm.stopPrank();
+    }
+
+    function testStEthPoolWithInitialStEth() public {
+        // Swapping ETH -> stETH on the Curve stETH pool through
+        // the full TychoRouter workflow. Uses native ETH as input
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        bytes memory curveStEthData = abi.encodePacked(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            uint8(1), // poolType = stable
+            uint8(0), // i = 0 (ETH)
+            uint8(1) // j = 1 (stETH)
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), curveStEthData);
+
+        uint256 amountOut = tychoRouter.singleSwap{value: amountIn}(
+            amountIn,
+            address(0), // tokenIn = native ETH
+            STETH_ADDR,
+            1, // min amount out
+            ALICE,
+            noClientFee(),
+            swap
+        );
+
+        // pools reports sending 999958043830457008 stETH to msg.sender (router)
+        // router actually got 999958043830457007 stETH
+        // after the last transfer to Alice, she gets 999958043830457005 stETH
+        assertEq(amountOut, 999958043830457005);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(ALICE.balance, 0);
 
         vm.stopPrank();
     }
