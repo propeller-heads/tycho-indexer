@@ -55,9 +55,12 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         bytes memory protocolData = abi.encodePacked(EtherfiDirection.EthToEeth);
 
         vm.deal(address(this), amountIn);
-        (minted,) = etherfiExposed.swap{value: amountIn}(
+        uint256 balBefore = IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
+        etherfiExposed.swap{value: amountIn}(
             amountIn, protocolData, address(etherfiExposed)
         );
+        uint256 balAfter = IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
+        minted = balAfter - balBefore;
     }
 
     function testDecodeParams() public view {
@@ -84,14 +87,12 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         uint256 balanceBefore =
             IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
 
-        (uint256 amountOut,) =
-            etherfiExposed.swap{value: amountIn}(amountIn, protocolData, BOB);
+        etherfiExposed.swap{value: amountIn}(amountIn, protocolData, BOB);
 
         uint256 balanceAfter =
             IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
 
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
     }
 
     function testSwapEethToWeeth() public {
@@ -105,12 +106,11 @@ contract EtherfiExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore =
             IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed));
-        (uint256 amountOut,) = etherfiExposed.swap(minted, protocolData, BOB);
+        etherfiExposed.swap(minted, protocolData, BOB);
         uint256 balanceAfter =
             IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed));
 
         assertGt(balanceAfter, balanceBefore);
-        assertApproxEqAbs(balanceAfter - balanceBefore, amountOut, 1);
     }
 
     function testSwapWeethToEeth() public {
@@ -121,19 +121,21 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         vm.prank(address(etherfiExposed));
         IERC20(EETH_ADDR).approve(WEETH_ADDR, type(uint256).max);
 
-        (uint256 weethAmount,) =
-            etherfiExposed.swap(minted, wrapData, address(etherfiExposed));
+        uint256 weethBefore =
+            IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed));
+        etherfiExposed.swap(minted, wrapData, address(etherfiExposed));
+        uint256 weethAmount =
+            IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed)) - weethBefore;
 
         bytes memory unwrapData = abi.encodePacked(EtherfiDirection.WeethToEeth);
 
         uint256 balanceBefore =
             IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
-        (uint256 amountOut,) = etherfiExposed.swap(weethAmount, unwrapData, BOB);
+        etherfiExposed.swap(weethAmount, unwrapData, BOB);
         uint256 balanceAfter =
             IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
 
         assertGt(balanceAfter, balanceBefore);
-        assertApproxEqAbs(balanceAfter - balanceBefore, amountOut, 1);
     }
 }
 

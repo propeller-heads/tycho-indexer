@@ -54,9 +54,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
+        address tokenOut;
         uint24 fee;
         address target;
         bool zeroForOne;
@@ -64,28 +64,19 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
         _verifyPairAddress(tokenIn, tokenOut, fee, target);
 
-        int256 amount0;
-        int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
         bytes memory callbackData = _extractV3CallbackData(data);
 
-        {
-            (amount0, amount1) = pool.swap(
-                receiver,
-                zeroForOne,
-                // positive means exactIn
-                int256(amountIn),
-                zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
-                callbackData
-            );
-        }
-
-        if (zeroForOne) {
-            amountOut = amount1 > 0 ? uint256(amount1) : uint256(-amount1);
-        } else {
-            amountOut = amount0 > 0 ? uint256(amount0) : uint256(-amount0);
-        }
+        // slither-disable-next-line unused-return
+        pool.swap(
+            receiver,
+            zeroForOne,
+            // positive means exactIn
+            int256(amountIn),
+            zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
+            callbackData
+        );
     }
 
     function handleCallback(bytes calldata msgData)

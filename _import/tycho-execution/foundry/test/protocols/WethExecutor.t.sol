@@ -110,12 +110,9 @@ contract WethExecutorTest is TestUtils, Constants {
 
         // Fund the executor with ETH
         vm.deal(address(wethExecutor), amountIn);
-        (uint256 amountOut, address tokenOut) =
-            wethExecutor.swap(amountIn, protocolData, BOB);
+        wethExecutor.swap(amountIn, protocolData, BOB);
 
         assertEq(WETH.balanceOf(address(wethExecutor)), 1 ether);
-        assertEq(amountOut, 1 ether);
-        assertEq(tokenOut, WETH_ADDR);
     }
 
     function testSwapUnwrap() public {
@@ -129,12 +126,9 @@ contract WethExecutorTest is TestUtils, Constants {
         deal(WETH_ADDR, address(wethExecutor), amountIn);
 
         uint256 ethBalanceBefore = address(wethExecutor).balance;
-        (uint256 amountOut, address tokenOut) =
-            wethExecutor.swap(amountIn, protocolData, BOB);
+        wethExecutor.swap(amountIn, protocolData, BOB);
 
         assertEq(address(wethExecutor).balance - ethBalanceBefore, 1 ether);
-        assertEq(amountOut, 1 ether);
-        assertEq(tokenOut, address(0));
     }
 
     function testDecodeWrapping() public view {

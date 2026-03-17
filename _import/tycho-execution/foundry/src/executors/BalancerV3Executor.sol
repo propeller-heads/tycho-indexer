@@ -38,15 +38,12 @@ contract BalancerV3Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         if (data.length != 60) {
             revert BalancerV3Executor__InvalidDataLength();
         }
-        bytes memory result =
-            _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
-        (amountOut, tokenOut) =
-            abi.decode(abi.decode(result, (bytes)), (uint256, address));
+        // slither-disable-next-line unused-return
+        _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
     }
 
     function verifyCallback(

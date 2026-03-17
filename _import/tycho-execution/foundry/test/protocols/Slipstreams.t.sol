@@ -141,12 +141,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut) =
-            slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 balanceBefore = IERC20(BASE_USDC).balanceOf(address(this));
+        slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 amountOut =
+            IERC20(BASE_USDC).balanceOf(address(this)) - balanceBefore;
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
-        assertGe(IERC20(BASE_USDC).balanceOf(address(this)), amountOut);
-        assertEq(tokenOut, BASE_USDC);
+        assertGt(amountOut, 0);
     }
 
     function testSwapNewFactory() public {
@@ -163,12 +164,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut) =
-            slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 balanceBefore = IERC20(BASE_BMI).balanceOf(address(this));
+        slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 amountOut =
+            IERC20(BASE_BMI).balanceOf(address(this)) - balanceBefore;
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
-        assertGe(IERC20(BASE_BMI).balanceOf(address(this)), amountOut);
-        assertEq(tokenOut, BASE_BMI);
+        assertGt(amountOut, 0);
     }
 
     function testDecodeParamsInvalidDataLength() public {

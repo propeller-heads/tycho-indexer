@@ -72,13 +72,10 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         vm.prank(address(maverickV2Exposed));
         IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
 
-        (uint256 amountOut, address tokenOut) =
-            maverickV2Exposed.swap(amountIn, protocolData, BOB);
+        maverickV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, USDC_ADDR);
     }
 
     function testDecodeIntegration() public view {
@@ -107,13 +104,10 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         vm.prank(address(maverickV2Exposed));
         IERC20(GHO_ADDR).transfer(GHO_USDC_POOL, amountIn);
 
-        (uint256 amountOut, address tokenOut) =
-            maverickV2Exposed.swap(amountIn, protocolData, BOB);
+        maverickV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = USDC.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, USDC_ADDR);
     }
 }
 

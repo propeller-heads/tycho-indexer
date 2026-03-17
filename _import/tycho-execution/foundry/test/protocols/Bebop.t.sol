@@ -124,10 +124,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned) =
-            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
+        bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
-        assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
         assertEq(
             IERC20(tokenOut).balanceOf(address(bebopExecutor))
                 - initialTokenOutBalance,
@@ -139,7 +137,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             0,
             "weth left in executor"
         );
-        assertEq(tokenOutReturned, tokenOut);
     }
 
     function testSingleOrder_PartialFill() public {
@@ -172,10 +169,8 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned) =
-            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
+        bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
-        assertEq(amountOut, expectedAmountOut, "Incorrect partial amount out");
         assertEq(
             IERC20(tokenOut).balanceOf(address(bebopExecutor))
                 - initialTokenOutBalance,
@@ -187,7 +182,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             0,
             "wbtc left in executor"
         );
-        assertEq(tokenOutReturned, tokenOut);
     }
 
     // Aggregate Order Tests
@@ -219,10 +213,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned) =
-            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
-
-        assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
+        bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(
             IERC20(tokenOut).balanceOf(address(bebopExecutor))
@@ -235,7 +226,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             0,
             "usdc left in executor"
         );
-        assertEq(tokenOutReturned, tokenOut);
     }
 
     function testAggregateOrder_PartialFill() public {
@@ -269,10 +259,7 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             IERC20(tokenOut).balanceOf(address(bebopExecutor));
         vm.prank(address(bebopExecutor));
         IERC20(tokenIn).approve(BEBOP_SETTLEMENT, amountIn);
-        (uint256 amountOut, address tokenOutReturned) =
-            bebopExecutor.swap(amountIn, params, address(bebopExecutor));
-
-        assertEq(amountOut, expectedAmountOut, "Incorrect amount out");
+        bebopExecutor.swap(amountIn, params, address(bebopExecutor));
 
         assertEq(
             IERC20(tokenOut).balanceOf(address(bebopExecutor))
@@ -285,7 +272,6 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             1, // because of integer division, there is 1 usdc left in the executor
             "usdc left in executor"
         );
-        assertEq(tokenOutReturned, tokenOut);
     }
 
     function testInvalidDataLength() public {

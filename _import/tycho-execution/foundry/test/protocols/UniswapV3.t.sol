@@ -143,13 +143,14 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
         bytes memory data =
             encodeUniswapV3Swap(WETH_ADDR, DAI_ADDR, DAI_WETH_USV3, zeroForOne);
 
-        (uint256 amountOut, address tokenOut) =
-            uniswapV3Exposed.swap(amountIn, data, address(this));
+        uint256 balanceBefore = IERC20(DAI_ADDR).balanceOf(address(this));
+        uniswapV3Exposed.swap(amountIn, data, address(this));
+        uint256 amountOut =
+            IERC20(DAI_ADDR).balanceOf(address(this)) - balanceBefore;
 
         assertGe(amountOut, expAmountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(uniswapV3Exposed)), 0);
         assertGe(IERC20(DAI_ADDR).balanceOf(address(this)), expAmountOut);
-        assertEq(tokenOut, DAI_ADDR);
     }
 
     function testDecodeParamsInvalidDataLength() public {

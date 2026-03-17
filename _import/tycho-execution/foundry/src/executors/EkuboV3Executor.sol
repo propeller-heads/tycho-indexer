@@ -102,13 +102,13 @@ contract EkuboV3Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         if (data.length < 72) revert EkuboV3Executor__InvalidDataLength();
 
         address tokenIn = address(bytes20(data[0:20]));
         // startPayments needs to be called in CORE before we transfer the token IN (which happens during callback)
-        bytes memory _result = LibCall.callContract(
+        // slither-disable-next-line unused-return
+        LibCall.callContract(
             CORE_ADDRESS,
             abi.encodeWithSelector(
                 IFlashAccountant.startPayments.selector, tokenIn
@@ -116,8 +116,11 @@ contract EkuboV3Executor is IExecutor, ICallback {
         );
 
         // amountIn must be at most type(int128).max
-        (amountOut, tokenOut) = _lock(
-            bytes.concat(
+        // slither-disable-next-line unused-return
+        LibCall.callContract(
+            CORE_ADDRESS,
+            abi.encodePacked(
+                IFlashAccountant.lock.selector,
                 bytes16(uint128(SafeCastLib.toInt128(amountIn))),
                 bytes20(receiver),
                 data
@@ -129,10 +132,8 @@ contract EkuboV3Executor is IExecutor, ICallback {
         verifyCallback(raw);
 
         // Without selector and locker id
-        bytes calldata stripped = raw[36:];
-
-        (uint128 amountOut, address tokenOut) = _locked(stripped);
-        return abi.encode(amountOut, tokenOut);
+        _locked(raw[36:]);
+        return "";
     }
 
     function verifyCallback(bytes calldata raw) public view coreOnly {
@@ -168,20 +169,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
         }
     }
 
-    function _lock(bytes memory data)
-        private
-        returns (uint256 swappedAmount, address tokenOut)
-    {
-        bytes memory result = LibCall.callContract(
-            CORE_ADDRESS, abi.encodePacked(IFlashAccountant.lock.selector, data)
-        );
-        (swappedAmount, tokenOut) = abi.decode(result, (uint128, address));
-    }
-
-    function _locked(bytes calldata swapData)
-        private
-        returns (uint128, address)
-    {
+    function _locked(bytes calldata swapData) private {
         uint128 amountIn = uint128(bytes16(swapData[0:16]));
         int128 nextAmountIn = int128(amountIn);
         address receiver = address(bytes20(swapData[16:36]));
@@ -243,13 +231,8 @@ contract EkuboV3Executor is IExecutor, ICallback {
             offset += _HOP_BYTE_LEN;
         }
 
-        // Only exact-in swaps are supported, so amountOut is always non-negative
-        uint128 amountOut = uint128(nextAmountIn);
-
         _pay(tokenIn, amountIn);
-        CORE.withdraw(nextTokenIn, receiver, amountOut);
-
-        return (amountOut, nextTokenOut);
+        CORE.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
     }
 
     function _pay(address token, uint128 amount) private {

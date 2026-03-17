@@ -61,14 +61,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         if (data.length < 72) {
             revert EkuboExecutor__InvalidDataLength();
         }
 
         // amountIn must be at most type(int128).MAX
-        (amountOut, tokenOut) = _lock(
+        _lock(
             abi.encodePacked(
                 bytes16(uint128(amountIn)), bytes20(receiver), data
             )
@@ -81,38 +80,23 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     {
         verifyCallback(raw);
 
-        // Without selector and locker id
-        bytes calldata stripped = raw[36:];
-
         bytes4 selector = bytes4(raw[:4]);
 
-        bytes memory result = "";
         if (selector == _LOCKED_SELECTOR) {
-            (int128 amountOut, address tokenOut) = _locked(stripped);
-            result = abi.encodePacked(amountOut, tokenOut);
+            _locked(raw[36:]);
         } else if (selector == _PAY_CALLBACK_SELECTOR) {
-            // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
+            // The paying is done in the Dispatcher using getCallbackTransferData
         } else {
             revert EkuboExecutor__UnknownCallback();
         }
 
-        return result;
+        return "";
     }
 
     function verifyCallback(bytes calldata) public view coreOnly {}
 
     function locked(uint256) external coreOnly {
-        // Without selector and locker id
-        (int128 amountOut, address tokenOut) = _locked(msg.data[36:]);
-
-        // Pack: 16 bytes int128 + 20 bytes address = 36 bytes total
-        bytes memory result = abi.encodePacked(amountOut, tokenOut);
-
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            // Return raw bytes without ABI encoding
-            return(add(result, 32), mload(result))
-        }
+        _locked(msg.data[36:]);
     }
 
     function payCallback(
@@ -125,10 +109,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         // The paying is done in the Dispatcher using getCallbackTransferData. Nothing to do here
     }
 
-    function _lock(bytes memory data)
-        internal
-        returns (uint128 swappedAmount, address tokenOut)
-    {
+    function _lock(bytes memory data) internal {
         // Prepend selector of lock() to calldata
         // We must use assembly here since the Ekubo Core's lock method expects the raw
         // bytes directly and not ABI-encoded bytes
@@ -143,23 +124,9 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 revert(add(result, 32), mload(result))
             }
         }
-
-        // Decode 36 bytes: 16 bytes for int128 + 20 bytes for address
-        // Data is packed with values left-shifted in each position
-        // Assembly is necessary since the input is bytes memory and not bytes calldata
-        int128 amountOut;
-        // slither-disable-next-line assembly
-        assembly ("memory-safe") {
-            amountOut := shr(128, mload(add(result, 32)))
-            tokenOut := shr(96, mload(add(result, 48)))
-        }
-        swappedAmount = uint128(amountOut);
     }
 
-    function _locked(bytes calldata swapData)
-        internal
-        returns (int128, address)
-    {
+    function _locked(bytes calldata swapData) internal {
         int128 nextAmountIn = int128(uint128(bytes16(swapData[0:16])));
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
         address receiver = address(bytes20(swapData[16:36]));
@@ -220,12 +187,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             offset += _HOP_BYTE_LEN;
         }
 
-        // After the loop, nextTokenOut is the final output token
-        address tokenOut = nextTokenOut;
-
         _pay(tokenIn, tokenInDebtAmount);
         _core.withdraw(nextTokenIn, receiver, uint128(nextAmountIn));
-        return (nextAmountIn, tokenOut);
     }
 
     function _forward(address to, bytes memory data)

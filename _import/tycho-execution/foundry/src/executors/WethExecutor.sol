@@ -43,7 +43,6 @@ contract WethExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         bool isWrapping;
         isWrapping = _decodeData(data);
@@ -51,13 +50,9 @@ contract WethExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             weth.deposit{value: amountIn}();
-            amountOut = amountIn;
-            tokenOut = address(weth);
         } else {
             // WETH -> ETH: Unwrap
             weth.withdraw(amountIn);
-            amountOut = amountIn;
-            tokenOut = address(0);
         }
     }
 

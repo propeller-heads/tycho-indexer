@@ -35,24 +35,16 @@ contract RocketpoolExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         bool isDeposit;
         (isDeposit) = _decodeData(data);
 
         if (isDeposit) {
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
-            // We don't need to _transfer ETH into this contract since it must be sent along with the call
-            uint256 rethBefore = RETH.balanceOf(address(this));
             rocketDepositPool.deposit{value: amountIn}();
-            amountOut = RETH.balanceOf(address(this)) - rethBefore;
-            tokenOut = address(RETH);
         } else {
-            tokenOut = address(0);
             // rETH -> ETH: Burn rETH to receive ETH
-            uint256 ethBefore = address(this).balance;
             RETH.burn(amountIn);
-            amountOut = address(this).balance - ethBefore;
         }
     }
 

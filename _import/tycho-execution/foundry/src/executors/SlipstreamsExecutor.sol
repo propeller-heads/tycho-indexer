@@ -62,9 +62,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
+        address tokenOut;
         int24 tickSpacing;
         address target;
         bool zeroForOne;
@@ -72,28 +72,19 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
 
         _verifyPairAddress(tokenIn, tokenOut, tickSpacing, target);
 
-        int256 amount0;
-        int256 amount1;
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
         bytes memory callbackData = data[0:43];
 
-        {
-            (amount0, amount1) = pool.swap(
-                receiver,
-                zeroForOne,
-                // positive means exactIn
-                int256(amountIn),
-                zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
-                callbackData
-            );
-        }
-
-        if (zeroForOne) {
-            amountOut = amount1 > 0 ? uint256(amount1) : uint256(-amount1);
-        } else {
-            amountOut = amount0 > 0 ? uint256(amount0) : uint256(-amount0);
-        }
+        // slither-disable-next-line unused-return
+        pool.swap(
+            receiver,
+            zeroForOne,
+            // positive means exactIn
+            int256(amountIn),
+            zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
+            callbackData
+        );
     }
 
     function handleCallback(bytes calldata msgData)

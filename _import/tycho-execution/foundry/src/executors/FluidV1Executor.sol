@@ -59,19 +59,12 @@ contract FluidV1Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         IFluidV1Dex dex;
         bool zero2one;
         bool isNativeSell;
 
-        (dex, zero2one, tokenOut, isNativeSell) = _decodeData(data);
-
-        // Balance check: measure actual output instead of trusting
-        // the pool's reported amount.
-        uint256 balanceBefore = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
+        (dex, zero2one,, isNativeSell) = _decodeData(data);
 
         if (!isNativeSell) {
             _setCurrentDex(dex);
@@ -81,12 +74,6 @@ contract FluidV1Executor is IExecutor, ICallback {
             // slither-disable-next-line arbitrary-send-eth,unused-return
             dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
         }
-
-        uint256 balanceAfter = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
-
-        amountOut = balanceAfter - balanceBefore;
     }
 
     // Stores dex address in transient storage

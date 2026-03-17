@@ -60,7 +60,6 @@ contract HashflowExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         (IHashflowRouter.RFQTQuote memory quote) = _decodeData(data);
 
@@ -76,12 +75,7 @@ contract HashflowExecutor is IExecutor {
             ethValue = quote.effectiveBaseTokenAmount;
         }
 
-        // The quote.trader is hardcoded to always be address(this)
-        uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
         IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
-        uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
-        amountOut = balanceAfter - balanceBefore;
-        tokenOut = quote.quoteToken;
     }
 
     function _decodeData(bytes calldata data)
@@ -108,16 +102,6 @@ contract HashflowExecutor is IExecutor {
         quote.nonce = uint256(bytes32(data[196:228]));
         quote.txid = bytes32(data[228:260]);
         quote.signature = data[260:325];
-    }
-
-    function _balanceOf(address trader, address token)
-        internal
-        view
-        returns (uint256 balance)
-    {
-        balance = token == NATIVE_TOKEN
-            ? trader.balance
-            : IERC20(token).balanceOf(trader);
     }
 
     function getTransferData(bytes calldata data)

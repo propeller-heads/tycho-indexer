@@ -35,9 +35,9 @@ contract BalancerV2Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
+        address tokenOut;
         bytes32 poolId;
 
         (tokenIn, tokenOut, poolId) = _decodeData(data);
@@ -60,8 +60,8 @@ contract BalancerV2Executor is IExecutor {
 
         uint256 limit = 0;
 
-        amountOut =
-            IVault(_VAULT).swap(singleSwap, funds, limit, block.timestamp);
+        // slither-disable-next-line unused-return
+        IVault(_VAULT).swap(singleSwap, funds, limit, block.timestamp);
     }
 
     function _decodeData(bytes calldata data)

@@ -69,20 +69,17 @@ contract CurveExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         if (data.length != 63) {
             revert CurveExecutor__InvalidDataLength();
         }
         address tokenIn;
+        address tokenOut;
         address pool;
         uint8 poolType;
         int128 i;
         int128 j;
         (tokenIn, tokenOut, pool, poolType, i, j) = _decodeData(data);
-
-        /// Inspired by Curve's router contract: https://github.com/curvefi/curve-router-ng/blob/9ab006ca848fc7f1995b6fbbecfecc1e0eb29e2a/contracts/Router.vy#L44
-        uint256 balanceBefore = _balanceOf(tokenOut);
 
         uint256 ethAmount = 0;
         if (tokenIn == nativeToken) {
@@ -106,16 +103,6 @@ contract CurveExecutor is IExecutor {
                         uint256(int256(i)), uint256(int256(j)), amountIn, 0
                     );
             }
-        }
-
-        uint256 balanceAfter = _balanceOf(tokenOut);
-        amountOut = balanceAfter - balanceBefore;
-
-        // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
-        // uses the address(0) instead. The tokenOut is then later used on some internal accounting across the entire
-        // swap by the TychoRouter, so it is relevant that we are consistent.
-        if (tokenOut == nativeToken) {
-            tokenOut = address(0);
         }
     }
 
@@ -148,12 +135,6 @@ contract CurveExecutor is IExecutor {
         require(msg.sender.code.length != 0);
     }
 
-    function _balanceOf(address token) internal view returns (uint256 balance) {
-        balance = token == nativeToken
-            ? address(this).balance
-            : IERC20(token).balanceOf(address(this));
-    }
-
     function getTransferData(bytes calldata data)
         external
         payable
@@ -175,6 +156,9 @@ contract CurveExecutor is IExecutor {
         } else {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
+        // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
+        // uses the address(0) instead. The tokenOut is then later used on some internal accounting across the entire
+        // swap by the TychoRouter, so it is relevant that we are consistent.
         if (tokenOut == nativeToken) {
             tokenOut = address(0);
         }

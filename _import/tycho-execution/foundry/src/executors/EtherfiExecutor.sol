@@ -79,7 +79,6 @@ contract EtherfiExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         EtherfiDirection direction;
         direction = _decodeData(data);
@@ -91,27 +90,18 @@ contract EtherfiExecutor is IExecutor {
             if (redeemAmount > amountIn) {
                 redeemAmount = amountIn;
             }
-            uint256 balanceBefore = address(this).balance;
             IEtherfiRedemptionManager(redemptionManagerAddress)
                 .redeemEEth(redeemAmount, address(this), ethAddress);
-            amountOut = address(this).balance - balanceBefore;
-            tokenOut = ethAddress;
         } else if (direction == EtherfiDirection.EthToEeth) {
-            uint256 balanceBefore = IERC20(eethAddress).balanceOf(address(this));
-            // deposit() returns shares, not the eETH amount;
-            // use balance delta for amount-out.
             // slither-disable-next-line arbitrary-send-eth,unused-return
             IEtherfiLiquidityPool(liquidityPoolAddress)
             .deposit{value: amountIn}();
-            uint256 balanceAfter = IERC20(eethAddress).balanceOf(address(this));
-            amountOut = balanceAfter - balanceBefore;
-            tokenOut = eethAddress;
         } else if (direction == EtherfiDirection.EethToWeeth) {
-            amountOut = IWeETH(weethAddress).wrap(amountIn);
-            tokenOut = weethAddress;
+            // slither-disable-next-line unused-return
+            IWeETH(weethAddress).wrap(amountIn);
         } else if (direction == EtherfiDirection.WeethToEeth) {
-            amountOut = IWeETH(weethAddress).unwrap(amountIn);
-            tokenOut = eethAddress;
+            // slither-disable-next-line unused-return
+            IWeETH(weethAddress).unwrap(amountIn);
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }

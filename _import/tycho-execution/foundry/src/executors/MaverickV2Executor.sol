@@ -40,12 +40,11 @@ contract MaverickV2Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address target;
         IERC20 tokenIn;
 
-        (target, tokenIn, tokenOut) = _decodeData(data);
+        (target, tokenIn,) = _decodeData(data);
 
         _verifyPairAddress(target);
         IMaverickV2Pool pool = IMaverickV2Pool(target);
@@ -60,7 +59,7 @@ contract MaverickV2Executor is IExecutor {
         });
 
         // slither-disable-next-line unused-return
-        (, amountOut) = pool.swap(receiver, swapParams, "");
+        pool.swap(receiver, swapParams, "");
     }
 
     function _decodeData(bytes calldata data)

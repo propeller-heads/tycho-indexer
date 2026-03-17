@@ -73,13 +73,10 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            balancerV2Exposed.swap(amountIn, protocolData, BOB);
+        balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, BAL_ADDR);
     }
 
     function testDecodeIntegration() public view {
@@ -104,12 +101,9 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            balancerV2Exposed.swap(amountIn, protocolData, BOB);
+        balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, BAL_ADDR);
     }
 }
