@@ -111,24 +111,6 @@ contract CurveExecutor is IExecutor {
         uint256 balanceAfter = _balanceOf(tokenOut);
         amountOut = balanceAfter - balanceBefore;
 
-        uint256 castRemainderWei = 0;
-
-        if (receiver != address(this)) {
-            if (tokenOut == nativeToken) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                // Due to rounding errors, 1 wei might get lost
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
-
-            if (hasStETH && tokenOut == stEthAddress) {
-                castRemainderWei = IERC20(stEthAddress).balanceOf(address(this))
-                    - balanceBefore;
-
-                amountOut -= castRemainderWei;
-            }
-        }
-
         // This is necessary because Curve's native token is 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE and TychoRouter
         // uses the address(0) instead. The tokenOut is then later used on some internal accounting across the entire
         // swap by the TychoRouter, so it is relevant that we are consistent.

@@ -199,12 +199,13 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         )
     {
         if (data.length >= 40) {
+            tokenIn = address(bytes20(data[0:20]));
             tokenOut = address(bytes20(data[20:40]));
         }
         return (
             TransferManager.TransferType.None,
             address(0),
-            address(0),
+            tokenIn,
             tokenOut,
             false
         );

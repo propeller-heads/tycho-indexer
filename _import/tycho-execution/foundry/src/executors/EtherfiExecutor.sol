@@ -85,16 +85,16 @@ contract EtherfiExecutor is IExecutor {
         direction = _decodeData(data);
 
         if (direction == EtherfiDirection.EethToEth) {
-            uint256 balanceBefore = receiver.balance;
             // eETH is share-based and rounds down on amount conversions;
             // cap redeem amount to current balance to avoid 1-wei dust reverts.
             uint256 redeemAmount = IERC20(eethAddress).balanceOf(address(this));
             if (redeemAmount > amountIn) {
                 redeemAmount = amountIn;
             }
+            uint256 balanceBefore = address(this).balance;
             IEtherfiRedemptionManager(redemptionManagerAddress)
-                .redeemEEth(redeemAmount, receiver, ethAddress);
-            amountOut = receiver.balance - balanceBefore;
+                .redeemEEth(redeemAmount, address(this), ethAddress);
+            amountOut = address(this).balance - balanceBefore;
             tokenOut = ethAddress;
         } else if (direction == EtherfiDirection.EthToEeth) {
             uint256 balanceBefore = IERC20(eethAddress).balanceOf(address(this));
@@ -106,29 +106,12 @@ contract EtherfiExecutor is IExecutor {
             uint256 balanceAfter = IERC20(eethAddress).balanceOf(address(this));
             amountOut = balanceAfter - balanceBefore;
             tokenOut = eethAddress;
-
-            if (receiver != address(this)) {
-                uint256 receiverBalanceBefore =
-                    IERC20(eethAddress).balanceOf(receiver);
-                IERC20(eethAddress).safeTransfer(receiver, amountOut);
-                uint256 receiverBalanceAfter =
-                    IERC20(eethAddress).balanceOf(receiver);
-                amountOut = receiverBalanceAfter - receiverBalanceBefore;
-            }
         } else if (direction == EtherfiDirection.EethToWeeth) {
             amountOut = IWeETH(weethAddress).wrap(amountIn);
             tokenOut = weethAddress;
-
-            if (receiver != address(this)) {
-                IERC20(weethAddress).safeTransfer(receiver, amountOut);
-            }
         } else if (direction == EtherfiDirection.WeethToEeth) {
             amountOut = IWeETH(weethAddress).unwrap(amountIn);
             tokenOut = eethAddress;
-
-            if (receiver != address(this)) {
-                IERC20(eethAddress).safeTransfer(receiver, amountOut);
-            }
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }

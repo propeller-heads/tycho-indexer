@@ -81,12 +81,15 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         bytes memory protocolData = abi.encodePacked(EtherfiDirection.EthToEeth);
 
         vm.deal(address(this), amountIn);
-        uint256 balanceBefore = IERC20(EETH_ADDR).balanceOf(BOB);
+        uint256 balanceBefore =
+            IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
 
         (uint256 amountOut,) =
             etherfiExposed.swap{value: amountIn}(amountIn, protocolData, BOB);
 
-        uint256 balanceAfter = IERC20(EETH_ADDR).balanceOf(BOB);
+        uint256 balanceAfter =
+            IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
+
         assertGt(balanceAfter, balanceBefore);
         assertEq(balanceAfter - balanceBefore, amountOut);
     }
@@ -100,9 +103,11 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         vm.prank(address(etherfiExposed));
         IERC20(EETH_ADDR).approve(WEETH_ADDR, type(uint256).max);
 
-        uint256 balanceBefore = IERC20(WEETH_ADDR).balanceOf(BOB);
+        uint256 balanceBefore =
+            IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed));
         (uint256 amountOut,) = etherfiExposed.swap(minted, protocolData, BOB);
-        uint256 balanceAfter = IERC20(WEETH_ADDR).balanceOf(BOB);
+        uint256 balanceAfter =
+            IERC20(WEETH_ADDR).balanceOf(address(etherfiExposed));
 
         assertGt(balanceAfter, balanceBefore);
         assertApproxEqAbs(balanceAfter - balanceBefore, amountOut, 1);
@@ -121,9 +126,11 @@ contract EtherfiExecutorTest is Constants, TestUtils {
 
         bytes memory unwrapData = abi.encodePacked(EtherfiDirection.WeethToEeth);
 
-        uint256 balanceBefore = IERC20(EETH_ADDR).balanceOf(BOB);
+        uint256 balanceBefore =
+            IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
         (uint256 amountOut,) = etherfiExposed.swap(weethAmount, unwrapData, BOB);
-        uint256 balanceAfter = IERC20(EETH_ADDR).balanceOf(BOB);
+        uint256 balanceAfter =
+            IERC20(EETH_ADDR).balanceOf(address(etherfiExposed));
 
         assertGt(balanceAfter, balanceBefore);
         assertApproxEqAbs(balanceAfter - balanceBefore, amountOut, 1);

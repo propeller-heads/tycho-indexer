@@ -110,13 +110,10 @@ contract WethExecutorTest is TestUtils, Constants {
 
         // Fund the executor with ETH
         vm.deal(address(wethExecutor), amountIn);
-        uint256 wethBalanceBefore = WETH.balanceOf(BOB);
         (uint256 amountOut, address tokenOut) =
             wethExecutor.swap(amountIn, protocolData, BOB);
-        uint256 wethBalanceAfter = WETH.balanceOf(BOB);
 
-        // Check balances
-        assertEq(wethBalanceAfter - wethBalanceBefore, 1 ether);
+        assertEq(WETH.balanceOf(address(wethExecutor)), 1 ether);
         assertEq(amountOut, 1 ether);
         assertEq(tokenOut, WETH_ADDR);
     }
@@ -131,13 +128,11 @@ contract WethExecutorTest is TestUtils, Constants {
         // Fund the executor with wETH
         deal(WETH_ADDR, address(wethExecutor), amountIn);
 
-        uint256 ethBalanceBefore = BOB.balance;
+        uint256 ethBalanceBefore = address(wethExecutor).balance;
         (uint256 amountOut, address tokenOut) =
             wethExecutor.swap(amountIn, protocolData, BOB);
-        uint256 ethBalanceAfter = BOB.balance;
 
-        // Check balances
-        assertEq(ethBalanceAfter - ethBalanceBefore, 1 ether);
+        assertEq(address(wethExecutor).balance - ethBalanceBefore, 1 ether);
         assertEq(amountOut, 1 ether);
         assertEq(tokenOut, address(0));
     }

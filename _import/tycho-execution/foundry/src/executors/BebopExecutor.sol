@@ -83,10 +83,6 @@ contract BebopExecutor is IExecutor {
         bebopSettlement.functionCall(finalCalldata);
         uint256 balanceAfter = _balanceOf(tokenOut, address(this));
         amountOut = balanceAfter - balanceBefore;
-
-        if (receiver != address(this)) {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
     }
 
     /// @dev Decodes the packed calldata

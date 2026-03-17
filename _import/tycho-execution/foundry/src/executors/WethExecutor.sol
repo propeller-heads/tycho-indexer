@@ -53,19 +53,11 @@ contract WethExecutor is IExecutor {
             weth.deposit{value: amountIn}();
             amountOut = amountIn;
             tokenOut = address(weth);
-
-            if (receiver != address(this)) {
-                weth.safeTransfer(receiver, amountOut);
-            }
         } else {
             // WETH -> ETH: Unwrap
             weth.withdraw(amountIn);
             amountOut = amountIn;
             tokenOut = address(0);
-
-            if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), amountOut);
-            }
         }
     }
 

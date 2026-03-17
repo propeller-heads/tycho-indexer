@@ -82,14 +82,6 @@ contract HashflowExecutor is IExecutor {
         uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
         amountOut = balanceAfter - balanceBefore;
         tokenOut = quote.quoteToken;
-
-        if (receiver != address(this)) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
-        }
     }
 
     function _decodeData(bytes calldata data)

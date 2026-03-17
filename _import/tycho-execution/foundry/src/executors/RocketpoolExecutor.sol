@@ -41,16 +41,11 @@ contract RocketpoolExecutor is IExecutor {
         (isDeposit) = _decodeData(data);
 
         if (isDeposit) {
-            tokenOut = address(RETH);
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
             // We don't need to _transfer ETH into this contract since it must be sent along with the call
             uint256 rethBefore = RETH.balanceOf(address(this));
             rocketDepositPool.deposit{value: amountIn}();
             amountOut = RETH.balanceOf(address(this)) - rethBefore;
-
-            if (receiver != address(this)) {
-                RETH.safeTransfer(receiver, amountOut);
-            }
             tokenOut = address(RETH);
         } else {
             tokenOut = address(0);
@@ -58,10 +53,6 @@ contract RocketpoolExecutor is IExecutor {
             uint256 ethBefore = address(this).balance;
             RETH.burn(amountIn);
             amountOut = address(this).balance - ethBefore;
-
-            if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), amountOut);
-            }
         }
     }
 

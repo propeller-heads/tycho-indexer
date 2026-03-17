@@ -297,11 +297,12 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         uint256 hopsLength =
             (data.length - _POOL_DATA_OFFSET + 36) / _HOP_BYTE_LEN;
         uint256 lastHopOffset = 20 + (hopsLength - 1) * _HOP_BYTE_LEN;
+        tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[lastHopOffset:lastHopOffset + 20]));
         return (
             TransferManager.TransferType.None,
             address(0),
-            address(0),
+            tokenIn,
             tokenOut,
             false
         );
