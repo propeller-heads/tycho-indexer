@@ -1,3 +1,19 @@
+## [0.41.0](https://github.com/propeller-heads/tycho-contracts/compare/0.40.0...0.41.0) (2026-03-18)
+
+
+### Features
+
+* Add tokenOut and outputToRouter to getTransferData ([1ce14c5](https://github.com/propeller-heads/tycho-contracts/commit/1ce14c53068dad41445208fe08dce131d644f3a5))
+* Perform balance checks in dispatcher ([a6b0276](https://github.com/propeller-heads/tycho-contracts/commit/a6b0276bc17df43dcc86cfa501e8ebb27b7c2a9f))
+* Remove target validation from executors ([54d798a](https://github.com/propeller-heads/tycho-contracts/commit/54d798ae7d1bc331b25c74a85fc0e73eb7c9ee7d))
+* Remove tokenOut and amountOut from executor interface ([6dc7621](https://github.com/propeller-heads/tycho-contracts/commit/6dc762187f2d3d6b5e80c35433e2cb2503700dea))
+
+
+### Bug Fixes
+
+* Add router test for stETH through Curve ([aa78a61](https://github.com/propeller-heads/tycho-contracts/commit/aa78a61cbbbfe4bad846d9cee8fe725548e6a61e))
+* Set Etherfi outputToRouter = false when eethToEth ([740cb13](https://github.com/propeller-heads/tycho-contracts/commit/740cb1323b0324026eb654d797a6b5050abe67ce))
+
 ## [0.40.0](https://github.com/propeller-heads/tycho-contracts/compare/0.39.4...0.40.0) (2026-03-18)
 
 
