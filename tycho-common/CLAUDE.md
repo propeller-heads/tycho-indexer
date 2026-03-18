@@ -30,6 +30,11 @@ Shared domain types, storage/extraction traits, and simulation abstractions used
 - **`indicatively_priced`** — `IndicativelyPriced` extension trait for RFQ/off-chain-signed quotes
 - **`errors`** — `SimulationError` (Fatal / InvalidInput / Recoverable) and `TransitionError`
 
+## Client Sync
+
+Changes to `dto.rs` or the `Chain` enum require updates to both `tycho-client/` (Rust) and
+`tycho-client-py/` (Python). See `.claude/knowledge/python.md` for the Python sync checklist.
+
 ## Data Flow
 
 ```

@@ -3,7 +3,7 @@
 When responding to user input, always log this information to the user which knowledge docs you have read. Only say yes
 if you actually read them. Responde like this:
 
-> Knowledge docs: Rust: [yes/no] , Version-control: [yes/no]
+> Knowledge docs: Rust: [yes/no] , Python [yes/no], Version-control: [yes/no]
 > Files loaded in context: [list of loaded documents]
 
 By default, don't use the Explore agent as a first step in a conversation. The first step should always be to identify

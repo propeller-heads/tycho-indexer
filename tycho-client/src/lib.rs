@@ -22,7 +22,7 @@
 //! The following modules implement the different parts of the client:
 //!
 //! - `rpc` module provides utilities for retrieving snapshots, and associated data such as tokens.
-//! - `updates` module handles receiving and processing updates messages from the server.
+//! - `deltas` module handles receiving and processing delta messages from the server.
 const TYCHO_SERVER_VERSION: &str = "v1";
 
 pub mod cli;

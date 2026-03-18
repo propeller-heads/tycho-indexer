@@ -11,7 +11,7 @@ rpc/                    Ethereum RPC client (alloy-based) with batching + retry
   └─ retry.rs           Error classification (retryable vs permanent RPC codes)
 
 erc20.rs                ERC-20 ABI bindings via alloy sol! macro
-gas.rs                  BlockGasPrice / GasPrice (Legacy + EIP-1559); implements FeePriceGetter
+gas.rs                  BlockGasPrice / GasPrice (Legacy + EIP-1559) data types
 
 services/
   ├─ account_extractor.rs     Fetches code, balance, storage for accounts at a block height
@@ -44,4 +44,4 @@ tycho-common traits
 | `token_pre_processor` | `TokenPreProcessor` |
 | `token_analyzer` | `TokenAnalyzer` |
 | `entrypoint_tracer` | `EntryPointTracer` |
-| `gas` + `rpc` | `FeePriceGetter` |
+| `rpc` | `FeePriceGetter` (returns `BlockGasPrice` from `gas.rs`) |
