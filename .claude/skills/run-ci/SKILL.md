@@ -16,14 +16,17 @@ Environment variables needed for DB tests can be configured in `.claude/settings
 ```json
 {
   "env": {
-    "DATABASE_URL": "postgres://postgres:mypassword@localhost:5431/tycho_indexer_0"
+    "DATABASE_URL": "postgres://postgres:mypassword@localhost:5431/tycho_indexer_0",
+    "RPC_URL": "https://your-ethereum-archive-node"
   }
 }
 ```
 
 DB tests require both `DATABASE_URL` set AND a running Postgres instance (see
 `tycho-storage/README.md` for setup). Tests marked `#[ignore]` require `RPC_URL` pointing to an
-archive node — these are always skipped.
+Ethereum archive node with **debug APIs enabled** (Erigon, Reth with `--http.api debug`) —
+standard providers like Alchemy/Infura do not support `debug_storageRangeAt` and will cause
+failures. These tests are skipped unless `RPC_URL` is set.
 
 ## Context
 
@@ -32,15 +35,21 @@ archive node — these are always skipped.
 
 ## Workflow
 
-### Phase 0: Check database availability and run migrations
+### Phase 0: Check environment and run migrations
 
-Check that `DATABASE_URL` is set:
+Check that `DATABASE_URL` and `RPC_URL` are set:
 
 ```bash
 printenv DATABASE_URL
 ```
+```bash
+printenv RPC_URL
+```
 
-If the command fails (exit code 1), `DATABASE_URL` is not set. Mark DB as unavailable:
+If `RPC_URL` is set, pass `--include-ignored` to all `run-nextest.sh` calls in Phase 3.
+If `RPC_URL` is not set, omit the flag (ignored tests will be skipped).
+
+If `DATABASE_URL` is not set, mark DB as unavailable:
 - All `serial_db` tests will be **skipped**
 - Unit tests will exclude `tycho-storage` and `diesel` tests
 - Set a `DB_SKIPPED` flag for the final report
@@ -98,12 +107,14 @@ the filter expressions. Also do NOT pipe commands through `grep`, `tail`, or oth
 
 If DB is available:
 ```bash
-bash .claude/scripts/run-nextest.sh unit
+bash .claude/scripts/run-nextest.sh unit                    # RPC_URL not set
+bash .claude/scripts/run-nextest.sh unit --include-ignored  # RPC_URL set
 ```
 
 If DB is NOT available (exclude tycho-storage and diesel round-trip tests):
 ```bash
-bash .claude/scripts/run-nextest.sh no-db
+bash .claude/scripts/run-nextest.sh no-db                    # RPC_URL not set
+bash .claude/scripts/run-nextest.sh no-db --include-ignored  # RPC_URL set
 ```
 
 Report pass/fail with test count summary (passed, failed, ignored).
@@ -111,7 +122,8 @@ Report pass/fail with test count summary (passed, failed, ignored).
 #### DB tests (serial) — only if DB is available
 
 ```bash
-bash .claude/scripts/run-nextest.sh serial-db
+bash .claude/scripts/run-nextest.sh serial-db                    # RPC_URL not set
+bash .claude/scripts/run-nextest.sh serial-db --include-ignored  # RPC_URL set
 ```
 
 Report pass/fail with test count summary. If DB is not available, skip entirely.
@@ -126,14 +138,14 @@ tests run in the other phase.
 **How to compute the totals:**
 - `passed` = unit passed + serial-db passed
 - `failed` = unit failed + serial-db failed
-- `ignored` = the `#[ignore]`-d count from nextest (tests requiring `RPC_URL` archive node)
-- `skipped` = only tests that were NOT run in ANY phase (e.g. DB tests when DB is unavailable)
+- `skipped` = only tests that were NOT run in ANY phase (e.g. DB tests when DB is unavailable,
+  or `#[ignore]`-d tests when `RPC_URL` is not set)
 
-| Step     | Status            | Details                                    |
-|----------|-------------------|--------------------------------------------|
-| Format   | pass/fail         | files reformatted or clean                 |
-| Clippy   | pass/fail         | warning/error count                        |
-| Tests    | pass/fail/skipped | X passed, Y failed, Z ignored (need RPC_URL) |
+| Step     | Status            | Details                              |
+|----------|-------------------|--------------------------------------|
+| Format   | pass/fail         | files reformatted or clean           |
+| Clippy   | pass/fail         | warning/error count                  |
+| Tests    | pass/fail/skipped | X passed, Y failed, Z skipped        |
 
 If clippy failed, mark tests as "skipped (clippy failed)".
 
@@ -155,6 +167,17 @@ To run the full suite including DB tests:
                       { "env": { "DATABASE_URL": "postgres://postgres:mypassword@localhost:5431/tycho_indexer_0" } }
 3. Run migrations:  diesel migration run --migration-dir ./tycho-storage/migrations
 4. Re-run:          /run-ci
+```
+
+**If `RPC_URL` was not set** and ignored tests were skipped, add a hint after the table:
+
+```
+To also run #[ignore]-d tests (archive node integration tests), set RPC_URL.
+Requires a debug-enabled archive node (Erigon, Reth with --http.api debug).
+Standard providers (Alchemy, Infura) will NOT work — they don't support debug_storageRangeAt.
+  a) Per-session:    export RPC_URL="http://your-debug-archive-node:8545"
+  b) Persistent:     Add to .claude/settings.local.json under "env":
+                     "RPC_URL": "http://your-debug-archive-node:8545"
 ```
 
 If any step failed, list the specific errors below the table.
