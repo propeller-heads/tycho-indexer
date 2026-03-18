@@ -10,7 +10,6 @@ import {
 } from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
-import "lib/forge-std/src/console.sol";
 
 error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
@@ -247,8 +246,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
         internal
         virtual
     {
-        console.logAddress(token);
-        console.log(deltaChange);
         // slither-disable-next-line incorrect-equality
         if (deltaChange == 0) return;
 
@@ -265,7 +262,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
             _setNonZeroDeltaCount(_getNonZeroDeltaCount() + 1);
         }
 
-        console.log(newDelta);
         _setDelta(token, newDelta);
     }
 

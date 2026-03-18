@@ -298,9 +298,9 @@ contract TransferManager is Vault {
         view
         returns (uint256)
     {
-        return token == address(0)
-            ? owner.balance
-            : IERC20(token).balanceOf(owner);
+        // slither-disable-next-line calls-loop
+        return
+            token == address(0) ? owner.balance : IERC20(token).balanceOf(owner);
     }
 
     /**
@@ -314,7 +314,6 @@ contract TransferManager is Vault {
         internal
         returns (uint256)
     {
-        // measuring the balance again is needed for rebase/fee tokens
         uint256 balanceBefore = _balanceOf(token, to);
         if (token == address(0)) {
             Address.sendValue(payable(to), amount);

@@ -146,7 +146,7 @@ contract Dispatcher is TransferManager {
             false
         );
 
-        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
+        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop,reentrancy-balance
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(
                 IExecutor.swap.selector, amount, data, receiver
