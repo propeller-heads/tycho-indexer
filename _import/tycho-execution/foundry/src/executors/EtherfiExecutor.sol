@@ -91,7 +91,7 @@ contract EtherfiExecutor is IExecutor {
                 redeemAmount = amountIn;
             }
             IEtherfiRedemptionManager(redemptionManagerAddress)
-                .redeemEEth(redeemAmount, address(this), ethAddress);
+                .redeemEEth(redeemAmount, receiver, ethAddress);
         } else if (direction == EtherfiDirection.EthToEeth) {
             // slither-disable-next-line arbitrary-send-eth,unused-return
             IEtherfiLiquidityPool(liquidityPoolAddress)
@@ -120,26 +120,28 @@ contract EtherfiExecutor is IExecutor {
     {
         EtherfiDirection direction = _decodeData(data);
 
-        outputToRouter = true;
-
         if (direction == EtherfiDirection.EthToEeth) {
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
             tokenOut = eethAddress;
+            outputToRouter = true;
         } else if (direction == EtherfiDirection.EethToEth) {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
             receiver = redemptionManagerAddress;
             tokenIn = eethAddress;
             tokenOut = address(0);
+            outputToRouter = false;
         } else if (direction == EtherfiDirection.EethToWeeth) {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
             receiver = weethAddress;
             tokenIn = eethAddress;
             tokenOut = weethAddress;
+            outputToRouter = true;
         } else if (direction == EtherfiDirection.WeethToEeth) {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
             receiver = msg.sender;
             tokenIn = weethAddress;
             tokenOut = eethAddress;
+            outputToRouter = true;
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }
