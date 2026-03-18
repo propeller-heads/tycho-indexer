@@ -104,9 +104,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
         address tokenIn;
         address tokenOut;
         bool zeroForOne;
-        bool isFoT;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
-        (tokenIn, tokenOut, zeroForOne, isFoT, pools) = _decodeData(data);
+        (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -120,7 +119,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 this.swapExactInputSingle.selector,
                 key,
                 zeroForOne,
-                isFoT,
                 amountIn,
                 receiver,
                 pools[0].hookData
@@ -143,7 +141,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
             swapData = abi.encodeWithSelector(
                 this.swapExactInput.selector,
                 currencyIn,
-                isFoT,
                 amountIn,
                 receiver,
                 path
@@ -163,20 +160,18 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
-            bool isFoT,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 90) {
+        if (data.length < 89) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
         zeroForOne = data[40] != 0;
-        isFoT = data[41] != 0;
 
-        bytes calldata remaining = data[42:];
+        bytes calldata remaining = data[41:];
 
         // Decode first pool with hook data
         if (remaining.length < 48) {
@@ -318,7 +313,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function swapExactInputSingle(
         PoolKey memory poolKey,
         bool zeroForOne,
-        bool isFoT,
         uint128 amountIn,
         address receiver,
         bytes calldata hookData
@@ -326,12 +320,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
         _settle(currencyIn, amountIn);
 
-        uint256 swapAmountIn;
-        if (isFoT) {
-            swapAmountIn = _getFullCredit(currencyIn);
-        } else {
-            swapAmountIn = amountIn;
-        }
+        uint256 swapAmountIn = _getFullCredit(currencyIn);
 
         uint128 amountOut = _swap(
                 poolKey, zeroForOne, -int256(swapAmountIn), hookData
@@ -352,7 +341,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
      */
     function swapExactInput(
         Currency currencyIn,
-        bool isFoT,
         uint128 amountIn,
         address receiver,
         PathKey[] calldata path
@@ -361,12 +349,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
         Currency swapCurrencyIn = currencyIn;
         _settle(currencyIn, amountIn);
 
-        uint256 swapAmountIn;
-        if (isFoT) {
-            swapAmountIn = _getFullCredit(currencyIn);
-        } else {
-            swapAmountIn = amountIn;
-        }
+        uint256 swapAmountIn = _getFullCredit(currencyIn);
+
         unchecked {
             uint256 pathLength = path.length;
             PathKey calldata pathKey;
@@ -569,12 +553,12 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bytes4 selector = bytes4(stripped[:4]);
         receiver = address(poolManager);
         if (selector == _swapExactInputSingleSelector) {
-            // swapExactInputSingle(PoolKey, bool zeroForOne, bool isFoT, uint128 amountIn, address receiver, bytes hookData)
+            // swapExactInputSingle(PoolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes hookData)
             // PoolKey: currency0[4:36] currency1[36:68] fee[68:100] tickSpacing[100:132] hooks[132:164]
-            // zeroForOne[164:196] isFoT[196:228] amountIn[228:260] receiver[260:292]
+            // zeroForOne[164:196] amountIn[196:228] receiver[228:260]
 
             bool zeroForOne = uint8(stripped[195]) != 0;
-            amount = uint128(bytes16(stripped[244:260]));
+            amount = uint128(bytes16(stripped[212:228]));
             if (zeroForOne) {
                 tokenIn = address(bytes20(stripped[16:36]));
             } else {
@@ -587,11 +571,11 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 transferType = TransferManager.TransferType.Transfer;
             }
         } else if (selector == _swapExactInputSelector) {
-            // swapExactInput(Currency, bool isFoT, uint128 amountIn, address receiver, PathKey[])
-            // Currency[4:36] isFoT[36:68] amountIn[68:100] receiver[100:132]
+            // swapExactInput(Currency, uint128 amountIn, address receiver, PathKey[])
+            // Currency[4:36] amountIn[36:68] receiver[68:100]
 
             tokenIn = address(bytes20(stripped[16:36]));
-            amount = uint128(bytes16(stripped[84:100]));
+            amount = uint128(bytes16(stripped[52:68]));
             if (tokenIn == address(0)) {
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;

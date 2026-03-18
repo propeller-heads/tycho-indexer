@@ -205,13 +205,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (
-            group_token_in_address,
-            group_token_out_address,
-            zero_to_one,
-            swap.has_fee_on_transfer(),
-            pool_params,
-        );
+        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
 
         Ok(args.abi_encode_packed())
     }
@@ -304,8 +298,6 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
-                // isFoT (false)
-                "00",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -469,8 +461,6 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
-                // isFoT (false)
-                "00",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -631,8 +621,7 @@ mod tests {
 
             write_calldata_to_file("test_encode_angstrom_grouped_swap", combined_hex.as_str());
             // Any different length could indicate we didn't encode attestation data
-            // +2 hex chars for the isFoT byte
-            assert!(combined_hex.len() == 2512);
+            assert!(combined_hex.len() == 2510);
         }
     }
 }

@@ -457,7 +457,6 @@ mod tests {
                 "a478c2975ab1ea89e8196811f51a7b7ade33eb11", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "6b175474e89094c44da98b954eedeac495271d0f", // tokenOut (DAI)
-                "00",                                       // isFoT (false)
             ));
             let hex_calldata = encode(encoded_solution.swaps());
 
@@ -521,19 +520,17 @@ mod tests {
 
             let expected = String::from(concat!(
                 // swap 1: WETH -> WBTC
-                "0051",                                     // swap length (81 bytes)
+                "0050",                                     // swap length (80 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "bb2b8038a1640196fbe3e38816f3e67cba72d940", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenOut (WBTC)
-                "00",                                       // isFoT (false)
                 // swap 2: WBTC -> USDC
-                "0051",                                     // swap length (81 bytes)
+                "0050",                                     // swap length (80 bytes)
                 "5615deb798bb3e4dfa0139dfa1b3d433cc23b72f", // executor address
                 "004375dff511095cc5a197a54140a24efef3a416", // component id (pool address)
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599", // tokenIn (WBTC)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
-                "00",                                       // isFoT (false)
             ));
 
             assert_eq!(hex_calldata, expected);
@@ -667,7 +664,7 @@ mod tests {
                 "000bb8",                                   // pool fee
                 "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
                 "01",                                       // zero2one
-                "0056",                                     // ple encoded swaps (86 bytes)
+                "0055",                                     // ple encoded swaps (85 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index
                 "000000",                                   // split
@@ -675,7 +672,6 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // tokenIn (WETH)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // tokenOut (USDC)
-                "00",                                       // isFoT (false)
             ]
             .join("");
             assert_eq!(hex_calldata, expected_swaps);
@@ -780,7 +776,7 @@ mod tests {
             let hex_calldata = hex::encode(encoded_solution.swaps());
 
             let expected_swaps = [
-                "0056",                                     // ple encoded swaps (86 bytes)
+                "0055",                                     // ple encoded swaps (85 bytes)
                 "00",                                       // token in index
                 "01",                                       // token out index
                 "000000",                                   // split
@@ -788,7 +784,6 @@ mod tests {
                 "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in (USDC)
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out (WETH)
-                "00",                                       // isFoT (false)
                 "0059",                                     // ple encoded swaps (89 bytes)
                 "01",                                       // token in index
                 "00",                                       // token out index

@@ -71,9 +71,6 @@ error TychoRouter__MsgValueDoesNotMatchAmountIn(
     uint256 msgValue, uint256 amountIn
 );
 error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
-error TychoRouter__AmountOutNotFullyReceived(
-    uint256 amountIn, uint256 amountConsumed
-);
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 error TychoRouter__InvalidClientSignature();
@@ -91,10 +88,6 @@ struct ClientFeeParams {
 
 contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     address private _feeCalculator; // Fee calculator contract
-
-    // Max amount of dust that can stay behind in the TychoRouter when swapping.
-    // This is relevant for rebasing tokens like stETH where sometimes 1 WEI is lost per transfer.
-    uint256 private constant _ALLOWED_DUST = 2;
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -195,9 +188,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
         _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
         return _splitSwapChecked(
@@ -205,7 +195,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             nTokens,
             receiver,
             clientFeeParams,
@@ -244,9 +233,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swaps
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, false
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _splitSwapChecked(
@@ -254,7 +240,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             nTokens,
             receiver,
             clientFeeParams,
@@ -297,9 +282,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swaps
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -311,7 +293,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             nTokens,
             receiver,
             clientFeeParams,
@@ -349,9 +330,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
         _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
         return _sequentialSwapChecked(
@@ -359,7 +337,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swaps
@@ -395,9 +372,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swaps
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, false
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _sequentialSwapChecked(
@@ -405,7 +379,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swaps
@@ -444,9 +417,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swaps
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -459,7 +429,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swaps
@@ -495,9 +464,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
         _updateNativeDeltaAccounting(amountIn);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
         return _singleSwap(
@@ -505,7 +471,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swapData
@@ -540,9 +505,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swapData
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, false
-        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _singleSwap(
@@ -550,7 +512,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swapData
@@ -589,9 +550,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata swapData
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
         _verifyClientSignature(clientFeeParams);
-        uint256 initialBalanceTokenOut = _getInitialBalanceTokenOut(
-            tokenIn, amountIn, tokenOut, receiver, true
-        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -603,7 +561,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             tokenIn,
             tokenOut,
             minAmountOut,
-            initialBalanceTokenOut,
             receiver,
             clientFeeParams,
             swapData
@@ -625,7 +582,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        uint256 initialBalanceTokenOut,
         uint256 nTokens,
         address receiver,
         ClientFeeParams calldata clientFeeParams,
@@ -677,28 +633,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             clientFeeParams.clientFeeReceiver
         );
 
-        int256 outputDelta = _getDelta(tokenOut);
-        if (outputDelta > 0) {
-            // out tokens are still in the Router and need to be sent to the final receiver
-            // or credited to the vault
-            if (receiver == address(this)) {
-                _creditVault(msg.sender, tokenOut, amountOut);
-            } else {
-                if (tokenOut == address(0)) {
-                    Address.sendValue(payable(receiver), amountOut);
-                } else {
-                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
-                }
-            }
-            _updateDeltaAccounting(tokenOut, -int256(amountOut));
-        }
-
-        // Finalize all transient deltas to persistent storage
-        _finalizeBalances(msg.sender, tokenIn, amountIn);
-
-        _verifyAmountOutWasReceived(
-            tokenOut, initialBalanceTokenOut, amountOut, receiver
-        );
+        amountOut =
+            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
     }
 
     /**
@@ -716,7 +652,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        uint256 initialBalanceTokenOut,
         address receiver,
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swap_
@@ -764,27 +699,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             client
         );
 
-        int256 outputDelta = _getDelta(tokenOut);
-        if (outputDelta > 0) {
-            // out tokens are still in the Router and need to be sent to the final receiver
-            // or credited to the vault
-            if (receiver == address(this)) {
-                _creditVault(msg.sender, tokenOut, amountOut);
-            } else {
-                if (tokenOut == address(0)) {
-                    Address.sendValue(payable(receiver), amountOut);
-                } else {
-                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
-                }
-            }
-            _updateDeltaAccounting(tokenOut, -int256(amountOut));
-        }
-
-        // Finalize all transient deltas to persistent storage
-        _finalizeBalances(msg.sender, tokenIn, amountIn);
-        _verifyAmountOutWasReceived(
-            tokenOut, initialBalanceTokenOut, amountOut, receiver
-        );
+        amountOut =
+            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
     }
 
     /**
@@ -802,7 +718,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         address tokenIn,
         address tokenOut,
         uint256 minAmountOut,
-        uint256 initialBalanceTokenOut,
         address receiver,
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
@@ -846,28 +761,37 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             client
         );
 
+        amountOut =
+            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
+    }
+
+    /**
+     * @dev Transfers output tokens to receiver (or credits vault),
+     *      and finalizes transient deltas.
+     */
+    function _settleOutput(
+        uint256 amountOut,
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        address receiver
+    ) internal returns (uint256) {
         int256 outputDelta = _getDelta(tokenOut);
         if (outputDelta > 0) {
+            _updateDeltaAccounting(tokenOut, -int256(amountOut));
             // out tokens are still in the Router and need to be sent to the final receiver
             // or credited to the vault
             if (receiver == address(this)) {
                 _creditVault(msg.sender, tokenOut, amountOut);
             } else {
-                if (tokenOut == address(0)) {
-                    Address.sendValue(payable(receiver), amountOut);
-                } else {
-                    IERC20(tokenOut).safeTransfer(receiver, amountOut);
-                }
+                // the amountOut might actually be lower at this point (if fee/rebasing token)
+                amountOut = _transferOut(tokenOut, receiver, amountOut);
             }
-            _updateDeltaAccounting(tokenOut, -int256(amountOut));
         }
 
-        // Finalize all transient deltas to persistent storage
         _finalizeBalances(msg.sender, tokenIn, amountIn);
 
-        _verifyAmountOutWasReceived(
-            tokenOut, initialBalanceTokenOut, amountOut, receiver
-        );
+        return amountOut;
     }
 
     /**
@@ -1145,49 +1069,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                 );
             }
             _updateDeltaAccounting(address(0), int256(msg.value));
-        }
-    }
-
-    /**
-     * @dev Gets balance of token out for the receiver at the beginning of a swap
-     */
-    function _getInitialBalanceTokenOut(
-        address tokenIn,
-        uint256 amountIn,
-        address tokenOut,
-        address receiver,
-        bool transferFrom
-    ) internal view returns (uint256 initialBalanceTokenOut) {
-        initialBalanceTokenOut = _balanceOf(tokenOut, receiver);
-        // For cyclic swaps (tokenIn == tokenOut), the receiver already holds
-        // some tokenOut before the swap, which would cause _verifyAmountOutWasReceived to
-        // undercount the actual output. We subtract amountIn when:
-        // - transferFrom && receiver != router: receiver is the user who still holds amountIn
-        // - !transferFrom && receiver == router: funds were taken from vault, and
-        // put back into vault.
-        // We must NOT subtract when transferFrom && receiver == router, because amountIn
-        // is in the user's wallet, not in the router's balance.
-        bool receiverHoldsAmountIn = transferFrom != (receiver == address(this));
-        if (tokenIn == tokenOut && receiverHoldsAmountIn) {
-            initialBalanceTokenOut -= amountIn;
-        }
-    }
-
-    /**
-     * @dev Verifies that the expected amount of output tokens was received by the receiver.
-     * It also handles the case of arbitrage swaps where the input and output tokens are the same.
-     */
-    function _verifyAmountOutWasReceived(
-        address tokenOut,
-        uint256 initialBalanceTokenOut,
-        uint256 amountOut,
-        address receiver
-    ) internal view {
-        uint256 currentBalanceTokenOut = _balanceOf(tokenOut, receiver);
-
-        uint256 userAmount = currentBalanceTokenOut - initialBalanceTokenOut;
-        if (userAmount < amountOut - _ALLOWED_DUST) {
-            revert TychoRouter__AmountOutNotFullyReceived(userAmount, amountOut);
         }
     }
 

@@ -42,19 +42,14 @@ contract UniswapV2Executor is IExecutor {
         address target;
         address tokenIn;
         address tokenOut;
-        bool isFoT;
 
-        (target, tokenIn, tokenOut, isFoT) = _decodeData(data);
+        (target, tokenIn, tokenOut) = _decodeData(data);
 
         bool zeroForOne = (tokenIn < tokenOut);
 
         IUniswapV2Pair pool = IUniswapV2Pair(target);
 
-        if (isFoT) {
-            _swapFoT(pool, tokenIn, zeroForOne, receiver);
-        } else {
-            _swap(pool, amountIn, zeroForOne, receiver);
-        }
+        _swap(pool, amountIn, zeroForOne, receiver);
     }
 
     function _swap(
@@ -78,43 +73,17 @@ contract UniswapV2Executor is IExecutor {
         }
     }
 
-    function _swapFoT(
-        IUniswapV2Pair pool,
-        address tokenIn,
-        bool zeroForOne,
-        address receiver
-    ) internal {
-        // slither-disable-next-line unused-return
-        (uint112 reserve0, uint112 reserve1,) = pool.getReserves();
-        uint112 reserveIn = zeroForOne ? reserve0 : reserve1;
-        uint112 reserveOut = zeroForOne ? reserve1 : reserve0;
-
-        // Measure actual balance to handle input transfer tax
-        uint256 actualAmountIn =
-            IERC20(tokenIn).balanceOf(address(pool)) - uint256(reserveIn);
-
-        uint256 calculatedAmount =
-            _getAmountOut(actualAmountIn, reserveIn, reserveOut);
-
-        if (zeroForOne) {
-            pool.swap(0, calculatedAmount, receiver, "");
-        } else {
-            pool.swap(calculatedAmount, 0, receiver, "");
-        }
-    }
-
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address tokenIn, address tokenOut, bool isFoT)
+        returns (address target, address tokenIn, address tokenOut)
     {
-        if (data.length != 61) {
+        if (data.length != 60) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
         tokenOut = address(bytes20(data[40:60]));
-        isFoT = data[60] != 0;
     }
 
     function _getAmountOut(
@@ -140,7 +109,7 @@ contract UniswapV2Executor is IExecutor {
             bool outputToRouter
         )
     {
-        if (data.length != 61) {
+        if (data.length != 60) {
             revert UniswapV2Executor__InvalidDataLength();
         }
         address target = address(bytes20(data[0:20]));

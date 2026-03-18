@@ -40,8 +40,7 @@ impl SwapEncoder for UniswapV2SwapEncoder {
         let component_id = Address::from_str(&swap.component().id)
             .map_err(|_| EncodingError::FatalError("Invalid USV2 component id".to_string()))?;
 
-        Ok((component_id, token_in_address, token_out_address, swap.has_fee_on_transfer())
-            .abi_encode_packed())
+        Ok((component_id, token_in_address, token_out_address).abi_encode_packed())
     }
 
     fn executor_address(&self) -> &Bytes {
@@ -98,8 +97,6 @@ mod tests {
                 "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                 // tokenOut
                 "6b175474e89094c44da98b954eedeac495271d0f",
-                // isFoT (false)
-                "00",
             ))
         );
         write_calldata_to_file("test_encode_uniswap_v2", hex_swap.as_str());

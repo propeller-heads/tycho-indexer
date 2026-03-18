@@ -136,7 +136,7 @@ contract Dispatcher is TransferManager {
         address measureAt = outputToRouter ? address(this) : receiver;
         uint256 balanceBeforeSwap = _balanceOf(tokenOut, measureAt);
 
-        _transfer(
+        amount = _transfer(
             transferReceiver,
             transferType,
             tokenIn,
@@ -146,7 +146,7 @@ contract Dispatcher is TransferManager {
             false
         );
 
-        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop
+        // slither-disable-next-line controlled-delegatecall,low-level-calls,calls-loop,reentrancy-balance
         (bool success, bytes memory result) = executor.delegatecall(
             abi.encodeWithSelector(
                 IExecutor.swap.selector, amount, data, receiver
@@ -183,11 +183,7 @@ contract Dispatcher is TransferManager {
 
         // Forward if output landed at router but needs to go elsewhere
         if (outputToRouter && receiver != address(this)) {
-            // measuring the balance again is needed for rebase/fee tokens
-            uint256 balanceBeforeTransfer = _balanceOf(tokenOut, receiver);
-            _transferOut(tokenOut, receiver, amountOut);
-            uint256 balanceAfterTransfer = _balanceOf(tokenOut, receiver);
-            amountOut = balanceAfterTransfer - balanceBeforeTransfer;
+            amountOut = _transferOut(tokenOut, receiver, amountOut);
         }
 
         // Delta accounting if tokens stay at router
@@ -376,26 +372,5 @@ contract Dispatcher is TransferManager {
 
         (amountOut, feeRecipients) =
             abi.decode(feeData, (uint256, FeeRecipient[]));
-    }
-
-    /**
-     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
-     */
-    function _balanceOf(address token, address owner)
-        internal
-        view
-        returns (uint256)
-    {
-        return token == address(0)
-            ? owner.balance
-            : IERC20(token).balanceOf(owner);
-    }
-
-    function _transferOut(address token, address to, uint256 amount) internal {
-        if (token == address(0)) {
-            Address.sendValue(payable(to), amount);
-        } else {
-            IERC20(token).safeTransfer(to, amount);
-        }
     }
 }
