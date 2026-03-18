@@ -23,6 +23,9 @@ target/
 # Local History for Visual Studio Code
 .history/
 
+# Claude-generated json helpers to compare gas between two branches
+.gas-compare/
+
 # Built Visual Studio Code Extensions
 *.vsix
 .env
