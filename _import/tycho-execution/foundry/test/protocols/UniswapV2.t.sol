@@ -79,11 +79,21 @@ contract UniswapV2ExecutorTest is Constants, Permit2TestHelper, TestUtils {
         bytes memory params =
             abi.encodePacked(DAI_WETH_UNIV2_POOL, DAI_ADDR, WETH_ADDR, false);
 
-        (, address receiver, address tokenIn,,) =
-            uniswapV2Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = uniswapV2Exposed.getTransferData(params);
 
-        assertEq(tokenIn, DAI_ADDR);
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, DAI_WETH_UNIV2_POOL);
+        assertEq(tokenIn, DAI_ADDR);
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(outputToRouter, false);
     }
 
     function testAmountOut() public view {

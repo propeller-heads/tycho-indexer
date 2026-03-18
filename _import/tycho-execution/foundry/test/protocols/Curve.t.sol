@@ -83,11 +83,22 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
         );
 
-        (, address receiver, address tokenIn,,) =
-            curveExecutorExposed.getTransferData(data);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = curveExecutorExposed.getTransferData(data);
 
-        assertEq(tokenIn, WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, TRICRYPTO_POOL);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(outputToRouter, true);
     }
 
     function testTriPool() public {

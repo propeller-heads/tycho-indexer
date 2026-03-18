@@ -17,8 +17,6 @@ contract BebopExecutorExposed is BebopExecutor {
         external
         pure
         returns (
-            address tokenIn,
-            address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bytes memory bebopCalldata
@@ -55,15 +53,11 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
         );
 
         (
-            address tokenIn,
-            address tokenOut,
             uint8 decodedPartialFillOffset,
             uint256 decodedOriginalAmountIn,
             bytes memory decodedBebopCalldata
         ) = bebopExecutor.decodeData(params);
 
-        assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
-        assertEq(tokenOut, ONDO_ADDR, "tokenOut mismatch");
         assertEq(
             keccak256(decodedBebopCalldata),
             keccak256(bebopCalldata),
@@ -91,11 +85,23 @@ contract BebopExecutorTest is Constants, Permit2TestHelper, TestUtils {
             USDC_ADDR, ONDO_ADDR, uint8(2), originalAmountIn, bebopCalldata
         );
 
-        (, address decodedReceiver, address tokenIn,,) =
-            bebopExecutor.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address decodedReceiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = bebopExecutor.getTransferData(params);
 
-        assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit),
+            "transferType mismatch"
+        );
         assertEq(decodedReceiver, BEBOP_SETTLEMENT, "receiver mismatch");
+        assertEq(tokenIn, USDC_ADDR, "tokenIn mismatch");
+        assertEq(tokenOut, ONDO_ADDR, "tokenOut mismatch");
+        assertEq(outputToRouter, true, "outputToRouter mismatch");
     }
 
     // Single Order Tests

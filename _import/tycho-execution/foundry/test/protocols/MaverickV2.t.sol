@@ -11,7 +11,7 @@ contract MaverickV2ExecutorExposed is MaverickV2Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (address target, IERC20 tokenIn, address tokenOut)
+        returns (address target, IERC20 tokenIn)
     {
         return _decodeData(data);
     }
@@ -34,12 +34,11 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory params =
             abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
-        (address target, IERC20 tokenIn, address tokenOut) =
+        (address target, IERC20 tokenIn) =
             maverickV2Exposed.decodeParams(params);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
-        assertEq(tokenOut, USDC_ADDR);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -53,11 +52,21 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory params =
             abi.encodePacked(GHO_USDC_POOL, GHO_ADDR, USDC_ADDR);
 
-        (, address receiver, address tokenIn,,) =
-            maverickV2Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = maverickV2Exposed.getTransferData(params);
 
-        assertEq(tokenIn, GHO_ADDR);
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, GHO_USDC_POOL);
+        assertEq(tokenIn, GHO_ADDR);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(outputToRouter, false);
     }
 
     function testSwap() public {
@@ -83,12 +92,11 @@ contract MaverickV2ExecutorTest is TestUtils, Constants {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_maverick_v2");
 
-        (address target, IERC20 tokenIn, address tokenOut) =
+        (address target, IERC20 tokenIn) =
             maverickV2Exposed.decodeParams(protocolData);
 
         assertEq(address(tokenIn), GHO_ADDR);
         assertEq(target, GHO_USDC_POOL);
-        assertEq(tokenOut, USDC_ADDR);
     }
 
     function testSwapIntegration() public {

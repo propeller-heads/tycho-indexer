@@ -31,7 +31,7 @@ contract MaverickV2Executor is IExecutor {
         address target;
         IERC20 tokenIn;
 
-        (target, tokenIn,) = _decodeData(data);
+        (target, tokenIn) = _decodeData(data);
 
         IMaverickV2Pool pool = IMaverickV2Pool(target);
 
@@ -51,14 +51,13 @@ contract MaverickV2Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, IERC20 inToken, address tokenOut)
+        returns (address target, IERC20 inToken)
     {
         if (data.length != 60) {
             revert MaverickV2Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
         inToken = IERC20(address(bytes20(data[20:40])));
-        tokenOut = address(bytes20(data[40:60]));
     }
 
     function getTransferData(bytes calldata data)

@@ -37,12 +37,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         external
         payable
     {
-        address tokenIn;
-        address tokenOut;
-        int24 tickSpacing;
         address target;
         bool zeroForOne;
-        (tokenIn, tokenOut, tickSpacing, target, zeroForOne) = _decodeData(data);
+        (target, zeroForOne) = _decodeData(data);
 
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
@@ -86,20 +83,11 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            address tokenIn,
-            address tokenOut,
-            int24 tickSpacing,
-            address target,
-            bool zeroForOne
-        )
+        returns (address target, bool zeroForOne)
     {
         if (data.length != 64) {
             revert SlipstreamsExecutor__InvalidDataLength();
         }
-        tokenIn = address(bytes20(data[0:20]));
-        tokenOut = address(bytes20(data[20:40]));
-        tickSpacing = int24(uint24(bytes3(data[40:43])));
         target = address(bytes20(data[43:63]));
         zeroForOne = uint8(data[63]) > 0;
     }

@@ -13,13 +13,7 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     function decodeData(bytes calldata data)
         external
         pure
-        returns (
-            address inToken,
-            address outToken,
-            int24 tick_spacing,
-            address target,
-            bool zeroForOne
-        )
+        returns (address target, bool zeroForOne)
     {
         return _decodeData(data);
     }
@@ -65,28 +59,28 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH, BASE_USDC, expectedTickSpacing, address(3), false
         );
 
-        (
-            address tokenIn,
-            address tokenOut,
-            int24 tick_spacing,
-            address target,
-            bool zeroForOne
-        ) = slipstreamsExposed.decodeData(data);
+        (address target, bool zeroForOne) = slipstreamsExposed.decodeData(data);
 
-        assertEq(tokenIn, BASE_WETH);
-        assertEq(tokenOut, BASE_USDC);
-        assertEq(tick_spacing, expectedTickSpacing);
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (, address receiver, address tokenIn,,) =
-            slipstreamsExposed.getTransferData(params);
 
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = slipstreamsExposed.getTransferData(params);
+
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {

@@ -48,11 +48,22 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         bytes memory params =
             abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
-        (, address receiver, address tokenIn,,) =
-            balancerV2Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = balancerV2Exposed.getTransferData(params);
 
-        assertEq(address(tokenIn), WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, VAULT);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, BAL_ADDR);
+        assertEq(outputToRouter, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {

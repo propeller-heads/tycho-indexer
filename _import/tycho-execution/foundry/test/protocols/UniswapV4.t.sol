@@ -97,13 +97,15 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         (
             address tokenIn,
             address tokenOut,
-            bool zeroForOneDecoded,,
+            bool zeroForOneDecoded,
+            bool isFoT,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
+        assertEq(isFoT, false);
         assertEq(decodedPools[0].hook, address(0));
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);

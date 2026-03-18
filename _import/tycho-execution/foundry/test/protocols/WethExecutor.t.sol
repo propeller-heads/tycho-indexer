@@ -70,15 +70,19 @@ contract WethExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(TransferManager.TransferType.TransferNativeInExecutor)
         );
+        assertEq(receiver, address(this));
         assertEq(tokenIn, address(0));
+        assertEq(tokenOut, WETH_ADDR);
+        assertEq(outputToRouter, true);
     }
 
     function testGetTransferDataUnwrap() public {
@@ -89,15 +93,19 @@ contract WethExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         ) = wethExecutor.getTransferData(params);
 
-        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(TransferManager.TransferType.ProtocolWillDebit)
         );
+        assertEq(receiver, address(this));
         assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, true);
     }
 
     function testSwapWrap() public {

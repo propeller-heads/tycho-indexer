@@ -134,7 +134,7 @@ contract Dispatcher is TransferManager {
         // Measure output before _transfer so cyclic handling is uniform
         // across callback and direct-transfer types.
         address measureAt = outputToRouter ? address(this) : receiver;
-        uint256 balanceBefore = _balanceOf(tokenOut, measureAt);
+        uint256 balanceBeforeSwap = _balanceOf(tokenOut, measureAt);
 
         _transfer(
             transferReceiver,
@@ -170,24 +170,24 @@ contract Dispatcher is TransferManager {
             );
         }
 
-        uint256 balanceAfter = _balanceOf(tokenOut, measureAt);
+        uint256 balanceAfterSwap = _balanceOf(tokenOut, measureAt);
 
         // Cyclic swap detection: when tokenIn == tokenOut (e.g. grouped UniswapV4
         // swap USDC -> WETH -> USDC), we must check initial balance before any
         // transfer and add the input amount back when needed.
         if (isCyclic && measureAt == inputSource) {
             // Add amount before subtracting initial balance to avoid underflow
-            balanceAfter += amount;
+            balanceAfterSwap += amount;
         }
-        amountOut = balanceAfter - balanceBefore;
+        amountOut = balanceAfterSwap - balanceBeforeSwap;
 
         // Forward if output landed at router but needs to go elsewhere
         if (outputToRouter && receiver != address(this)) {
             // measuring the balance again is needed for rebase/fee tokens
-            uint256 balanceBefore = _balanceOf(tokenOut, receiver);
+            uint256 balanceBeforeTransfer = _balanceOf(tokenOut, receiver);
             _transferOut(tokenOut, receiver, amountOut);
-            uint256 balanceAfter = _balanceOf(tokenOut, receiver);
-            amountOut = balanceAfter - balanceBefore;
+            uint256 balanceAfterTransfer = _balanceOf(tokenOut, receiver);
+            amountOut = balanceAfterTransfer - balanceBeforeTransfer;
         }
 
         // Delta accounting if tokens stay at router

@@ -69,11 +69,19 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = "";
 
-        (, address receiver, address tokenIn,,) =
-            balancerV3Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = balancerV3Exposed.getTransferData(params);
 
-        assertEq(tokenIn, address(0));
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {

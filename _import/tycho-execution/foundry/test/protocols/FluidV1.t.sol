@@ -11,12 +11,7 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
     function decodeData(bytes calldata data)
         external
         pure
-        returns (
-            IFluidV1Dex dex,
-            bool zero2one,
-            address outputToken,
-            bool isNative
-        )
+        returns (IFluidV1Dex dex, bool zero2one, bool isNative)
     {
         return _decodeData(data);
     }
@@ -58,25 +53,30 @@ contract FluidV1ExecutorTest is Test, Constants {
         bytes memory params = abi.encodePacked(dex, true, outputToken, false);
         IFluidV1Dex dexVal;
         bool zero2oneVal;
-        address outputTokenVal;
         bool isNative;
 
-        (dexVal, zero2oneVal, outputTokenVal, isNative) =
-            executor.decodeData(params);
+        (dexVal, zero2oneVal, isNative) = executor.decodeData(params);
 
         assertEq(address(dexVal), dex);
         assert(zero2oneVal);
-        assertEq(outputTokenVal, outputToken);
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
 
-        (, address receiver, address tokenIn,,) =
-            executor.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = executor.getTransferData(params);
 
-        assertEq(tokenIn, address(0));
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {

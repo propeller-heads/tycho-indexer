@@ -13,13 +13,7 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     function decodeData(bytes calldata data)
         external
         pure
-        returns (
-            address inToken,
-            address outToken,
-            uint24 fee,
-            address target,
-            bool zeroForOne
-        )
+        returns (address target, bool zeroForOne)
     {
         return _decodeData(data);
     }
@@ -69,28 +63,28 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR, DAI_ADDR, expectedPoolFee, address(3), false
         );
 
-        (
-            address tokenIn,
-            address tokenOut,
-            uint24 fee,
-            address target,
-            bool zeroForOne
-        ) = uniswapV3Exposed.decodeData(data);
+        (address target, bool zeroForOne) = uniswapV3Exposed.decodeData(data);
 
-        assertEq(tokenIn, WETH_ADDR);
-        assertEq(tokenOut, DAI_ADDR);
-        assertEq(fee, expectedPoolFee);
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (, address receiver, address tokenIn,,) =
-            uniswapV3Exposed.getTransferData(params);
 
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = uniswapV3Exposed.getTransferData(params);
+
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {

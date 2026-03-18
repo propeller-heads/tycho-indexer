@@ -53,7 +53,7 @@ contract BebopExecutor is IExecutor {
         uint8 partialFillOffset;
         uint256 originalFilledTakerAmount;
         bytes memory bebopCalldata;
-        (,, partialFillOffset, originalFilledTakerAmount, bebopCalldata) =
+        (partialFillOffset, originalFilledTakerAmount, bebopCalldata) =
             _decodeData(data);
 
         // Modify the filledTakerAmount in the calldata
@@ -76,19 +76,15 @@ contract BebopExecutor is IExecutor {
         internal
         pure
         returns (
-            address tokenIn,
-            address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bytes memory bebopCalldata
         )
     {
         // Need at least 73 bytes for the minimum fixed fields
-        // 20 + 20 + 1 (offset) + 32 (original amount) = 73
+        // 20 (tokenIn) + 20 (tokenOut) + 1 (offset) + 32 (amount) = 73
         if (data.length < 73) revert BebopExecutor__InvalidDataLength();
 
-        tokenIn = address(bytes20(data[0:20]));
-        tokenOut = address(bytes20(data[20:40]));
         partialFillOffset = uint8(data[40]);
         originalFilledTakerAmount = uint256(bytes32(data[41:73]));
         bebopCalldata = data[73:];

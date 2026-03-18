@@ -75,17 +75,21 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         ) = rocketpoolExecutor.getTransferData(params);
 
         // receiver is msg.sender (this test contract) since getTransferData
         // is called via staticcall in production (msg.sender = TychoRouter)
-        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(TransferManager.TransferType.TransferNativeInExecutor)
         );
+        assertEq(receiver, address(this));
         assertEq(tokenIn, address(0));
+        assertEq(tokenOut, RETH_ADDR);
+        assertEq(outputToRouter, true);
     }
 
     function testGetTransferDataBurn() public {
@@ -96,17 +100,21 @@ contract RocketpoolExecutorTest is TestUtils, Constants {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         ) = rocketpoolExecutor.getTransferData(params);
 
         // receiver is msg.sender (this test contract) since getTransferData
         // is called via staticcall in production (msg.sender = TychoRouter)
-        assertEq(receiver, address(this));
         assertEq(
             uint8(transferType),
             uint8(TransferManager.TransferType.ProtocolWillDebit)
         );
+        assertEq(receiver, address(this));
         assertEq(tokenIn, RETH_ADDR);
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, true);
     }
 
     /// Test deposit

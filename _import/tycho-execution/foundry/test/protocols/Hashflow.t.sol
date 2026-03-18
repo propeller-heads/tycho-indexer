@@ -112,11 +112,24 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function testGetTransferData() public {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (, address receiver, address tokenIn,,) =
-            executor.getTransferData(encodedQuote);
 
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = executor.getTransferData(encodedQuote);
+
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit),
+            "transferType mismatch"
+        );
+        assertEq(receiver, HASHFLOW_ROUTER, "receiver mismatch");
         assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");
-        assertEq(receiver, HASHFLOW_ROUTER);
+        assertEq(tokenOut, expected_quote.quoteToken, "quoteToken mismatch");
+        assertEq(outputToRouter, true, "outputToRouter mismatch");
     }
 
     function testSwapNoSlippage() public {

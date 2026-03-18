@@ -69,11 +69,22 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = abi.encodePacked(WETH_ADDR, address(spETH));
 
-        (, address receiver, address tokenIn,,) =
-            ERC4626Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = ERC4626Exposed.getTransferData(params);
 
-        assertEq(tokenIn, WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, address(spETH));
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, address(spETH));
+        assertEq(outputToRouter, false);
     }
 
     function testDeposit() public {
