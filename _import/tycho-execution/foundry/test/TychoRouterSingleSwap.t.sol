@@ -5,6 +5,25 @@ import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
 import {Vault__InsufficientBalance} from "@src/Vault.sol";
 
+contract LyingSwapOutputPool {
+    // Fake UniswapV2 pool that reports reserves that would result in ~1000 USDC output
+    // for 1 WETH, but never transfers tokens.
+    uint112 private _reserve0;
+    uint112 private _reserve1;
+
+    constructor() {
+        _reserve0 = 1_000_000e6; // 1M USDC
+        _reserve1 = 1000e18; //     1000 WETH
+    }
+
+    function getReserves() external view returns (uint112, uint112, uint32) {
+        return (_reserve0, _reserve1, uint32(block.timestamp));
+    }
+
+    // Does nothing.
+    function swap(uint256, uint256, address, bytes calldata) external {}
+}
+
 contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
     function testSingleSwapPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
@@ -438,5 +457,42 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         uint256 balanceAfter = IERC20(DAI_ADDR).balanceOf(ALICE);
         assertTrue(success, "Call Failed");
         assertEq(balanceAfter - balanceBefore, 2018817438608734439722);
+    }
+
+    function testLyingSwapOutputPool() public {
+        // A fake UniswapV2 pool reports reserves implying ~1000 USDC output for 1
+        // WETH, but its swap() never transfers tokens. The Dispatcher's balance-diff
+        // correctly measures 0 output, and the slippage check reverts the transaction.
+
+        LyingSwapOutputPool fakePool = new LyingSwapOutputPool();
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(address(fakePool), WETH_ADDR, USDC_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        // The executor calculates ~996 USDC from fake reserves and calls pool.swap(),
+        // but the pool sends nothing.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, uint256(0), uint256(1)
+            )
+        );
+        tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            ALICE,
+            noClientFee(),
+            swap
+        );
+        vm.stopPrank();
     }
 }

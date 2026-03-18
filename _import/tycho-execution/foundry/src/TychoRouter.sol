@@ -637,21 +637,24 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
-        bool isCyclical = false;
-        if (tokenIn == tokenOut) {
-            isCyclical = true;
-        }
 
-        address client = clientFeeParams.clientFeeReceiver;
-        // Get router fee once and pass it down to avoid duplicate external calls
-        uint16 routerFeeOnOutputBps =
-            _callGetEffectiveRouterFeeOnOutput(_feeCalculator, client);
-
-        address finalReceiver = determineFinalReceiver(
-            receiver, clientFeeParams.clientFeeBps, routerFeeOnOutputBps
+        uint16 routerFeeOnOutputBps = _callGetEffectiveRouterFeeOnOutput(
+            _feeCalculator, clientFeeParams.clientFeeReceiver
         );
-        uint256 amountOutBeforeFees =
-            _splitSwap(amountIn, nTokens, swaps, finalReceiver, isCyclical);
+
+        uint256 amountOutBeforeFees;
+        {
+            address finalReceiver = determineFinalReceiver(
+                receiver, clientFeeParams.clientFeeBps, routerFeeOnOutputBps
+            );
+            amountOutBeforeFees = _splitSwap(
+                amountIn,
+                nTokens,
+                swaps,
+                finalReceiver,
+                tokenIn == tokenOut // isCyclical
+            );
+        }
 
         // Skip _takeFees call if no fees exist
         if (clientFeeParams.clientFeeBps == 0 && routerFeeOnOutputBps == 0) {
@@ -661,7 +664,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                 tokenOut,
                 amountOutBeforeFees,
                 clientFeeParams.clientFeeBps,
-                client
+                clientFeeParams.clientFeeReceiver
             );
         }
 
@@ -671,7 +674,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             clientFeeParams.maxClientContribution,
             tokenOut,
             receiver,
-            client
+            clientFeeParams.clientFeeReceiver
         );
 
         int256 outputDelta = _getDelta(tokenOut);
@@ -908,28 +911,27 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             revert TychoRouter__EmptySwaps();
         }
 
-        uint256 currentAmountIn;
-        uint256 currentAmountOut;
-        uint8 tokenInIndex = 0;
-        uint8 tokenOutIndex = 0;
-        uint24 split;
-        address executor;
-        bytes calldata protocolData;
-        bytes calldata swapData;
-
         uint256[] memory remainingAmounts = new uint256[](nTokens);
         uint256[] memory amounts = new uint256[](nTokens);
         uint256 cyclicSwapAmountOut = 0;
+        uint8 lastTokenOutIndex = 0;
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
 
         while (swaps_.length > 0) {
+            bytes calldata swapData;
             (swapData, swaps_) = swaps_.next();
 
-            (tokenInIndex, tokenOutIndex, split, executor, protocolData) =
-                swapData.decodeSplitSwap();
+            (
+                uint8 tokenInIndex,
+                uint8 tokenOutIndex,
+                uint24 split,
+                address executor,
+                bytes calldata protocolData
+            ) = swapData.decodeSplitSwap();
+            lastTokenOutIndex = tokenOutIndex;
 
-            currentAmountIn = split > 0
+            uint256 currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
                 : remainingAmounts[tokenInIndex];
 
@@ -941,7 +943,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                 swapReceiver = receiver;
             }
 
-            currentAmountOut = _callSwapOnExecutor(
+            uint256 currentAmountOut = _callSwapOnExecutor(
                 executor,
                 currentAmountIn,
                 protocolData,
@@ -958,7 +960,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             remainingAmounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
-        return tokenOutIndex == 0 ? cyclicSwapAmountOut : amounts[tokenOutIndex];
+        return lastTokenOutIndex == 0
+            ? cyclicSwapAmountOut
+            : amounts[lastTokenOutIndex];
     }
 
     /**
@@ -1142,19 +1146,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             }
             _updateDeltaAccounting(address(0), int256(msg.value));
         }
-    }
-
-    /**
-     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
-     */
-    function _balanceOf(address token, address owner)
-        internal
-        view
-        returns (uint256)
-    {
-        return token == address(0)
-            ? owner.balance
-            : IERC20(token).balanceOf(owner);
     }
 
     /**

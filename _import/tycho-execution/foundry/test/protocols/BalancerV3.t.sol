@@ -69,11 +69,19 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = "";
 
-        (, address receiver, address tokenIn) =
-            balancerV3Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = balancerV3Exposed.getTransferData(params);
 
-        assertEq(tokenIn, address(0));
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
+        assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {
@@ -108,13 +116,10 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = IERC20(waEthWETH_ADDR).balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut) =
-            balancerV3Exposed.swap(amountIn, protocolData, BOB);
+        balancerV3Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = IERC20(waEthWETH_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, waEthWETH_ADDR);
     }
 
     function testSwapIntegration() public {
@@ -129,13 +134,10 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         deal(waEthUSDT_ADDR, address(balancerV3Exposed), amountIn);
         uint256 balanceBefore = IERC20(aaveGHO_ADDR).balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut) =
-            balancerV3Exposed.swap(amountIn, protocolData, BOB);
+        balancerV3Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = IERC20(aaveGHO_ADDR).balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, aaveGHO_ADDR);
     }
 }
 

@@ -46,24 +46,15 @@ contract BebopExecutor is IExecutor {
     /// @param amountIn The amount of input token to swap
     /// @param data Encoded swap data containing tokens and bebop calldata
     /// @param receiver The address to receive output tokens
-    /// @return amountOut The amount of output token received
-    /// @return tokenOut The address of the output token
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
-        address tokenIn;
         uint8 partialFillOffset;
         uint256 originalFilledTakerAmount;
         bytes memory bebopCalldata;
-        (
-            tokenIn,
-            tokenOut,
-            partialFillOffset,
-            originalFilledTakerAmount,
-            bebopCalldata
-        ) = _decodeData(data);
+        (partialFillOffset, originalFilledTakerAmount, bebopCalldata) =
+            _decodeData(data);
 
         // Modify the filledTakerAmount in the calldata
         // If the filledTakerAmount is the same as the original, the original calldata is returned
@@ -74,19 +65,10 @@ contract BebopExecutor is IExecutor {
             partialFillOffset
         );
 
-        // Bebop quotes are always made with the router as the receiver
-        uint256 balanceBefore = _balanceOf(tokenOut, address(this));
-
         // Use OpenZeppelin's Address library for safe call
         // This will revert if the call fails
         // slither-disable-next-line unused-return
         bebopSettlement.functionCall(finalCalldata);
-        uint256 balanceAfter = _balanceOf(tokenOut, address(this));
-        amountOut = balanceAfter - balanceBefore;
-
-        if (receiver != address(this)) {
-            IERC20(tokenOut).safeTransfer(receiver, amountOut);
-        }
     }
 
     /// @dev Decodes the packed calldata
@@ -94,19 +76,15 @@ contract BebopExecutor is IExecutor {
         internal
         pure
         returns (
-            address tokenIn,
-            address tokenOut,
             uint8 partialFillOffset,
             uint256 originalFilledTakerAmount,
             bytes memory bebopCalldata
         )
     {
         // Need at least 73 bytes for the minimum fixed fields
-        // 20 + 20 + 1 (offset) + 32 (original amount) = 73
+        // 20 (tokenIn) + 20 (tokenOut) + 1 (offset) + 32 (amount) = 73
         if (data.length < 73) revert BebopExecutor__InvalidDataLength();
 
-        tokenIn = address(bytes20(data[0:20]));
-        tokenOut = address(bytes20(data[20:40]));
         partialFillOffset = uint8(data[40]);
         originalFilledTakerAmount = uint256(bytes32(data[41:73]));
         bebopCalldata = data[73:];
@@ -152,20 +130,6 @@ contract BebopExecutor is IExecutor {
         return bebopCalldata;
     }
 
-    /// @dev Returns the balance of a token or ETH for an account
-    /// @param token The token address, or address(0) for ETH
-    /// @param account The account to get the balance of
-    /// @return balance The balance of the token or ETH for the account
-    function _balanceOf(address token, address account)
-        internal
-        view
-        returns (uint256)
-    {
-        return token == address(0)
-            ? account.balance
-            : IERC20(token).balanceOf(account);
-    }
-
     /**
      * @dev Allow receiving ETH for settlement calls that require ETH
      * This is needed when the executor handles native ETH swaps
@@ -182,7 +146,9 @@ contract BebopExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length < 73) {
@@ -190,7 +156,9 @@ contract BebopExecutor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
         transferType = TransferManager.TransferType.ProtocolWillDebit;
         receiver = bebopSettlement;
+        outputToRouter = true;
     }
 }

@@ -59,19 +59,12 @@ contract FluidV1Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         IFluidV1Dex dex;
         bool zero2one;
         bool isNativeSell;
 
-        (dex, zero2one, tokenOut, isNativeSell) = _decodeData(data);
-
-        // Balance check: measure actual output instead of trusting
-        // the pool's reported amount.
-        uint256 balanceBefore = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
+        (dex, zero2one, isNativeSell) = _decodeData(data);
 
         if (!isNativeSell) {
             _setCurrentDex(dex);
@@ -81,12 +74,6 @@ contract FluidV1Executor is IExecutor, ICallback {
             // slither-disable-next-line arbitrary-send-eth,unused-return
             dex.swapIn{value: amountIn}(zero2one, amountIn, 0, receiver);
         }
-
-        uint256 balanceAfter = tokenOut == address(0)
-            ? receiver.balance
-            : IERC20(tokenOut).balanceOf(receiver);
-
-        amountOut = balanceAfter - balanceBefore;
     }
 
     // Stores dex address in transient storage
@@ -107,18 +94,13 @@ contract FluidV1Executor is IExecutor, ICallback {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (
-            IFluidV1Dex dex,
-            bool zero2one,
-            address tokenOut,
-            bool isNativeSell
-        )
+        returns (IFluidV1Dex dex, bool zero2one, bool isNativeSell)
     {
         // expected calldata layout
         // ---------------------
         // 0  | dex address
         // 20 | zero2one
-        // 21 | tokenOut
+        // 21 | tokenOut (parsed in getTransferData)
         // 41 | is_native
         // 42 | EOF
         if (data.length != 42) {
@@ -126,7 +108,6 @@ contract FluidV1Executor is IExecutor, ICallback {
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
-        tokenOut = address(bytes20(data[21:41]));
         isNativeSell = uint8(data[41]) > 0;
     }
 
@@ -147,18 +128,27 @@ contract FluidV1Executor is IExecutor, ICallback {
         }
     }
 
-    function getTransferData(
-        bytes calldata /* data */
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
-        return (TransferManager.TransferType.None, address(0), address(0));
+        if (data.length >= 41) {
+            tokenOut = address(bytes20(data[21:41]));
+        }
+        return (
+            TransferManager.TransferType.None,
+            address(0),
+            address(0),
+            tokenOut,
+            false
+        );
     }
 
     function getCallbackTransferData(bytes calldata data)

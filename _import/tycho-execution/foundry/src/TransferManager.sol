@@ -202,6 +202,26 @@ contract TransferManager is Vault {
     }
 
     /**
+     * @dev Returns the address that provides input tokens for the current swap.
+     */
+    // slither-disable-next-line assembly
+    function _getInputSource(bool isFirstSwap)
+        internal
+        view
+        returns (address source)
+    {
+        if (!isFirstSwap) return address(this);
+        bool useVault;
+        assembly {
+            useVault := tload(_USE_VAULT_SLOT)
+        }
+        if (useVault) return address(this);
+        assembly {
+            source := tload(_SENDER_SLOT)
+        }
+    }
+
+    /**
      * @dev Approves a receiver to spend tokens if receiver is not this contract.
      * For special cases like Rocketpool, the contract burns the user's balance
      * without physically transferring the input token, so an approval is not

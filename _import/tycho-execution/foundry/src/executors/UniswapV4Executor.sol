@@ -100,9 +100,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
+        address tokenOut;
         bool zeroForOne;
         bool isFoT;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
@@ -150,8 +150,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
             );
         }
         poolManager.sync(Currency.wrap(tokenIn));
-        bytes memory result = poolManager.unlock(swapData);
-        amountOut = abi.decode(result, (uint128));
+        // slither-disable-next-line unused-return
+        poolManager.unlock(swapData);
     }
 
     // slither-disable-next-line dead-code
@@ -322,7 +322,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         uint128 amountIn,
         address receiver,
         bytes calldata hookData
-    ) external returns (uint128) {
+    ) external {
         Currency currencyIn = zeroForOne ? poolKey.currency0 : poolKey.currency1;
         _settle(currencyIn, amountIn);
 
@@ -340,15 +340,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         Currency currencyOut =
             zeroForOne ? poolKey.currency1 : poolKey.currency0;
 
-        if (isFoT) {
-            uint256 balanceBefore = _balanceOf(currencyOut, receiver);
-            _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
-            return
-                (_balanceOf(currencyOut, receiver) - balanceBefore).toUint128();
-        } else {
-            _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
-            return amountOut;
-        }
+        _take(currencyOut, receiver, _mapTakeAmount(amountOut, currencyOut));
     }
 
     /**
@@ -364,7 +356,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         uint128 amountIn,
         address receiver,
         PathKey[] calldata path
-    ) external returns (uint128) {
+    ) external {
         uint128 amountOut = 0;
         Currency swapCurrencyIn = currencyIn;
         _settle(currencyIn, amountIn);
@@ -395,24 +387,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
             }
         }
 
-        if (isFoT) {
-            uint256 balanceBefore = _balanceOf(swapCurrencyIn, receiver);
-            _take(
-                swapCurrencyIn,
-                receiver,
-                _mapTakeAmount(amountOut, swapCurrencyIn)
-            );
-            return
-                (_balanceOf(swapCurrencyIn, receiver) - balanceBefore)
-                .toUint128();
-        } else {
-            _take(
-                swapCurrencyIn,
-                receiver,
-                _mapTakeAmount(amountOut, swapCurrencyIn)
-            );
-            return amountOut;
-        }
+        _take(
+            swapCurrencyIn, receiver, _mapTakeAmount(amountOut, swapCurrencyIn)
+        );
     }
 
     function _swap(
@@ -489,17 +466,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
         poolManager.take(currency, recipient, amount);
     }
 
-    function _balanceOf(Currency currency, address account)
-        internal
-        view
-        returns (uint256)
-    {
-        if (currency.isAddressZero()) {
-            return account.balance;
-        }
-        return IERC20(Currency.unwrap(currency)).balanceOf(account);
-    }
-
     function _mapTakeAmount(uint256 amount, Currency currency)
         internal
         view
@@ -567,18 +533,26 @@ contract UniswapV4Executor is IExecutor, ICallback {
         return "";
     }
 
-    function getTransferData(
-        bytes calldata /* data */
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
-        return (TransferManager.TransferType.None, address(0), address(0));
+        tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
+        return (
+            TransferManager.TransferType.None,
+            address(0),
+            tokenIn,
+            tokenOut,
+            false
+        );
     }
 
     function getCallbackTransferData(bytes calldata data)

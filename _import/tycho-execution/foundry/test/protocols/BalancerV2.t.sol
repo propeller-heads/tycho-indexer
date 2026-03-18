@@ -48,11 +48,22 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
         bytes memory params =
             abi.encodePacked(WETH_ADDR, BAL_ADDR, WETH_BAL_POOL_ID);
 
-        (, address receiver, address tokenIn) =
-            balancerV2Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = balancerV2Exposed.getTransferData(params);
 
-        assertEq(address(tokenIn), WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, VAULT);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, BAL_ADDR);
+        assertEq(outputToRouter, false);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -73,13 +84,10 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            balancerV2Exposed.swap(amountIn, protocolData, BOB);
+        balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, BAL_ADDR);
     }
 
     function testDecodeIntegration() public view {
@@ -104,12 +112,9 @@ contract BalancerV2ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(balancerV2Exposed));
         IERC20(WETH_ADDR).approve(VAULT, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            balancerV2Exposed.swap(amountIn, protocolData, BOB);
+        balancerV2Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = BAL.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, BAL_ADDR);
     }
 }

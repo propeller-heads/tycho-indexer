@@ -112,11 +112,24 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
     function testGetTransferData() public {
         IHashflowRouter.RFQTQuote memory expected_quote = rfqtQuote();
         bytes memory encodedQuote = encodeRfqtQuoteWithDefaults(expected_quote);
-        (, address receiver, address tokenIn) =
-            executor.getTransferData(encodedQuote);
 
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = executor.getTransferData(encodedQuote);
+
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit),
+            "transferType mismatch"
+        );
+        assertEq(receiver, HASHFLOW_ROUTER, "receiver mismatch");
         assertEq(tokenIn, expected_quote.baseToken, "baseToken mismatch");
-        assertEq(receiver, HASHFLOW_ROUTER);
+        assertEq(tokenOut, expected_quote.quoteToken, "quoteToken mismatch");
+        assertEq(outputToRouter, true, "outputToRouter mismatch");
     }
 
     function testSwapNoSlippage() public {
@@ -133,14 +146,11 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         vm.stopPrank();
 
         vm.prank(trader);
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, address(executor));
+        executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(amountOut, quote.quoteTokenAmount);
-        assertEq(tokenOut, quote.quoteToken);
+        assertEq(balanceAfter - balanceBefore, quote.quoteTokenAmount);
     }
 
     function testSwapRouterAmountUnderQuoteAmount() public {
@@ -157,14 +167,11 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         vm.stopPrank();
 
         vm.prank(trader);
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, address(executor));
+        executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertLt(amountOut, quote.quoteTokenAmount);
-        assertEq(tokenOut, quote.quoteToken);
+        assertLt(balanceAfter - balanceBefore, quote.quoteTokenAmount);
     }
 
     function testSwapRouterAmountOverQuoteAmount() public {
@@ -181,14 +188,11 @@ contract HashflowExecutorECR20Test is Constants, TestUtils, HashflowUtils {
         vm.stopPrank();
 
         vm.prank(trader);
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, address(executor));
+        executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(amountOut, quote.quoteTokenAmount);
-        assertEq(tokenOut, quote.quoteToken);
+        assertEq(balanceAfter - balanceBefore, quote.quoteTokenAmount);
     }
 
     function rfqtQuote()
@@ -245,14 +249,11 @@ contract HashflowExecutorNativeTest is Constants, HashflowUtils {
         uint256 balanceBefore = USDC.balanceOf(trader);
 
         vm.prank(trader);
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, encodedQuote, address(executor));
+        executor.swap(amountIn, encodedQuote, address(executor));
 
         uint256 balanceAfter = USDC.balanceOf(trader);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(amountOut, quote.quoteTokenAmount);
-        assertEq(tokenOut, quote.quoteToken);
+        assertEq(balanceAfter - balanceBefore, quote.quoteTokenAmount);
     }
 
     function rfqtQuote()

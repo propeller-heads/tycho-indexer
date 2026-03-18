@@ -7,10 +7,48 @@ import {
     ClientFeeParams
 } from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
+import {Vault__UnexpectedNonZeroCount} from "@src/Vault.sol";
 
 import {
     TransferManager__ExceededTransferFromAllowance
 } from "@src/TransferManager.sol";
+
+contract HackedCallbackDataPool is Constants {
+    // A hacked USV3-compatible pool. When called via swap(), it triggers a
+    // USV3 callback with PEPE as the owed token instead of the real input token. The
+    // real UniswapV3Executor honestly relays whatever the pool reports, so the
+    // TransferManager ends up transferring PEPE.
+    // Matches IUniswapV3Pool.swap signature
+    function swap(address, bool, int256, uint160, bytes calldata)
+        external
+        returns (int256, int256)
+    {
+        // Craft callback data with stolenToken as tokenIn.
+        // The UniV3 executor reads tokenIn from
+        // callbackData[0:20].
+        bytes memory cbData = abi.encodePacked(
+            bytes20(PEPE_ADDR), // tokenIn
+            bytes20(address(0)), //  tokenOut
+            bytes3(uint24(0)) //     fee
+        );
+        uint256 stolenAmount = 1000 ether;
+
+        // slither-disable-next-line low-level-calls
+        (bool ok,) = msg.sender
+            .call(
+                abi.encodeWithSignature(
+                    "uniswapV3SwapCallback(int256,int256,bytes)",
+                    int256(stolenAmount), // amount0Delta (owed)
+                    int256(0), //            amount1Delta
+                    cbData
+                )
+            );
+        require(ok, "Callback failed");
+
+        // First value is the stolen PEPE amount
+        return (int256(stolenAmount), int256(0));
+    }
+}
 
 contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
     function _getSplitSwaps() private view returns (bytes[] memory) {
@@ -626,5 +664,142 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99444510);
 
         vm.stopPrank();
+    }
+
+    function testHackedPoolCaughtByDeltaAccounting() public {
+        // A split swap where one leg routes through a hacked pool. The pool sends a
+        // malicious callback requesting a transfer of PEPE (a different token) from
+        // the router to the attacker. The executor itself is honest — it just relays
+        // whatever the pool reported. The transient-storage delta accounting detects
+        // the unexpected negative PEPE delta and reverts the entire transaction.
+        //
+        //  WETH ──(USV2)──> DAI ─┬──(USV2, 100%)──────────> USDC
+        //                        └──(HACKED POOL, 0%)─────> USDC
+        //                             └─> callback steals PEPE
+
+        HackedCallbackDataPool hackedPool = new HackedCallbackDataPool();
+
+        // Router has some PEPE thanks to someone's Vault balance.
+        uint256 stolenPepe = 1000 ether;
+        deal(PEPE_ADDR, tychoRouterAddr, stolenPepe);
+
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes[] memory swaps = new bytes[](3);
+
+        // Swap 1: WETH -> DAI, full amount
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0),
+            address(usv2Executor),
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR)
+        );
+
+        // Swap 2: DAI -> USDC, 100%
+        swaps[1] = encodeSplitSwap(
+            uint8(1),
+            uint8(2),
+            uint24(0), // 100%
+            address(usv2Executor),
+            encodeUniswapV2Swap(DAI_USDC_POOL, DAI_ADDR, USDC_ADDR)
+        );
+
+        // Swap 3: DAI -> USDC, split 0 (no DAI left)
+        // Routes through the hacked pool via the real UniswapV3Executor. The pool's
+        // callback requests a PEPE transfer instead of DAI.
+        bytes memory v3Data = abi.encodePacked(
+            DAI_ADDR, // tokenIn
+            USDC_ADDR, // tokenOut
+            uint24(3000), // fee
+            address(hackedPool), // target
+            true //  zeroForOne
+        );
+        swaps[2] = encodeSplitSwap(
+            uint8(1), uint8(2), uint24(0), address(usv3Executor), v3Data
+        );
+
+        // Delta accounting detects:
+        //   PEPE delta < 0  (stolen in callback)
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedNonZeroCount.selector, uint256(1)
+            )
+        );
+        tychoRouter.splitSwap(
+            amountIn,
+            WETH_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            3, // nTokens
+            ALICE,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+    }
+
+    function testSplitSwapMultipleOutputToRouter() public {
+        // A split swap where both legs use a Curve executor (outputToRouter = true).
+        // The Dispatcher independently measures each leg's output via balance-diff,
+        // forwards to the receiver, and the split-swap accumulates the totals
+        // correctly.
+        //
+        //          ┌──(Curve tripool, 60%)──┐
+        //   DAI ───┤                        ├──> USDC
+        //          └──(Curve tripool, 40%)──┘
+        //
+        uint256 amountIn = 1000 ether;
+        deal(DAI_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(DAI_ADDR).approve(tychoRouterAddr, amountIn);
+
+        // Curve tripool: DAI(0) -> USDC(1), stable pool
+        bytes memory curveData = abi.encodePacked(
+            DAI_ADDR,
+            USDC_ADDR,
+            TRIPOOL,
+            uint8(1), // stable pool type
+            uint8(0), // i = DAI index
+            uint8(1) //  j = USDC index
+        );
+
+        bytes[] memory swaps = new bytes[](2);
+
+        // DAI -> USDC (60%)
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100,
+            address(curveExecutor),
+            curveData
+        );
+
+        // DAI -> USDC (remaining 40%)
+        swaps[1] = encodeSplitSwap(
+            uint8(0), uint8(1), uint24(0), address(curveExecutor), curveData
+        );
+
+        uint256 amountOut = tychoRouter.splitSwap(
+            amountIn,
+            DAI_ADDR,
+            USDC_ADDR,
+            1, // min amount
+            2, // nTokens
+            ALICE,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+
+        uint256 usdcBalance = IERC20(USDC_ADDR).balanceOf(ALICE);
+
+        assertEq(amountOut, usdcBalance);
+        assertGt(usdcBalance, 0);
     }
 }

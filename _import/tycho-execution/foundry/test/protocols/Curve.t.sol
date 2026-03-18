@@ -83,11 +83,22 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
             WETH_ADDR, USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
         );
 
-        (, address receiver, address tokenIn) =
-            curveExecutorExposed.getTransferData(data);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = curveExecutorExposed.getTransferData(data);
 
-        assertEq(tokenIn, WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, TRICRYPTO_POOL);
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, USDC_ADDR);
+        assertEq(outputToRouter, true);
     }
 
     function testTriPool() public {
@@ -99,12 +110,11 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DAI_ADDR).approve(TRIPOOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 999797);
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, USDC_ADDR);
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(address(curveExecutorExposed)), 999797
+        );
     }
 
     function testStEthPool() public {
@@ -115,40 +125,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         bytes memory data =
             _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
 
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 1001072414418410896);
-        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, STETH_ADDR);
-    }
-
-    // This test verifies that amountOut for stETH is calculated correctly by
-    // accounting for an existing stETH balance in the executor prior to the swap
-    function testStEthPoolWithInitialstETH() public {
-        // Swapping ETH -> stETH on StEthPool 0xDC24316b9AE028F1497c275EB9192a3Ea0f67022 twice
-        uint256 amountIn = 2 ether;
-        deal(address(curveExecutorExposed), amountIn);
-
-        uint256 amountInForTest = 1 ether;
-
-        bytes memory data1 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
-
-        (uint256 amountOut1, address tokenOut1) =
-            curveExecutorExposed.swap(amountInForTest, data1, ALICE);
-
-        bytes memory data2 =
-            _getData(ETH_ADDR_FOR_CURVE, STETH_ADDR, STETH_POOL, 1);
-
-        (uint256 amountOut2, address tokenOut2) =
-            curveExecutorExposed.swap(amountInForTest, data2, ALICE);
-
-        assertEq(amountOut1, 1001072414418410896);
-        assertEq(amountOut2, 1001072213238226892);
-        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut1 + amountOut2);
-        assertEq(tokenOut1, STETH_ADDR);
-        assertEq(tokenOut2, STETH_ADDR);
+        assertEq(
+            IERC20(STETH_ADDR).balanceOf(address(curveExecutorExposed)),
+            1001072414418410897
+        );
     }
 
     function testTricrypto2Pool() public {
@@ -160,12 +142,11 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO2_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 2279618);
-        assertEq(IERC20(WBTC_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, WBTC_ADDR);
+        assertEq(
+            IERC20(WBTC_ADDR).balanceOf(address(curveExecutorExposed)), 2279618
+        );
     }
 
     function testSUSDPool() public {
@@ -177,12 +158,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(SUSD_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 100488101605550214590);
-        assertEq(IERC20(SUSD_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, SUSD_ADDR);
+        assertEq(
+            IERC20(SUSD_ADDR).balanceOf(address(curveExecutorExposed)),
+            100488101605550214590
+        );
     }
 
     function testFraxUsdcPool() public {
@@ -194,12 +175,11 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(FRAX_ADDR).approve(FRAX_USDC_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 998097);
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, USDC_ADDR);
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(address(curveExecutorExposed)), 998097
+        );
     }
 
     function testUsdeUsdcPool() public {
@@ -211,12 +191,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDC_ADDR).approve(USDE_USDC_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 100064812138999986170);
-        assertEq(IERC20(USDE_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, USDE_ADDR);
+        assertEq(
+            IERC20(USDE_ADDR).balanceOf(address(curveExecutorExposed)),
+            100064812138999986170
+        );
     }
 
     function testDolaFraxPyusdPool() public {
@@ -229,18 +209,17 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(DOLA_ADDR).approve(DOLA_FRAXPYUSD_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 99688992);
-        assertEq(IERC20(FRAXPYUSD_POOL).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, FRAXPYUSD_POOL);
+        assertEq(
+            IERC20(FRAXPYUSD_POOL).balanceOf(address(curveExecutorExposed)),
+            99688992
+        );
     }
 
     function testCryptoPoolWithETH() public {
         // Swapping XYO -> ETH on a CryptoPool, deployed by factory 0xF18056Bbd320E96A48e3Fbf8bC061322531aac99
         uint256 amountIn = 1 ether;
-        uint256 initialBalance = address(ALICE).balance; // this address already has some ETH assigned to it
         deal(XYO_ADDR, address(curveExecutorExposed), amountIn);
 
         bytes memory data =
@@ -248,12 +227,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(XYO_ADDR).approve(ETH_XYO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 6081816039338);
-        assertEq(ALICE.balance, initialBalance + amountOut);
-        assertEq(tokenOut, address(0));
+        uint256 ethBefore = address(curveExecutorExposed).balance;
+        curveExecutorExposed.swap(amountIn, data, ALICE);
+        uint256 ethAfter = address(curveExecutorExposed).balance;
+
+        assertEq(ethAfter - ethBefore, 6081816039338);
     }
 
     function testCryptoPool() public {
@@ -265,12 +244,11 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(BSGG_ADDR).approve(BSGG_USDT_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 23429);
-        assertEq(IERC20(USDT_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, USDT_ADDR);
+        assertEq(
+            IERC20(USDT_ADDR).balanceOf(address(curveExecutorExposed)), 23429
+        );
     }
 
     function testTricryptoPool() public {
@@ -282,12 +260,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WETH_ADDR).approve(TRICRYPTO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 1861130974);
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, USDC_ADDR);
+        assertEq(
+            IERC20(USDC_ADDR).balanceOf(address(curveExecutorExposed)),
+            1861130974
+        );
     }
 
     function testTwoCryptoPool() public {
@@ -299,12 +277,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(UWU_ADDR).approve(UWU_WETH_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 2873786684675);
-        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, WETH_ADDR);
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(address(curveExecutorExposed)),
+            2873786684675
+        );
     }
 
     function testStableSwapPool() public {
@@ -317,12 +295,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(USDT_ADDR).forceApprove(CRVUSD_USDT_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 10436946786333182306400100);
-        assertEq(IERC20(CRVUSD_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, CRVUSD_ADDR);
+        assertEq(
+            IERC20(CRVUSD_ADDR).balanceOf(address(curveExecutorExposed)),
+            10436946786333182306400100
+        );
     }
 
     function testMetaPool() public {
@@ -335,12 +313,12 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
 
         vm.prank(address(curveExecutorExposed));
         IERC20(WTAO_ADDR).approve(WSTTAO_WTAO_POOL, amountIn);
-        (uint256 amountOut, address tokenOut) =
-            curveExecutorExposed.swap(amountIn, data, ALICE);
+        curveExecutorExposed.swap(amountIn, data, ALICE);
 
-        assertEq(amountOut, 32797923610);
-        assertEq(IERC20(WSTTAO_ADDR).balanceOf(ALICE), amountOut);
-        assertEq(tokenOut, WSTTAO_ADDR);
+        assertEq(
+            IERC20(WSTTAO_ADDR).balanceOf(address(curveExecutorExposed)),
+            32797923610
+        );
     }
 
     function _getData(
@@ -383,6 +361,46 @@ contract TychoRouterForCurveTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), 2877855391767);
+
+        vm.stopPrank();
+    }
+
+    function testStEthPoolWithInitialStEth() public {
+        // Swapping ETH -> stETH on the Curve stETH pool through
+        // the full TychoRouter workflow. Uses native ETH as input
+        uint256 amountIn = 1 ether;
+        deal(ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+
+        bytes memory curveStEthData = abi.encodePacked(
+            ETH_ADDR_FOR_CURVE,
+            STETH_ADDR,
+            STETH_POOL,
+            uint8(1), // poolType = stable
+            uint8(0), // i = 0 (ETH)
+            uint8(1) // j = 1 (stETH)
+        );
+
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), curveStEthData);
+
+        uint256 amountOut = tychoRouter.singleSwap{value: amountIn}(
+            amountIn,
+            address(0), // tokenIn = native ETH
+            STETH_ADDR,
+            1, // min amount out
+            ALICE,
+            noClientFee(),
+            swap
+        );
+
+        // pools reports sending 999958043830457008 stETH to msg.sender (router)
+        // router actually got 999958043830457007 stETH
+        // after the last transfer to Alice, she gets 999958043830457005 stETH
+        assertEq(amountOut, 999958043830457005);
+        assertEq(IERC20(STETH_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(ALICE.balance, 0);
 
         vm.stopPrank();
     }

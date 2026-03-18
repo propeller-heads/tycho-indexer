@@ -43,7 +43,6 @@ contract WethExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         bool isWrapping;
         isWrapping = _decodeData(data);
@@ -51,21 +50,9 @@ contract WethExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             weth.deposit{value: amountIn}();
-            amountOut = amountIn;
-            tokenOut = address(weth);
-
-            if (receiver != address(this)) {
-                weth.safeTransfer(receiver, amountOut);
-            }
         } else {
             // WETH -> ETH: Unwrap
             weth.withdraw(amountIn);
-            amountOut = amountIn;
-            tokenOut = address(0);
-
-            if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), amountOut);
-            }
         }
     }
 
@@ -91,7 +78,9 @@ contract WethExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 1) {
@@ -103,13 +92,16 @@ contract WethExecutor is IExecutor {
         if (isWrapping) {
             // ETH -> WETH: Wrap
             tokenIn = address(0);
+            tokenOut = address(weth);
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(weth);
+            tokenOut = address(0);
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
 
+        outputToRouter = true;
         // Since unwrapping withdraws the funds from the msg.sender, the user's funds need to be sent to the
         // TychoRouter initially. This does not require an actual approval since our
         // router is interacting directly with the token contract.

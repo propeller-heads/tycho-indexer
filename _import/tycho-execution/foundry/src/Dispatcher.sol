@@ -5,6 +5,11 @@ import {ICallback} from "@interfaces/ICallback.sol";
 import {IFeeCalculator} from "@interfaces/IFeeCalculator.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 import {TransferManager} from "./TransferManager.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__ExecutorIsTimelocked(address executor);
@@ -25,6 +30,8 @@ error Dispatcher__ExecutorAlreadyExists(address executor);
  *  an alternate selector is specified.
  */
 contract Dispatcher is TransferManager {
+    using SafeERC20 for IERC20;
+
     mapping(address => uint256) public executorsActivationTimestamp;
 
     // keccak256("Dispatcher#CURRENTLY_SWAPPING_EXECUTOR_SLOT")
@@ -85,17 +92,8 @@ contract Dispatcher is TransferManager {
         bool isFirstSwap,
         bool isSplitSwap,
         address receiver
-    ) internal returns (uint256 calculatedAmount) {
-        uint256 activationTimestamp = executorsActivationTimestamp[executor];
-
-        // slither-disable-next-line incorrect-equality
-        if (activationTimestamp == 0) {
-            revert Dispatcher__UnapprovedExecutor(executor);
-        }
-        // slither-disable-next-line timestamp
-        if (block.timestamp < activationTimestamp) {
-            revert Dispatcher__ExecutorIsTimelocked(executor);
-        }
+    ) internal returns (uint256 amountOut) {
+        _validateExecutor(executor);
 
         assembly {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
@@ -121,10 +119,22 @@ contract Dispatcher is TransferManager {
         (
             TransferManager.TransferType transferType,
             address transferReceiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         ) = abi.decode(
-            transferData, (TransferManager.TransferType, address, address)
+            transferData,
+            (TransferManager.TransferType, address, address, address, bool)
         );
+
+        bool isCyclic = tokenIn == tokenOut && tokenIn != address(0);
+        address inputSource =
+            isCyclic ? _getInputSource(isFirstSwap) : address(0);
+
+        // Measure output before _transfer so cyclic handling is uniform
+        // across callback and direct-transfer types.
+        address measureAt = outputToRouter ? address(this) : receiver;
+        uint256 balanceBeforeSwap = _balanceOf(tokenOut, measureAt);
 
         _transfer(
             transferReceiver,
@@ -160,13 +170,30 @@ contract Dispatcher is TransferManager {
             );
         }
 
-        address tokenOut;
-        (calculatedAmount, tokenOut) = abi.decode(result, (uint256, address));
+        uint256 balanceAfterSwap = _balanceOf(tokenOut, measureAt);
 
-        // Update delta accounting (transient storage) if tokens stayed in router
+        // Cyclic swap detection: when tokenIn == tokenOut (e.g. grouped UniswapV4
+        // swap USDC -> WETH -> USDC), we must check initial balance before any
+        // transfer and add the input amount back when needed.
+        if (isCyclic && measureAt == inputSource) {
+            // Add amount before subtracting initial balance to avoid underflow
+            balanceAfterSwap += amount;
+        }
+        amountOut = balanceAfterSwap - balanceBeforeSwap;
+
+        // Forward if output landed at router but needs to go elsewhere
+        if (outputToRouter && receiver != address(this)) {
+            // measuring the balance again is needed for rebase/fee tokens
+            uint256 balanceBeforeTransfer = _balanceOf(tokenOut, receiver);
+            _transferOut(tokenOut, receiver, amountOut);
+            uint256 balanceAfterTransfer = _balanceOf(tokenOut, receiver);
+            amountOut = balanceAfterTransfer - balanceBeforeTransfer;
+        }
+
+        // Delta accounting if tokens stay at router
         if (receiver == address(this)) {
             // slither-disable-next-line calls-loop
-            _updateDeltaAccounting(tokenOut, int256(calculatedAmount));
+            _updateDeltaAccounting(tokenOut, int256(amountOut));
         }
     }
 
@@ -184,16 +211,7 @@ contract Dispatcher is TransferManager {
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
         }
 
-        uint256 activationTimestamp = executorsActivationTimestamp[executor];
-
-        // slither-disable-next-line incorrect-equality
-        if (activationTimestamp == 0) {
-            revert Dispatcher__UnapprovedExecutor(executor);
-        }
-        // slither-disable-next-line timestamp
-        if (block.timestamp < activationTimestamp) {
-            revert Dispatcher__ExecutorIsTimelocked(executor);
-        }
+        _validateExecutor(executor);
 
         (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
             abi.encodeWithSelector(
@@ -265,16 +283,7 @@ contract Dispatcher is TransferManager {
         view
         returns (address receiver)
     {
-        uint256 activationTimestamp = executorsActivationTimestamp[executor];
-
-        // slither-disable-next-line incorrect-equality
-        if (activationTimestamp == 0) {
-            revert Dispatcher__UnapprovedExecutor(executor);
-        }
-        // slither-disable-next-line timestamp
-        if (block.timestamp < activationTimestamp) {
-            revert Dispatcher__ExecutorIsTimelocked(executor);
-        }
+        _validateExecutor(executor);
 
         // slither-disable-next-line calls-loop,low-level-calls
         (bool success, bytes memory receiverData) = executor.staticcall(
@@ -296,6 +305,19 @@ contract Dispatcher is TransferManager {
         }
 
         receiver = abi.decode(receiverData, (address));
+    }
+
+    function _validateExecutor(address executor) private view {
+        uint256 activationTimestamp = executorsActivationTimestamp[executor];
+
+        // slither-disable-next-line incorrect-equality
+        if (activationTimestamp == 0) {
+            revert Dispatcher__UnapprovedExecutor(executor);
+        }
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTimestamp) {
+            revert Dispatcher__ExecutorIsTimelocked(executor);
+        }
     }
 
     function _callGetEffectiveRouterFeeOnOutput(
@@ -354,5 +376,26 @@ contract Dispatcher is TransferManager {
 
         (amountOut, feeRecipients) =
             abi.decode(feeData, (uint256, FeeRecipient[]));
+    }
+
+    /**
+     * @dev Gets balance of a token for a given address. Supports both native ETH and ERC20 tokens.
+     */
+    function _balanceOf(address token, address owner)
+        internal
+        view
+        returns (uint256)
+    {
+        return token == address(0)
+            ? owner.balance
+            : IERC20(token).balanceOf(owner);
+    }
+
+    function _transferOut(address token, address to, uint256 amount) internal {
+        if (token == address(0)) {
+            Address.sendValue(payable(to), amount);
+        } else {
+            IERC20(token).safeTransfer(to, amount);
+        }
     }
 }

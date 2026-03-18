@@ -15,15 +15,6 @@ interface ICallback {
         bytes calldata data
     ) external returns (bytes memory result);
 
-    /**
-     * @notice Verifies the validity of callback data.
-     * @dev This view function checks if the provided callback data is valid according
-     * to the protocol's requirements. It should revert if the data is invalid.
-     *
-     * @param data The encoded callback data to verify.
-     */
-    function verifyCallback(bytes calldata data) external view;
-
 
     /**
      * @notice Gets transfer data for callback-based token transfers.

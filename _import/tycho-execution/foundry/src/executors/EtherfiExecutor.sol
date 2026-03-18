@@ -79,13 +79,11 @@ contract EtherfiExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         EtherfiDirection direction;
         direction = _decodeData(data);
 
         if (direction == EtherfiDirection.EethToEth) {
-            uint256 balanceBefore = receiver.balance;
             // eETH is share-based and rounds down on amount conversions;
             // cap redeem amount to current balance to avoid 1-wei dust reverts.
             uint256 redeemAmount = IERC20(eethAddress).balanceOf(address(this));
@@ -94,41 +92,16 @@ contract EtherfiExecutor is IExecutor {
             }
             IEtherfiRedemptionManager(redemptionManagerAddress)
                 .redeemEEth(redeemAmount, receiver, ethAddress);
-            amountOut = receiver.balance - balanceBefore;
-            tokenOut = ethAddress;
         } else if (direction == EtherfiDirection.EthToEeth) {
-            uint256 balanceBefore = IERC20(eethAddress).balanceOf(address(this));
-            // deposit() returns shares, not the eETH amount;
-            // use balance delta for amount-out.
             // slither-disable-next-line arbitrary-send-eth,unused-return
             IEtherfiLiquidityPool(liquidityPoolAddress)
             .deposit{value: amountIn}();
-            uint256 balanceAfter = IERC20(eethAddress).balanceOf(address(this));
-            amountOut = balanceAfter - balanceBefore;
-            tokenOut = eethAddress;
-
-            if (receiver != address(this)) {
-                uint256 receiverBalanceBefore =
-                    IERC20(eethAddress).balanceOf(receiver);
-                IERC20(eethAddress).safeTransfer(receiver, amountOut);
-                uint256 receiverBalanceAfter =
-                    IERC20(eethAddress).balanceOf(receiver);
-                amountOut = receiverBalanceAfter - receiverBalanceBefore;
-            }
         } else if (direction == EtherfiDirection.EethToWeeth) {
-            amountOut = IWeETH(weethAddress).wrap(amountIn);
-            tokenOut = weethAddress;
-
-            if (receiver != address(this)) {
-                IERC20(weethAddress).safeTransfer(receiver, amountOut);
-            }
+            // slither-disable-next-line unused-return
+            IWeETH(weethAddress).wrap(amountIn);
         } else if (direction == EtherfiDirection.WeethToEeth) {
-            amountOut = IWeETH(weethAddress).unwrap(amountIn);
-            tokenOut = eethAddress;
-
-            if (receiver != address(this)) {
-                IERC20(eethAddress).safeTransfer(receiver, amountOut);
-            }
+            // slither-disable-next-line unused-return
+            IWeETH(weethAddress).unwrap(amountIn);
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }
@@ -140,39 +113,35 @@ contract EtherfiExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         EtherfiDirection direction = _decodeData(data);
 
         if (direction == EtherfiDirection.EthToEeth) {
-            return (
-                TransferManager.TransferType.TransferNativeInExecutor,
-                address(0),
-                address(0)
-            );
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
+            tokenOut = eethAddress;
+            outputToRouter = true;
         } else if (direction == EtherfiDirection.EethToEth) {
-            // redemptionManager pulls eETH from router via transferFrom
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                redemptionManagerAddress,
-                eethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = redemptionManagerAddress;
+            tokenIn = eethAddress;
+            tokenOut = address(0);
+            outputToRouter = false;
         } else if (direction == EtherfiDirection.EethToWeeth) {
-            // weETH.wrap() pulls eETH from router via transferFrom
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                weethAddress,
-                eethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = weethAddress;
+            tokenIn = eethAddress;
+            tokenOut = weethAddress;
+            outputToRouter = true;
         } else if (direction == EtherfiDirection.WeethToEeth) {
-            // weETH.unwrap() burns from router (no transferFrom), so no approval
-            // needed — receiver=msg.sender skips _approveIfNeeded
-            return (
-                TransferManager.TransferType.ProtocolWillDebit,
-                msg.sender,
-                weethAddress
-            );
+            transferType = TransferManager.TransferType.ProtocolWillDebit;
+            receiver = msg.sender;
+            tokenIn = weethAddress;
+            tokenOut = eethAddress;
+            outputToRouter = true;
         } else {
             revert EtherfiExecutor__InvalidDirection();
         }

@@ -130,15 +130,13 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         bytes memory data =
             abi.encodePacked(USDC_ADDR, WETH_ADDR, true, false, firstPool);
 
-        (uint256 amountOut, address tokenOut) =
-            angstromExecutor.swap(amountIn, data, ALICE);
+        angstromExecutor.swap(amountIn, data, ALICE);
 
         assertEq(
             USDC.balanceOf(POOL_MANAGER), poolManagerBalanceBefore + amountIn
         );
-        assertTrue(WETH.balanceOf(ALICE) == amountOut);
+        uint256 amountOut = WETH.balanceOf(ALICE);
         assertTrue(amountOut > 0);
-        assertEq(tokenOut, WETH_ADDR);
     }
 
     function testSwapWithExpiredAttestations() public {
@@ -164,8 +162,8 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         bytes memory data =
             abi.encodePacked(USDC_ADDR, WETH_ADDR, true, false, firstPool);
 
-        (uint256 amountOut,) = angstromExecutor.swap(amountIn, data, BOB);
-        assertGt(amountOut, 0);
+        angstromExecutor.swap(amountIn, data, BOB);
+        assertGt(WETH.balanceOf(BOB), 0);
     }
 
     function testGroupedSwapIntegration() public {
@@ -181,8 +179,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforePool = USDC.balanceOf(POOL_MANAGER);
         uint256 usdcBalanceBeforeExecutor =
             USDC.balanceOf(address(angstromExecutor));
-        (uint256 amountOut, address tokenOut) =
-            angstromExecutor.swap(amountIn, protocolData, ALICE);
+        angstromExecutor.swap(amountIn, protocolData, ALICE);
 
         // Verify USDC was transferred to pool manager
         assertEq(USDC.balanceOf(POOL_MANAGER), usdcBalanceBeforePool + amountIn);
@@ -192,8 +189,7 @@ contract UniswapV4AngstromExecutorTest is Constants, TestUtils {
             usdcBalanceBeforeExecutor - amountIn
         );
         // Verify USDT was received by ALICE
-        assertTrue(IERC20(USDT_ADDR).balanceOf(ALICE) == amountOut);
+        uint256 amountOut = IERC20(USDT_ADDR).balanceOf(ALICE);
         assertTrue(amountOut > 0);
-        assertEq(tokenOut, USDT_ADDR);
     }
 }

@@ -57,8 +57,10 @@ contract EkuboExecutorTest is Constants, TestUtils {
             ORACLE_CONFIG // poolConfig
         );
 
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, data, address(executor));
+        executor.swap(amountIn, data, address(executor));
+
+        uint256 amountOut =
+            USDC.balanceOf(address(executor)) - usdcBalanceBeforeExecutor;
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
         assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
@@ -66,11 +68,6 @@ contract EkuboExecutorTest is Constants, TestUtils {
         assertEq(
             USDC.balanceOf(CORE_ADDRESS), usdcBalanceBeforeCore - amountOut
         );
-        assertEq(
-            USDC.balanceOf(address(executor)),
-            usdcBalanceBeforeExecutor + amountOut
-        );
-        assertEq(tokenOut, USDC_ADDR);
     }
 
     // Expects input that encodes the same test case as swap_encoder::tests::ekubo::test_encode_swap_multi
@@ -85,8 +82,10 @@ contract EkuboExecutorTest is Constants, TestUtils {
         uint256 usdtBalanceBeforeCore = USDT.balanceOf(CORE_ADDRESS);
         uint256 usdtBalanceBeforeExecutor = USDT.balanceOf(address(executor));
 
-        (uint256 amountOut, address tokenOut) =
-            executor.swap(amountIn, data, address(executor));
+        executor.swap(amountIn, data, address(executor));
+
+        uint256 amountOut =
+            USDT.balanceOf(address(executor)) - usdtBalanceBeforeExecutor;
 
         assertEq(CORE_ADDRESS.balance, ethBalanceBeforeCore + amountIn);
         assertEq(address(executor).balance, ethBalanceBeforeExecutor - amountIn);
@@ -94,11 +93,6 @@ contract EkuboExecutorTest is Constants, TestUtils {
         assertEq(
             USDT.balanceOf(CORE_ADDRESS), usdtBalanceBeforeCore - amountOut
         );
-        assertEq(
-            USDT.balanceOf(address(executor)),
-            usdtBalanceBeforeExecutor + amountOut
-        );
-        assertEq(tokenOut, USDT_ADDR);
     }
 
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi

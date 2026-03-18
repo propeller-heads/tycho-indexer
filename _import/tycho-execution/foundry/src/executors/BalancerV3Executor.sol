@@ -38,15 +38,12 @@ contract BalancerV3Executor is IExecutor, ICallback {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         if (data.length != 60) {
             revert BalancerV3Executor__InvalidDataLength();
         }
-        bytes memory result =
-            _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
-        (amountOut, tokenOut) =
-            abi.decode(abi.decode(result, (bytes)), (uint256, address));
+        // slither-disable-next-line unused-return
+        _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
     }
 
     function verifyCallback(
@@ -123,18 +120,28 @@ contract BalancerV3Executor is IExecutor, ICallback {
         receiver = address(bytes20(data[92:112]));
     }
 
-    function getTransferData(
-        bytes calldata /* data */
-    )
+    function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
-        return (TransferManager.TransferType.None, address(0), address(0));
+        if (data.length >= 40) {
+            tokenIn = address(bytes20(data[0:20]));
+            tokenOut = address(bytes20(data[20:40]));
+        }
+        return (
+            TransferManager.TransferType.None,
+            address(0),
+            tokenIn,
+            tokenOut,
+            false
+        );
     }
 
     function getCallbackTransferData(bytes calldata data)

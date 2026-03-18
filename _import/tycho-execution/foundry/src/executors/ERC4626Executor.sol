@@ -31,28 +31,16 @@ contract ERC4626Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address target;
         IERC20 tokenIn;
 
         (tokenIn, target) = _decodeData(data);
 
-        address asset = IERC4626(target).asset();
         bool isRedeem = (address(tokenIn) == target);
-
-        if (isRedeem) {
-            tokenOut = asset;
-        } else if (address(tokenIn) == asset) {
-            tokenOut = target;
-        } else {
+        if (!isRedeem && address(tokenIn) != IERC4626(target).asset()) {
             revert ERC4626Executor__InvalidTarget();
         }
-
-        // Since there is no way to validate target address,
-        // we rely on balance checks to determine the amountOut instead
-        // of trusting the amount reported by the target.
-        uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
 
         if (isRedeem) {
             // slither-disable-next-line unused-return
@@ -61,8 +49,6 @@ contract ERC4626Executor is IExecutor {
             // slither-disable-next-line unused-return
             IERC4626(target).deposit(amountIn, receiver);
         }
-
-        amountOut = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
     }
 
     function _decodeData(bytes calldata data)
@@ -83,14 +69,25 @@ contract ERC4626Executor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 40) {
             revert ERC4626Executor__InvalidDataLength();
         }
         tokenIn = address(bytes20(data[0:20]));
-        receiver = address(bytes20(data[20:40]));
+        address target = address(bytes20(data[20:40]));
+        receiver = target;
         transferType = TransferManager.TransferType.ProtocolWillDebit;
+        outputToRouter = false;
+
+        bool isRedeem = (tokenIn == target);
+        if (isRedeem) {
+            tokenOut = IERC4626(target).asset();
+        } else {
+            tokenOut = target;
+        }
     }
 }

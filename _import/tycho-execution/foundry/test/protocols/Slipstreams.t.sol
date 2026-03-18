@@ -8,31 +8,14 @@ import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
 
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
-    constructor(address _factory1, address _factory2)
-        SlipstreamsExecutor(_factory1, _factory2)
-    {}
+    constructor() SlipstreamsExecutor() {}
 
     function decodeData(bytes calldata data)
         external
         pure
-        returns (
-            address inToken,
-            address outToken,
-            int24 tick_spacing,
-            address target,
-            bool zeroForOne
-        )
+        returns (address target, bool zeroForOne)
     {
         return _decodeData(data);
-    }
-
-    function verifyPairAddress(
-        address tokenA,
-        address tokenB,
-        int24 tick_spacing,
-        address target
-    ) external view {
-        _verifyPairAddress(tokenA, tokenB, tick_spacing, target);
     }
 
     function uniswapV3SwapCallback(
@@ -67,9 +50,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 forkBlock = 38086214;
         vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
-        slipstreamsExposed = new SlipstreamsExecutorExposed(
-            SLIPSTREAMS_FACTORY_BASE, SLIPSTREAMS_NEW_FACTORY_BASE
-        );
+        slipstreamsExposed = new SlipstreamsExecutorExposed();
     }
 
     function testDecodeParams() public view {
@@ -78,28 +59,28 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH, BASE_USDC, expectedTickSpacing, address(3), false
         );
 
-        (
-            address tokenIn,
-            address tokenOut,
-            int24 tick_spacing,
-            address target,
-            bool zeroForOne
-        ) = slipstreamsExposed.decodeData(data);
+        (address target, bool zeroForOne) = slipstreamsExposed.decodeData(data);
 
-        assertEq(tokenIn, BASE_WETH);
-        assertEq(tokenOut, BASE_USDC);
-        assertEq(tick_spacing, expectedTickSpacing);
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
 
     function testGetTransferData() public {
         bytes memory params = "";
-        (, address receiver, address tokenIn) =
-            slipstreamsExposed.getTransferData(params);
 
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = slipstreamsExposed.getTransferData(params);
+
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
+        assertEq(tokenOut, address(0));
+        assertEq(outputToRouter, false);
     }
 
     function testGetCallbackTransferData() public {
@@ -141,12 +122,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut) =
-            slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 balanceBefore = IERC20(BASE_USDC).balanceOf(address(this));
+        slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 amountOut =
+            IERC20(BASE_USDC).balanceOf(address(this)) - balanceBefore;
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
-        assertGe(IERC20(BASE_USDC).balanceOf(address(this)), amountOut);
-        assertEq(tokenOut, BASE_USDC);
+        assertGt(amountOut, 0);
     }
 
     function testSwapNewFactory() public {
@@ -163,12 +145,13 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             zeroForOne
         );
 
-        (uint256 amountOut, address tokenOut) =
-            slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 balanceBefore = IERC20(BASE_BMI).balanceOf(address(this));
+        slipstreamsExposed.swap(amountIn, data, address(this));
+        uint256 amountOut =
+            IERC20(BASE_BMI).balanceOf(address(this)) - balanceBefore;
 
         assertEq(IERC20(BASE_WETH).balanceOf(address(slipstreamsExposed)), 0);
-        assertGe(IERC20(BASE_BMI).balanceOf(address(this)), amountOut);
-        assertEq(tokenOut, BASE_BMI);
+        assertGt(amountOut, 0);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -177,12 +160,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
 
         vm.expectRevert(SlipstreamsExecutor__InvalidDataLength.selector);
         slipstreamsExposed.decodeData(invalidParams);
-    }
-
-    function testVerifyPairAddress() public view {
-        slipstreamsExposed.verifyPairAddress(
-            BASE_WETH, BASE_USDC, 100, SLIPSTREAMS_WETH_USDC_POOL
-        );
     }
 
     function testSlipstreamsCallback() public {
@@ -215,20 +192,6 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
         uint256 finalPoolReserve =
             IERC20(BASE_WETH).balanceOf(SLIPSTREAMS_WETH_USDC_POOL);
         assertEq(finalPoolReserve - initialPoolReserve, amountOwed);
-    }
-
-    function testSwapFailureInvalidTarget() public {
-        uint256 amountIn = 10 ** 18;
-        deal(BASE_WETH, address(slipstreamsExposed), amountIn);
-        bool zeroForOne = false;
-        address fakePool = DUMMY; // Contract with minimal code
-
-        bytes memory protocolData = abi.encodePacked(
-            BASE_WETH, BASE_USDC, uint24(100), fakePool, zeroForOne
-        );
-
-        vm.expectRevert(SlipstreamsExecutor__InvalidTarget.selector);
-        slipstreamsExposed.swap(amountIn, protocolData, BOB);
     }
 }
 

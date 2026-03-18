@@ -35,33 +35,16 @@ contract RocketpoolExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         bool isDeposit;
         (isDeposit) = _decodeData(data);
 
         if (isDeposit) {
-            tokenOut = address(RETH);
             // ETH -> rETH: Deposit ETH to Rocketpool to receive rETH
-            // We don't need to _transfer ETH into this contract since it must be sent along with the call
-            uint256 rethBefore = RETH.balanceOf(address(this));
             rocketDepositPool.deposit{value: amountIn}();
-            amountOut = RETH.balanceOf(address(this)) - rethBefore;
-
-            if (receiver != address(this)) {
-                RETH.safeTransfer(receiver, amountOut);
-            }
-            tokenOut = address(RETH);
         } else {
-            tokenOut = address(0);
             // rETH -> ETH: Burn rETH to receive ETH
-            uint256 ethBefore = address(this).balance;
             RETH.burn(amountIn);
-            amountOut = address(this).balance - ethBefore;
-
-            if (receiver != address(this)) {
-                Address.sendValue(payable(receiver), amountOut);
-            }
         }
     }
 
@@ -86,7 +69,9 @@ contract RocketpoolExecutor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 1) {
@@ -95,13 +80,15 @@ contract RocketpoolExecutor is IExecutor {
 
         bool isDeposit = uint8(data[0]) == 1;
         if (isDeposit) {
-            // ETH transfers are handled in the Executor
             tokenIn = address(0);
+            tokenOut = address(RETH);
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             tokenIn = address(RETH);
+            tokenOut = address(0);
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
+        outputToRouter = true;
         // Since burning withdraws the funds from the msg.sender, the user's funds need to be sent to the
         // TychoRouter initially. This does not require an actual approval since our
         // router is interacting directly with the token contract.

@@ -35,9 +35,9 @@ contract BalancerV2Executor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         address tokenIn;
+        address tokenOut;
         bytes32 poolId;
 
         (tokenIn, tokenOut, poolId) = _decodeData(data);
@@ -60,8 +60,8 @@ contract BalancerV2Executor is IExecutor {
 
         uint256 limit = 0;
 
-        amountOut =
-            IVault(_VAULT).swap(singleSwap, funds, limit, block.timestamp);
+        // slither-disable-next-line unused-return
+        IVault(_VAULT).swap(singleSwap, funds, limit, block.timestamp);
     }
 
     function _decodeData(bytes calldata data)
@@ -84,7 +84,9 @@ contract BalancerV2Executor is IExecutor {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 72) {
@@ -92,7 +94,9 @@ contract BalancerV2Executor is IExecutor {
         }
 
         tokenIn = address(bytes20(data[0:20]));
+        tokenOut = address(bytes20(data[20:40]));
         receiver = _VAULT;
         transferType = TransferManager.TransferType.ProtocolWillDebit;
+        outputToRouter = false;
     }
 }

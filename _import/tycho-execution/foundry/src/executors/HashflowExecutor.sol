@@ -60,7 +60,6 @@ contract HashflowExecutor is IExecutor {
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
-        returns (uint256 amountOut, address tokenOut)
     {
         (IHashflowRouter.RFQTQuote memory quote) = _decodeData(data);
 
@@ -76,20 +75,7 @@ contract HashflowExecutor is IExecutor {
             ethValue = quote.effectiveBaseTokenAmount;
         }
 
-        // The quote.trader is hardcoded to always be address(this)
-        uint256 balanceBefore = _balanceOf(quote.trader, quote.quoteToken);
         IHashflowRouter(hashflowRouter).tradeRFQT{value: ethValue}(quote);
-        uint256 balanceAfter = _balanceOf(quote.trader, quote.quoteToken);
-        amountOut = balanceAfter - balanceBefore;
-        tokenOut = quote.quoteToken;
-
-        if (receiver != address(this)) {
-            if (tokenOut == address(0)) {
-                Address.sendValue(payable(receiver), amountOut);
-            } else {
-                IERC20(tokenOut).safeTransfer(receiver, amountOut);
-            }
-        }
     }
 
     function _decodeData(bytes calldata data)
@@ -118,23 +104,15 @@ contract HashflowExecutor is IExecutor {
         quote.signature = data[260:325];
     }
 
-    function _balanceOf(address trader, address token)
-        internal
-        view
-        returns (uint256 balance)
-    {
-        balance = token == NATIVE_TOKEN
-            ? trader.balance
-            : IERC20(token).balanceOf(trader);
-    }
-
     function getTransferData(bytes calldata data)
         external
         payable
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
         )
     {
         if (data.length != 325) {
@@ -143,7 +121,8 @@ contract HashflowExecutor is IExecutor {
 
         transferType = TransferManager.TransferType.ProtocolWillDebit;
         tokenIn = address(bytes20(data[60:80]));
-        // The receiver of the funds will be the Hashflow Router.
+        tokenOut = address(bytes20(data[80:100]));
         receiver = hashflowRouter;
+        outputToRouter = true;
     }
 }

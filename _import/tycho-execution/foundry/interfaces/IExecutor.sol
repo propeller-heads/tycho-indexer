@@ -5,13 +5,11 @@ import "../src/TransferManager.sol";
 
 pragma abicoder v2;
 
-
 interface IExecutor {
     /**
      * @notice Performs a swap on a liquidity pool.
-     * @dev This method takes the amount of the input token and returns the amount of
-     * the output token which has been swapped, along with the output token address
-     * and the receiver address where tokens were sent.
+     * @dev Executes the swap using the provided data. The Dispatcher measures output
+     * via balance checks, so executors do not need to report the amount received.
      *
      * Note Part of the informal interface is that the executor supports sending the received
      *  tokens to a receiver address. If the underlying smart contract does not provide this
@@ -20,14 +18,10 @@ interface IExecutor {
      * @param amountIn The amount of the input token to swap.
      * @param data Data that holds information necessary to perform the swap.
      * @param receiver The address where the output tokens will be sent.
-     * @return amountOut The amount of the output token swapped, depending on
-     * the amountIn.
-     * @return tokenOut The address of the output token.
      */
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
-        payable
-        returns (uint256 amountOut, address tokenOut);
+        payable;
 
     /**
      * @notice Gets transfer data for pre-swap token transfers.
@@ -39,11 +33,20 @@ interface IExecutor {
      * @return transferType The transfer type for this executor (None, ProtocolWillDebit, Transfer or TransferNativeInExecutor).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol).
      * @return tokenIn The address of the input token to transfer.
+     * @return tokenOut The address of the output token.
+     * @return outputToRouter Whether the protocol sends output to msg.sender
+     *  rather than accepting a receiver parameter.
      */
     function getTransferData(bytes calldata data)
         external
         payable
-        returns (TransferManager.TransferType transferType, address receiver, address tokenIn);
+        returns (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        );
 
     /**
      * @dev Returns where funds from the previous swap should be sent in a sequential swap case.
@@ -56,9 +59,7 @@ interface IExecutor {
      * @return receiver Address where to send the funds to. Returns msg.sender if funds should stay in router,
      * or the target address (e.g., pool) if direct transfer is supported.
      */
-    function fundsExpectedAddress(bytes calldata data)
-    external returns (address receiver);
-
+    function fundsExpectedAddress(bytes calldata data) external returns (address receiver);
 }
 
 interface IExecutorErrors {

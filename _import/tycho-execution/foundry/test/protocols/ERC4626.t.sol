@@ -69,11 +69,22 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
     function testGetTransferData() public {
         bytes memory params = abi.encodePacked(WETH_ADDR, address(spETH));
 
-        (, address receiver, address tokenIn) =
-            ERC4626Exposed.getTransferData(params);
+        (
+            TransferManager.TransferType transferType,
+            address receiver,
+            address tokenIn,
+            address tokenOut,
+            bool outputToRouter
+        ) = ERC4626Exposed.getTransferData(params);
 
-        assertEq(tokenIn, WETH_ADDR);
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.ProtocolWillDebit)
+        );
         assertEq(receiver, address(spETH));
+        assertEq(tokenIn, WETH_ADDR);
+        assertEq(tokenOut, address(spETH));
+        assertEq(outputToRouter, false);
     }
 
     function testDeposit() public {
@@ -86,13 +97,10 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         vm.prank(address(ERC4626Exposed));
         IERC20(WETH_ADDR).approve(address(spETH), amountIn);
-        (uint256 amountOut, address tokenOut) =
-            ERC4626Exposed.swap(amountIn, protocolData, BOB);
+        ERC4626Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = spETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, address(spETH));
     }
 
     function testRedeem() public {
@@ -104,13 +112,10 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
 
         uint256 balanceBefore = WETH.balanceOf(BOB);
 
-        (uint256 amountOut, address tokenOut) =
-            ERC4626Exposed.swap(amountIn, protocolData, BOB);
+        ERC4626Exposed.swap(amountIn, protocolData, BOB);
 
         uint256 balanceAfter = WETH.balanceOf(BOB);
         assertGt(balanceAfter, balanceBefore);
-        assertEq(balanceAfter - balanceBefore, amountOut);
-        assertEq(tokenOut, WETH_ADDR);
     }
 
     function testFakeVault() public {
@@ -124,12 +129,12 @@ contract ERC4626ExecutorTest is Constants, TestUtils {
         bytes memory protocolData =
             abi.encodePacked(WETH_ADDR, address(fakeVault));
 
-        (uint256 amountOut, address tokenOut) =
-            ERC4626Exposed.swap(amountIn, protocolData, BOB);
+        uint256 balanceBefore = IERC20(address(fakeVault)).balanceOf(BOB);
+        ERC4626Exposed.swap(amountIn, protocolData, BOB);
+        uint256 balanceAfter = IERC20(address(fakeVault)).balanceOf(BOB);
 
         // Balance check produces 0 — fake vault sent nothing
-        assertEq(amountOut, 0);
-        assertEq(tokenOut, address(fakeVault));
+        assertEq(balanceAfter - balanceBefore, 0);
     }
 }
 
