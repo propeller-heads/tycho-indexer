@@ -22,9 +22,8 @@ you've exhausted the path of documentation.
 | Document        | Trigger                                                                 | Path                                   |
 |-----------------|-------------------------------------------------------------------------|----------------------------------------|
 | Rust            | Writing, reviewing, or debugging Rust code                              | `.claude/knowledge/rust.md`            |
-| Solidity        | Writing, reviewing, or debugging Solidity code                          | `.claude/knowledge/solidity.md`        |
 | Version control | git, branch, commit, PR, push, rebase, merge, cherry-pick, tag, release | `.claude/knowledge/version-control.md` |
-| Python          | Writing, reviewing, or debugging Python code; tycho-client-py           | `.claude/knowledge/python.md`          |
+| Python          | Python code, tycho-client-py, changes to dto.rs or rpc.rs              | `.claude/knowledge/python.md`          |
 
 When spawning subagents, pass the relevant knowledge document contents to them.
 
