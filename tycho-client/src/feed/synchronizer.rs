@@ -625,6 +625,7 @@ where
         info!(
             n_components = self.component_tracker.components.len(),
             n_contracts = self.component_tracker.contracts.len(),
+            extractor = %self.extractor_id,
             "Finished retrieving components",
         );
 
