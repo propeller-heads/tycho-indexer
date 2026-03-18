@@ -1,3 +1,11 @@
+## [0.150.0](https://github.com/propeller-heads/tycho-indexer/compare/0.149.0...0.150.0) (2026-03-18)
+
+
+### Features
+
+* add max_retries option to CLI arguments for startup attempts ([2f8202c](https://github.com/propeller-heads/tycho-indexer/commit/2f8202cd465f92048036e5c86bdc228296737e94))
+* add max_retries option to CLI arguments for startup attempts ([#858](https://github.com/propeller-heads/tycho-indexer/issues/858)) ([3f1e33b](https://github.com/propeller-heads/tycho-indexer/commit/3f1e33b7e3e6999f2d9399481da33b43e7b8ee4d))
+
 ## [0.149.0](https://github.com/propeller-heads/tycho-indexer/compare/0.148.0...0.149.0) (2026-03-16)
 
 
