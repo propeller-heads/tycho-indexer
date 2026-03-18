@@ -1,3 +1,10 @@
+## [0.40.0](https://github.com/propeller-heads/tycho-contracts/compare/0.39.4...0.40.0) (2026-03-18)
+
+
+### Features
+
+* Claude skill to compare gas between branches ([ccb7b34](https://github.com/propeller-heads/tycho-contracts/commit/ccb7b34ffbcf961eb7dd094ec40349c4f06da43f))
+
 ## [0.39.4](https://github.com/propeller-heads/tycho-contracts/compare/0.39.3...0.39.4) (2026-03-16)
 
 
