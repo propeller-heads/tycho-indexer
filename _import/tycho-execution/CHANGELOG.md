@@ -1,3 +1,17 @@
+## [0.42.0](https://github.com/propeller-heads/tycho-contracts/compare/0.41.0...0.42.0) (2026-03-18)
+
+
+### Features
+
+* Everytime there is a transfer double check with balances the actual amount received ([6fef32b](https://github.com/propeller-heads/tycho-contracts/commit/6fef32bcca8f76da61f988e0210a0f00c398ad77))
+
+
+### Bug Fixes
+
+* post-rebase error - remove redundant balance check ([bca642e](https://github.com/propeller-heads/tycho-contracts/commit/bca642e62afd6403a5070eb6a9b842ffb7ff8023))
+* Remove FoT logic for univ2 and univ4 ([a4c1177](https://github.com/propeller-heads/tycho-contracts/commit/a4c117758909c9b752d2246e05fdd41c69147bbb))
+* Smother slither ([b123329](https://github.com/propeller-heads/tycho-contracts/commit/b1233297d03dcd923501d8451da1bf1d31b072d5))
+
 ## [0.41.0](https://github.com/propeller-heads/tycho-contracts/compare/0.40.0...0.41.0) (2026-03-18)
 
 
