@@ -247,7 +247,6 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             address(0), // ETH_ADDR
             false, // zeroForOne
-            false, // isFoT
             pool
         );
 

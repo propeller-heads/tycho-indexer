@@ -842,8 +842,6 @@ mod tests {
                     "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
                     // tokenOut (DAI)
                     "6b175474e89094c44da98b954eedeac495271d0f",
-                    // isFoT
-                    "00",
                 ))
             );
         }
@@ -917,8 +915,6 @@ mod tests {
                     // group out token
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
-                    "00",
-                    // isFoT (false)
                     "00",
                     // first pool intermediary token (ETH)
                     "0000000000000000000000000000000000000000",

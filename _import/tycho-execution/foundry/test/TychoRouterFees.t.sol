@@ -383,7 +383,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(address(tychoRouterAddr), amountIn);
 
         bytes memory protocolData =
-            encodeUniswapV2Swap(STA_WETH_UNIV2_POOL, WETH_ADDR, STA_ADDR, true);
+            encodeUniswapV2Swap(STA_WETH_UNIV2_POOL, WETH_ADDR, STA_ADDR);
 
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);

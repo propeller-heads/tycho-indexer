@@ -9,16 +9,6 @@ library UniswapV4Utils {
         bool zeroForOne,
         UniswapV4Executor.UniswapV4Pool[] memory pools
     ) public pure returns (bytes memory) {
-        return encodeExactInput(tokenIn, tokenOut, zeroForOne, false, pools);
-    }
-
-    function encodeExactInput(
-        address tokenIn,
-        address tokenOut,
-        bool zeroForOne,
-        bool isFoT,
-        UniswapV4Executor.UniswapV4Pool[] memory pools
-    ) public pure returns (bytes memory) {
         require(pools.length > 0, "Must have at least one pool");
 
         bytes memory firstPool = abi.encodePacked(
@@ -46,7 +36,6 @@ library UniswapV4Utils {
             tokenIn,
             tokenOut,
             zeroForOne,
-            isFoT,
             firstPool,
             pleEncode(encodedExtraPools)
         );

@@ -241,11 +241,6 @@ impl Swap {
     pub fn estimated_amount_in(&self) -> &Option<BigUint> {
         &self.estimated_amount_in
     }
-
-    /// Returns true if either token has a non-zero transfer tax.
-    pub fn has_fee_on_transfer(&self) -> bool {
-        self.token_in.tax > 0 || self.token_out.tax > 0
-    }
 }
 
 impl PartialEq for Swap {

@@ -226,10 +226,10 @@ fn test_split_input_cyclic_swap() {
     // time) it's hard to assert back
 
     let expected_swaps = [
-        "000000000000000000000000000000000000000000000000000000000000010e", /* length of ple
+        "000000000000000000000000000000000000000000000000000000000000010d", /* length of ple
                                                                              * encoded swaps
                                                                              * without padding
-                                                                             * (270 bytes) */
+                                                                             * (269 bytes) */
         "0059",                                     // ple encoded swaps (89 bytes)
         "00",                                       // token in index
         "01",                                       // token out index
@@ -250,7 +250,7 @@ fn test_split_input_cyclic_swap() {
         "000bb8",                                   // pool fee
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "01",                                       // zero2one
-        "0056",                                     // ple encoded swaps (86 bytes)
+        "0055",                                     // ple encoded swaps (85 bytes)
         "01",                                       // token in index
         "00",                                       // token out index
         "000000",                                   // split
@@ -258,8 +258,7 @@ fn test_split_input_cyclic_swap() {
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token in (WETH)
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token out (USDC)
-        "00",                                       // isFoT (false)
-        "000000000000000000000000000000000000",     // padding (18 bytes)
+        "00000000000000000000000000000000000000",   // padding (19 bytes)
     ]
     .join("");
     assert_eq!(hex_calldata[..456], expected_input);
@@ -382,11 +381,11 @@ fn test_split_output_cyclic_swap() {
     // time) it's hard to assert back
 
     let expected_swaps = [
-        "000000000000000000000000000000000000000000000000000000000000010e", /* length of ple
+        "000000000000000000000000000000000000000000000000000000000000010d", /* length of ple
                                                                              * encoded swaps
                                                                              * without padding
-                                                                             * (270 bytes) */
-        "0056",                                     // ple encoded swaps (86 bytes)
+                                                                             * (269 bytes) */
+        "0055",                                     // ple encoded swaps (85 bytes)
         "00",                                       // token in index
         "01",                                       // token out index
         "000000",                                   // split
@@ -394,7 +393,6 @@ fn test_split_output_cyclic_swap() {
         "b4e16d0168e52d35cacd2c6185b44281ec28c9dc", // component id (pool address)
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // token in (USDC)
         "c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", // token out (WETH)
-        "00",                                       // isFoT (false)
         "0059",                                     // ple encoded swaps (89 bytes)
         "01",                                       // token in index
         "00",                                       // token out index
@@ -415,7 +413,7 @@ fn test_split_output_cyclic_swap() {
         "000bb8",                                   // pool fee
         "8ad599c3a0ff1de082011efddc58f1908eb6e6d8", // component id
         "00",                                       // zero2one
-        "000000000000000000000000000000000000",     // padding (18 bytes)
+        "00000000000000000000000000000000000000",   // padding (19 bytes)
     ]
     .join("");
 

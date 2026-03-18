@@ -278,16 +278,7 @@ contract TychoRouterTestSetup is
         address tokenIn,
         address tokenOut
     ) internal pure returns (bytes memory) {
-        return abi.encodePacked(target, tokenIn, tokenOut, false);
-    }
-
-    function encodeUniswapV2Swap(
-        address target,
-        address tokenIn,
-        address tokenOut,
-        bool isFoT
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(target, tokenIn, tokenOut, isFoT);
+        return abi.encodePacked(target, tokenIn, tokenOut);
     }
 
     function encodeUniswapV3Swap(
