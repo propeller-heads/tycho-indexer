@@ -32,6 +32,7 @@ pub fn maybe_create_component(
                         event.pool.clone(),
                         params.mint_impl.clone(),
                         params.swap_impl.clone(),
+                        params.info.clone(),
                     ])
                     .as_swap_type("liquidityparty_pool", ImplementationType::Vm),
             );
