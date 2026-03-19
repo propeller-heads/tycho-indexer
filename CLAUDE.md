@@ -1,7 +1,7 @@
 # Workflow Directives for CLAUDE
 
 When responding to user input, always log this information to the user which knowledge docs you have read. Only say yes
-if you actually read them. Responde like this:
+if you actually read them. Respond like this:
 
 > Knowledge docs: Rust: [yes/no] , Python [yes/no], Version-control: [yes/no]
 > Files loaded in context: [list of loaded documents]
