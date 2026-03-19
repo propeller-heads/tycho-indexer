@@ -7,7 +7,9 @@ serves it over HTTP/WebSocket.
 
 ```
 main.rs                     CLI entry point; account initialisation; extractor startup
-cli/                        Command definitions: Index, Run, AnalyzeTokens, Rpc
+cli.rs                      Command definitions: Index, Run, AnalyzeTokens, Rpc
+ot.rs                       OpenTelemetry tracing configuration
+testing.rs                  Test utilities
 
 extractor/
   protocol_extractor.rs     ProtocolExtractor — core message processor (see below)
@@ -16,10 +18,25 @@ extractor/
   models.rs                 BlockChanges, BlockAggregatedChanges, TxWithChanges
   protocol_cache.rs         ProtocolMemoryCache — in-process token/component metadata cache
   chain_state.rs            ChainState — tracks current tip and finality horizon
+  u256_num.rs               U256 numeric utilities
   token_analysis_cron.rs    Background job: token quality / tax analysis
   protobuf_deserialisation.rs  Substreams protobuf → BlockChanges conversion
   dynamic_contract_indexer/ DCI optional extension (see below)
+    dci.rs                  Core DCI: DynamicContractIndexer implementation
+    cache.rs                DCI component/contract cache
+    hooks/                  UniswapV4-style hooks DCI variant
+      hook_dci.rs           HooksDCI — hooks-specific ExtractorExtension
+      hooks_dci_builder.rs  Builder for HooksDCI
+      hook_orchestrator.rs  Orchestrates hook detection + metadata
+      hook_permissions_detector.rs  Detects hook permission flags
+      entrypoint_generator.rs      Generates entry points for hook contracts
+      component_metadata.rs        Hook component metadata types
+      metadata_orchestrator.rs     Coordinates metadata providers
+      rpc_metadata_provider.rs     Fetches hook metadata via RPC
+      integrations/         Protocol-specific hook metadata (e.g. euler/)
   post_processors/          Optional block-level post-processing hooks
+    attributes.rs           Attribute post-processor
+    balances.rs             Balance post-processor
 
 services/
   mod.rs                    ServicesBuilder — wires extractors, gateway, and server together
@@ -27,9 +44,15 @@ services/
   ws.rs                     WebSocket broadcaster — emits BlockAggregatedChanges per block
   deltas_buffer.rs          PendingDeltasBuffer — pending-block state for RPC consistency
   cache.rs                  HTTP response cache
+  api_docs.rs               OpenAPI schema generation (utoipa)
   access_control.rs         API-key authentication middleware
+  middleware/
+    plan_restrictions.rs    Per-user API limits via X-User-Plan header (plans.yaml)
+    compression.rs          Zstd response compression
+    metrics.rs              RPC request metrics
+    pagination.rs           Request pagination validation
 
-substreams/                 gRPC client for Substreams streaming API
+substreams/                 gRPC client for Substreams streaming API (stream.rs)
 pb/                         Auto-generated protobuf bindings (Substreams + Firehose)
 ```
 
@@ -63,8 +86,9 @@ arrives (clearing the buffer).
 `ExtractorExtension::process_block_update()` is called on the accumulated `BlockChanges` before
 aggregation. The DCI uses entry-point tracing results (`trace_results`) to extract additional
 contract state and injects it back into `BlockChanges`. Two implementations exist:
-`DynamicContractIndexer` (generic EVM tracing) and a `UniswapV4Hooks`-specific variant. When no
-DCI is configured the call is a no-op.
+`DynamicContractIndexer` (`dci.rs` — generic EVM tracing) and `HooksDCI` (`hooks/hook_dci.rs` —
+UniswapV4-style hooks with permission detection and protocol-specific metadata via `integrations/`).
+When no DCI is configured the call is a no-op.
 
 ### Revert handling
 
@@ -112,3 +136,25 @@ ExtractorRunner (runner.rs)
        └─ PendingDeltasBuffer (services/deltas_buffer.rs)
             └─ RpcHandlers (services/rpc.rs) → HTTP responses
 ```
+
+## Client Sync
+
+Changes to RPC endpoints in `services/rpc.rs` require updates to both `tycho-client/` (Rust) and
+`tycho-client-py/` (Python). See `.claude/knowledge/python.md` for the Python sync checklist.
+
+## RPC Endpoints
+
+All POST under `/{version_prefix}/` (default `/v1/`), except where noted.
+
+| Path | Description |
+|---|---|
+| `/contract_state` | Contract storage, code, balance |
+| `/protocol_state` | Protocol component state + balances |
+| `/tokens` | Token metadata (quality, decimals, symbol) |
+| `/protocol_components` | Components by system / TVL / IDs |
+| `/traced_entry_points` | Traced entry point results |
+| `/add_entry_points` | Register entry points for tracing |
+| `/protocol_systems` | List available protocol systems |
+| `/component_tvl` | Component TVL estimates |
+| `/health` | GET — health check |
+| `/ws/` | GET — WebSocket upgrade for delta subscriptions |

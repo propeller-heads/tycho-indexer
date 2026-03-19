@@ -1,122 +1,36 @@
-# CLAUDE.md
+# Workflow Directives for CLAUDE
 
-## Development Environment
-- Requires PostgreSQL (via `docker-compose up -d db`)
-- Uses Diesel for ORM and migrations
-- Uses `nextest` for parallel test execution; DB tests tagged `serial_db` run sequentially
-- Follows Conventional Commits for automated versioning (see `release.config.js`)
+When responding to user input, always log this information to the user which knowledge docs you have read. Only say yes
+if you actually read them. Respond like this:
 
-## Testing Conventions
-- For `rstest` parameterized tests, **name each case** with `#[case::descriptive_name(...)]` — test names should be self-documenting so failures are immediately identifiable
-- Keep test function names concise; avoid suffixes that restate what parameters already express
-- Don't nest `mod` wrappers inside `#[cfg(test)] mod test` unless there's a concrete isolation benefit
+> Knowledge docs: Rust: [yes/no] , Python [yes/no], Version-control: [yes/no]
+> Files loaded in context: [list of loaded documents]
 
-## Commands
+By default, don't use the Explore agent as a first step in a conversation. The first step should always be to identify
+and read the relevant documentation files.
 
-### Testing
-```bash
-# Run standard tests (excludes serial database tests)
-cargo nextest run --workspace --locked --all-targets --all-features --bin tycho-indexer -E 'not test(serial_db)'
+Everytime a developer asks something new, you should check the list of available knowledge and inform
+the user about it. If the user asks a question that requires exploring the project, always
+check [.claude/CODEBASE.md](.claude/CODEBASE.md) and all the related linked documents first. Only go through files when
+you've exhausted the path of documentation.
 
-# Run serial database tests (must be run separately)
-cargo nextest run --workspace --locked --all-targets --all-features --bin tycho-indexer -E 'test(serial_db)'
+## Knowledge Documents
 
-# Run a single test by name
-cargo nextest run --workspace --locked --all-targets --all-features -E 'test(my_test_name)'
+**MANDATORY**: Before responding to any input, scan this table for trigger matches. If ANY trigger matches, you MUST
+`Read` the document BEFORE doing anything else. Tell the user which documents you loaded.
 
-# Run all tests in a specific crate
-cargo nextest run --package tycho-storage --locked --all-targets --all-features
-```
+| Document        | Trigger                                                                 | Path                                   |
+|-----------------|-------------------------------------------------------------------------|----------------------------------------|
+| Rust            | Writing, reviewing, or debugging Rust code                              | `.claude/knowledge/rust.md`            |
+| Version control | git, branch, commit, PR, push, rebase, merge, cherry-pick, tag, release | `.claude/knowledge/version-control.md` |
+| Python          | Python code, tycho-client-py, changes to dto.rs or rpc.rs              | `.claude/knowledge/python.md`          |
 
-### Code Quality
-```bash
-# Format code (requires nightly toolchain)
-cargo +nightly fmt
+When spawning subagents, pass the relevant knowledge document contents to them.
 
-# Check formatting
-cargo +nightly fmt -- --check
+## Skills
 
-# Lint with clippy
-cargo +nightly clippy --locked --all --all-features --all-targets -- -D warnings
-
-# Run all checks (format + clippy + tests)
-./check.sh
-```
-
-## Architecture Overview
-
-Tycho is a multi-crate Rust workspace for indexing DEX/DeFi protocol data from blockchains, streaming real-time state to solvers via WebSocket deltas and HTTP snapshots.
-
-### Core Crates
-- **tycho-indexer**: Main indexing engine, extractor management, RPC + WebSocket services
-- **tycho-storage**: PostgreSQL backend with Diesel ORM, versioned data, migrations
-- **tycho-common**: Shared domain types, storage/blockchain traits, DTOs
-- **tycho-client**: Consumer library — HTTP snapshot client + WebSocket delta client
-- **tycho-ethereum**: Ethereum specific implementations: RPC, token analysis, EVM account/trace extraction
-- **tycho-client-py**: Python bindings (not maintained)
-
-### End-to-End Data Flow
-
-```
-── INGESTION ──────────────────────────────────────────────────────────────────
-
-  Substreams gRPC                                    Ethereum RPC
-       │                                                   │
-       ▼                                                   │
-  ProtocolExtractor                                        │
-  ├─ Deserialize BlockScopedData (protobuf)                │
-  ├─ PartialBlockBuffer: accumulate sub-block msgs         │
-  │  until full-block signal arrives                       │
-  ├─ TokenPreProcessor: for each unknown token address ────┘
-  │  fetch metadata (symbol, decimals) via eth_call
-  └─ Produce BlockChanges (tx-level state/balance/token deltas)
-       │
-       ▼
-  ReorgBuffer (extractor-owned, one per ProtocolExtractor)
-  ├─ Insert BlockChanges for every new block
-  ├─ On BlockUndoSignal: purge blocks after reverted hash,
-  │  emit revert messages (revert=true) — no DB rollback needed
-  └─ Drain to DB when count_blocks_before(finalized_block_height)
-       >= commit_batch_size  ← only finalized blocks ever reach DB
-       │
-       ▼ (drained blocks only)
-  BlockChanges → BlockAggregatedChanges
-  │  merge all tx-level deltas into one state per component/account;
-  │  new_tokens, new_protocol_components, component_balances included
-  │
-  ├─ DB write (CachedGateway → Postgres)
-  │  upsert blocks, tokens, protocol components, state, balances
-  │  sets db_committed_block_height on outgoing message
-  │
-  └─ Broadcast BlockAggregatedChanges on internal channel
-       │ (all blocks, including pending/non-committed)
-       │
-── SERVER ─────────────────────────────────────────────────────────────────────
-       │
-       ├──► WebSocket subscribers (tycho-indexer/src/services/ws.rs)
-       │    emit message directly; revert flag signals chain reorg
-       │
-       └──► PendingDeltasBuffer (tycho-indexer/src/services/deltas_buffer.rs)
-            per-extractor ReorgBuffer of BlockAggregatedChanges
-            ├─ Insert every full block (partial blocks skipped)
-            ├─ Auto-drain blocks ≤ db_committed_block_height
-            │  (they're in DB, no longer "pending")
-            └─ Used by RPC handlers: DB snapshot + pending deltas
-               = consistent view of latest state for HTTP queries
-
-── CLIENT (tycho-client) ──────────────────────────────────────────────────────
-
-  StateSynchronizer (one per extractor subscription)
-  ├─ 1. Subscribe to WebSocket stream (WsDeltasClient)
-  ├─ 2. On first message: query HTTP snapshot (HttpRPCClient)
-  │     fetches protocol_state / contract_state at that block height
-  └─ 3. Buffer WebSocket deltas received before snapshot arrives;
-        apply buffered deltas on top of snapshot to catch up
-
-  BlockSynchronizer (across all extractors)
-  ├─ Tracks state per synchronizer: Ready / Delayed / Stale
-  ├─ Delayed synchronizers consume buffered messages to catch up
-  └─ When all synchronizers reach the same block: emit FeedMessage
-     (unified view of all protocol state at that block) to consumer
-```
-
+- `plan`: Guided feature planning with iterative user input. Gathers requirements, validates assumptions, proposes a
+  solution. **Always use this skill** when the user wants to plan, design, or architect a feature before coding. Trigger
+  words: "plan", "design", "architect", "think through", "figure out how to".
+- `run-ci`: Run all CI checks. Optionally run solidity checks.
+- `sync-docs`: Review all codebase documentation

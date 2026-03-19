@@ -42,6 +42,7 @@ class Chain(str, Enum):
     starknet = "starknet"
     arbitrum = "arbitrum"
     base = "base"
+    bsc = "bsc"
     zksync = "zksync"
     unichain = "unichain"
 
