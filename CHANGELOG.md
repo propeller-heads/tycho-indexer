@@ -1,3 +1,15 @@
+## [0.152.0](https://github.com/propeller-heads/tycho-indexer/compare/0.151.0...0.152.0) (2026-03-19)
+
+
+### Features
+
+* add user_identity label to websocket subscriptions gauge ([4dd2537](https://github.com/propeller-heads/tycho-indexer/commit/4dd2537acb5377562b1a44044deca36b2473cbe9))
+
+
+### Bug Fixes
+
+* reduce metrics cardinality by removing UUID labels ([8c6c60c](https://github.com/propeller-heads/tycho-indexer/commit/8c6c60cf1f55e6194b0f449875e82a8a6b767384))
+
 ## [0.151.0](https://github.com/propeller-heads/tycho-indexer/compare/0.150.0...0.151.0) (2026-03-19)
 
 
