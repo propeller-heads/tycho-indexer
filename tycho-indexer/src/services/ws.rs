@@ -285,6 +285,7 @@ impl WsActor {
                             let handle = ctx.add_stream(stream);
                             let chain = extractor_id.chain.to_string();
                             let extractor = extractor_id.name.to_string();
+                            let user_identity = actor.user_identity.as_deref().unwrap_or("unknown").to_owned();
                             actor.subscriptions.insert(
                                 subscription_id,
                                 SubscriptionState {
@@ -298,6 +299,7 @@ impl WsActor {
                                 .insert(subscription_id, compression);
                             gauge!(
                                 "websocket_subscriptions_active",
+                                "user_identity" => user_identity,
                                 "chain" => chain,
                                 "extractor" => extractor,
                             )
@@ -338,6 +340,7 @@ impl WsActor {
             debug!("Cancelled subscription future");
             gauge!(
                 "websocket_subscriptions_active",
+                "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
                 "chain" => sub.chain,
                 "extractor" => sub.extractor,
             )
@@ -387,10 +390,12 @@ impl Actor for WsActor {
         .decrement(1);
 
         // Close all remaining subscriptions
+        let user_identity = self.user_identity.as_deref().unwrap_or("unknown").to_owned();
         for (_, sub) in self.subscriptions.drain() {
             ctx.cancel_future(sub.handle);
             gauge!(
                 "websocket_subscriptions_active",
+                "user_identity" => user_identity.clone(),
                 "chain" => sub.chain,
                 "extractor" => sub.extractor,
             )
