@@ -124,15 +124,15 @@ mod tests {
         map: &HashMap<(MetricKind, String, BTreeMap<String, String>), DebugValue>,
         name: &str,
         labels: &[(&str, &str)],
-    ) -> Option<u64> {
+    ) -> u64 {
         let labels_map = labels
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect::<BTreeMap<_, _>>();
 
         match map.get(&(MetricKind::Counter, name.to_owned(), labels_map)) {
-            Some(DebugValue::Counter(value)) => Some(*value),
-            _ => None,
+            Some(DebugValue::Counter(value)) => *value,
+            _ => 0,
         }
     }
 
@@ -140,76 +140,32 @@ mod tests {
         map: &HashMap<(MetricKind, String, BTreeMap<String, String>), DebugValue>,
         name: &str,
         labels: &[(&str, &str)],
-    ) -> Option<usize> {
+    ) -> usize {
         let labels_map = labels
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect::<BTreeMap<_, _>>();
 
         match map.get(&(MetricKind::Histogram, name.to_owned(), labels_map)) {
-            Some(DebugValue::Histogram(values)) => Some(values.len()),
-            _ => None,
+            Some(DebugValue::Histogram(values)) => values.len(),
+            _ => 0,
         }
     }
 
+    /// Both success and failure cases run in a single test to share one actix System.
+    /// The DebuggingRecorder uses thread-local handle caching, and `#[actix_web::test]`
+    /// creates a new System (and thread) per test. When two tests run on different threads,
+    /// metric handles registered on the first thread aren't visible to the snapshotter
+    /// from the second thread's actix System.
     #[actix_web::test]
-    async fn test_rpc_success() {
+    async fn test_rpc_metrics() {
         let snapshotter = init_metrics();
 
+        // --- Success case ---
         let app = test::init_service(
             App::new()
                 .wrap(middleware::from_fn(rpc_metrics_middleware))
-                .route("/v1/health", web::get().to(|| async { HttpResponse::Ok().finish() })),
-        )
-        .await;
-
-        let before = snapshot_to_map(snapshotter.snapshot());
-
-        let request = test::TestRequest::get()
-            .uri("/v1/health")
-            .insert_header(("user-identity", "alice"))
-            .to_request();
-
-        let response = test::call_service(&app, request).await;
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let after = snapshot_to_map(snapshotter.snapshot());
-
-        let expected_labels = [("endpoint", "/v1/health"), ("user_identity", "alice")];
-
-        let before_requests = counter_value(&before, "rpc_requests", &expected_labels).unwrap_or(0);
-        let after_requests = counter_value(&after, "rpc_requests", &expected_labels).unwrap_or(0);
-        assert_eq!(after_requests.saturating_sub(before_requests), 1);
-
-        let failure_labels =
-            [("endpoint", "/v1/health"), ("status", "400"), ("user_identity", "alice")];
-        let before_failures =
-            counter_value(&before, "rpc_requests_failed", &failure_labels).unwrap_or(0);
-        let after_failures =
-            counter_value(&after, "rpc_requests_failed", &failure_labels).unwrap_or(0);
-        assert_eq!(after_failures.saturating_sub(before_failures), 0);
-
-        assert_eq!(
-            histogram_samples(
-                &after,
-                "rpc_request_duration_seconds",
-                &[("endpoint", "/v1/health")]
-            )
-            .unwrap_or_default(),
-            1
-        );
-    }
-
-    #[actix_web::test]
-    async fn test_rpc_failure() {
-        let snapshotter = init_metrics();
-
-        let expected_error = RpcError::Pagination(100);
-        let expected_status = expected_error.status_code();
-
-        let app = test::init_service(
-            App::new()
-                .wrap(middleware::from_fn(rpc_metrics_middleware))
+                .route("/v1/health", web::get().to(|| async { HttpResponse::Ok().finish() }))
                 .route(
                     "/v1/fail",
                     web::get().to(|| async { Err::<HttpResponse, _>(RpcError::Pagination(100)) }),
@@ -220,34 +176,76 @@ mod tests {
         let before = snapshot_to_map(snapshotter.snapshot());
 
         let request = test::TestRequest::get()
-            .uri("/v1/fail")
+            .uri("/v1/health")
+            .insert_header(("user-identity", "alice"))
             .to_request();
-
         let response = test::call_service(&app, request).await;
-        assert_eq!(response.status(), expected_error.status_code());
+        assert_eq!(response.status(), StatusCode::OK);
 
         let after = snapshot_to_map(snapshotter.snapshot());
 
-        let base_labels = [("endpoint", "/v1/fail"), ("user_identity", "unknown")];
-        let before_requests = counter_value(&before, "rpc_requests", &base_labels).unwrap_or(0);
-        let after_requests = counter_value(&after, "rpc_requests", &base_labels).unwrap_or(0);
-        assert_eq!(after_requests.saturating_sub(before_requests), 1);
+        let success_labels = [("endpoint", "/v1/health"), ("user_identity", "alice")];
+        assert_eq!(
+            counter_value(&after, "rpc_requests", &success_labels)
+                - counter_value(&before, "rpc_requests", &success_labels),
+            1
+        );
 
-        let failure_labels = [
+        let no_failure_labels =
+            [("endpoint", "/v1/health"), ("status", "400"), ("user_identity", "alice")];
+        assert_eq!(
+            counter_value(&after, "rpc_requests_failed", &no_failure_labels),
+            counter_value(&before, "rpc_requests_failed", &no_failure_labels),
+        );
+
+        assert_eq!(
+            histogram_samples(
+                &after,
+                "rpc_request_duration_seconds",
+                &[("endpoint", "/v1/health")]
+            ),
+            1
+        );
+
+        // --- Failure case ---
+        let expected_error = RpcError::Pagination(100);
+        let expected_status = expected_error.status_code();
+
+        let before = snapshot_to_map(snapshotter.snapshot());
+
+        let request = test::TestRequest::get()
+            .uri("/v1/fail")
+            .to_request();
+        let response = test::call_service(&app, request).await;
+        assert_eq!(response.status(), expected_status);
+
+        let after = snapshot_to_map(snapshotter.snapshot());
+
+        let fail_request_labels = [("endpoint", "/v1/fail"), ("user_identity", "unknown")];
+        assert_eq!(
+            counter_value(&after, "rpc_requests", &fail_request_labels)
+                - counter_value(&before, "rpc_requests", &fail_request_labels),
+            1
+        );
+
+        let fail_labels = [
             ("endpoint", "/v1/fail"),
             ("status", expected_status.as_str()),
             ("user_identity", "unknown"),
         ];
+        assert_eq!(
+            counter_value(&after, "rpc_requests_failed", &fail_labels)
+                - counter_value(&before, "rpc_requests_failed", &fail_labels),
+            1
+        );
 
-        let before_failures =
-            counter_value(&before, "rpc_requests_failed", &failure_labels).unwrap_or(0);
-        let after_failures =
-            counter_value(&after, "rpc_requests_failed", &failure_labels).unwrap_or(0);
-        assert_eq!(after_failures.saturating_sub(before_failures), 1);
-
-        let histogram_count =
-            histogram_samples(&after, "rpc_request_duration_seconds", &[("endpoint", "/v1/fail")])
-                .unwrap_or_default();
-        assert_eq!(histogram_count, 1);
+        assert_eq!(
+            histogram_samples(
+                &after,
+                "rpc_request_duration_seconds",
+                &[("endpoint", "/v1/fail")]
+            ),
+            1
+        );
     }
 }

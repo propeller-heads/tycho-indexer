@@ -40,6 +40,12 @@ impl WsData {
     }
 }
 
+struct SubscriptionState {
+    handle: SpawnHandle,
+    chain: String,
+    extractor: String,
+}
+
 /// Actor handling a single WS connection
 ///
 /// This actor is responsible for:
@@ -51,14 +57,19 @@ pub struct WsActor {
     /// connection.
     heartbeat: Instant,
     app_state: web::Data<WsData>,
-    subscriptions: HashMap<Uuid, SpawnHandle>,
+    subscriptions: HashMap<Uuid, SubscriptionState>,
     /// Tracks which subscriptions have zstd compression enabled
     compression_enabled: HashMap<Uuid, bool>,
     user_identity: Option<String>,
+    client_version: String,
 }
 
 impl WsActor {
-    fn new(app_state: web::Data<WsData>, user_identity: Option<String>) -> Self {
+    fn new(
+        app_state: web::Data<WsData>,
+        user_identity: Option<String>,
+        client_version: String,
+    ) -> Self {
         Self {
             id: Uuid::new_v4(),
             heartbeat: Instant::now(),
@@ -66,6 +77,7 @@ impl WsActor {
             subscriptions: HashMap::new(),
             compression_enabled: HashMap::new(),
             user_identity,
+            client_version,
         }
     }
 
@@ -85,26 +97,14 @@ impl WsActor {
                     .unwrap_or("unknown")
                     .to_string()
             });
-        let ws_actor = WsActor::new(data, user_identity);
-
-        // metrics
-        let user_agent = req
+        let client_version = req
             .headers()
             .get("user-agent")
-            .map(|value| {
-                value
-                    .to_str()
-                    .unwrap_or_default()
-                    .to_string()
-            })
-            .unwrap_or_default();
-        counter!(
-            "websocket_connections_metadata",
-            "id" => ws_actor.id.to_string(),
-            "client_version" => user_agent,
-            "user_identity" => ws_actor.user_identity.clone().unwrap_or("unknown".to_string()),
-        )
-        .increment(1);
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("unknown")
+            .to_string();
+
+        let ws_actor = WsActor::new(data, user_identity, client_version);
 
         ws::start(ws_actor, &req, stream)
     }
@@ -222,7 +222,6 @@ impl WsActor {
         debug!(actor_id = %self.id, "About to call message_sender.subscribe() asynchronously");
         let start_time = std::time::Instant::now();
         let actor_id = self.id;
-        let user_identity = self.user_identity.clone();
         let extractor_id_for_future = extractor_id.clone();
         let extractor_id_for_error = extractor_id.clone();
 
@@ -275,62 +274,74 @@ impl WsActor {
         // Step 4: Spawn the async future using ctx.spawn()
         // This is fire-and-forget: we don't wait for completion to avoid blocking
         // The future will complete independently and update actor state when done
-        ctx.spawn(fut.into_actor(self).map(move |result, actor, ctx| {
-            // Step 5: Handle async completion - this runs when the subscription future finishes
-            // If successful: add stream to actor, update metrics, send success response to client
-            // If failed: send error response to client
-            match result {
-                Some((subscription_id, stream, extractor_id)) => {
-                    let handle = ctx.add_stream(stream);
-                    actor.subscriptions.insert(subscription_id, handle);
-                    actor.compression_enabled.insert(subscription_id, compression);
-                    gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).increment(1);
-                    counter!(
-                        "websocket_extractor_subscriptions_metadata",
-                        "subscription_id" => subscription_id.to_string(),
-                        "chain"=> extractor_id.chain.to_string(),
-                        "extractor" => extractor_id.name.to_string(),
-                        "user_identity" => user_identity.unwrap_or("unknown".to_string()),
-                        "compression" => compression.to_string(),
-                        "partial_blocks" => partial_blocks.to_string(),
-                    )
-                    .increment(1);
+        ctx.spawn(
+            fut.into_actor(self)
+                .map(move |result, actor, ctx| {
+                    // Step 5: Handle async completion - this runs when the subscription future finishes
+                    // If successful: add stream to actor, update metrics, send success response to client
+                    // If failed: send error response to client
+                    match result {
+                        Some((subscription_id, stream, extractor_id)) => {
+                            let handle = ctx.add_stream(stream);
+                            let chain = extractor_id.chain.to_string();
+                            let extractor = extractor_id.name.to_string();
+                            actor.subscriptions.insert(
+                                subscription_id,
+                                SubscriptionState {
+                                    handle,
+                                    chain: chain.clone(),
+                                    extractor: extractor.clone(),
+                                },
+                            );
+                            actor
+                                .compression_enabled
+                                .insert(subscription_id, compression);
+                            gauge!(
+                                "websocket_subscriptions_active",
+                                "chain" => chain,
+                                "extractor" => extractor,
+                            )
+                            .increment(1);
 
-                    let message = Response::NewSubscription {
-                        extractor_id: extractor_id.into(),
-                        subscription_id,
-                    };
-                    ctx.text(serde_json::to_string(&message).unwrap());
-                }
-                None => {
-                    let error = WebsocketError::SubscribeError(extractor_id_for_error);
-                    ctx.text(
-                        serde_json::to_string(&WebSocketMessage::Response(Response::Error(
-                            error.into(),
-                        )))
-                            .expect("WebsocketMessage serialize infallible"),
-                    );
-                }
-            }
-        }));
+                            let message = Response::NewSubscription {
+                                extractor_id: extractor_id.into(),
+                                subscription_id,
+                            };
+                            ctx.text(serde_json::to_string(&message).unwrap());
+                        }
+                        None => {
+                            let error = WebsocketError::SubscribeError(extractor_id_for_error);
+                            ctx.text(
+                                serde_json::to_string(&WebSocketMessage::Response(
+                                    Response::Error(error.into()),
+                                ))
+                                .expect("WebsocketMessage serialize infallible"),
+                            );
+                        }
+                    }
+                }),
+        );
     }
 
     #[instrument(skip(self, ctx), fields(WsActor.id = %self.id))]
     fn unsubscribe(&mut self, ctx: &mut ws::WebsocketContext<Self>, subscription_id: Uuid) {
         info!(%subscription_id, "Unsubscribing from subscription");
 
-        if let Some(handle) = self
+        if let Some(sub) = self
             .subscriptions
             .remove(&subscription_id)
         {
             debug!("Subscription ID found");
-            // Cancel the future of the subscription stream
-            ctx.cancel_future(handle);
-            // Remove compression tracking for this subscription
+            ctx.cancel_future(sub.handle);
             self.compression_enabled
                 .remove(&subscription_id);
             debug!("Cancelled subscription future");
-            gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).decrement(1);
+            gauge!(
+                "websocket_subscriptions_active",
+                "chain" => sub.chain,
+                "extractor" => sub.extractor,
+            )
+            .decrement(1);
 
             let message = Response::SubscriptionEnded { subscription_id };
             ctx.text(serde_json::to_string(&message).unwrap());
@@ -353,7 +364,12 @@ impl Actor for WsActor {
     fn started(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection established");
 
-        gauge!("websocket_connections_active", "id" => self.id.to_string()).increment(1);
+        gauge!(
+            "websocket_connections_active",
+            "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
+            "client_version" => self.client_version.clone(),
+        )
+        .increment(1);
 
         // Start the heartbeat
         self.heartbeat(ctx);
@@ -363,13 +379,22 @@ impl Actor for WsActor {
     fn stopped(&mut self, ctx: &mut Self::Context) {
         info!("Websocket connection closed");
 
-        gauge!("websocket_connections_active", "id" => self.id.to_string()).decrement(1);
+        gauge!(
+            "websocket_connections_active",
+            "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
+            "client_version" => self.client_version.clone(),
+        )
+        .decrement(1);
 
         // Close all remaining subscriptions
-        for (subscription_id, handle) in self.subscriptions.drain() {
-            debug!(subscription_id = ?subscription_id, "Closing subscription.");
-            ctx.cancel_future(handle);
-            gauge!("websocket_extractor_subscriptions_active", "subscription_id" => subscription_id.to_string()).decrement(1);
+        for (_, sub) in self.subscriptions.drain() {
+            ctx.cancel_future(sub.handle);
+            gauge!(
+                "websocket_subscriptions_active",
+                "chain" => sub.chain,
+                "extractor" => sub.extractor,
+            )
+            .decrement(1);
         }
     }
 }

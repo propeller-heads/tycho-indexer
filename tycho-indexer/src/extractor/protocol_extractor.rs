@@ -1078,14 +1078,10 @@ where
         tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
         tracing::Span::current().record("target_number", block_ref.number);
 
-        // Perf: consider optimizing this to avoid having a unique counter for every revert, which
-        // can blow up metrics memory usage in case of frequent reverts.
         counter!(
             "extractor_revert",
             "extractor" => self.name.clone(),
-            "current_block" => last_processed_block_number,
-            "current_partial_block_index" => current_partial_block_index,
-            "target_block" => block_ref.number.to_string()
+            "chain" => self.chain.to_string(),
         )
         .increment(1);
 
