@@ -1,53 +1,68 @@
 require('dotenv').config();
 const {ethers} = require("hardhat");
-const path = require('path');
-const fs = require('fs');
 const hre = require("hardhat");
-const {proposeOrSendTransaction} = require("./utils");
+const roles = require("./roles.json");
+
+const ROLE_HASHES = {
+    EXECUTOR_SETTER_ROLE: "0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87",
+    PAUSER_ROLE: "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
+    UNPAUSER_ROLE: "0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a",
+    ROUTER_FEE_SETTER: "0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348",
+};
 
 async function main() {
     const network = hre.network.name;
     const routerAddress = process.env.ROUTER_ADDRESS;
-    const safeAddress = process.env.SAFE_ADDRESS;
+    const roleName = process.env.ROLE_NAME;
+    const granterPk = process.env.GRANTER_PK;
+
     if (!routerAddress) {
-        throw new Error("Missing ROUTER_ADDRESS");
+        throw new Error("Missing ROUTER_ADDRESS env var");
+    }
+    if (!roleName || !ROLE_HASHES[roleName]) {
+        throw new Error(
+            `Missing or invalid ROLE_NAME env var. Valid values: ${Object.keys(ROLE_HASHES).join(", ")}`
+        );
+    }
+    if (!granterPk) {
+        throw new Error("Missing GRANTER_PK env var");
     }
 
-    console.log(`Setting roles on TychoRouter at ${routerAddress} on ${network}`);
+    const baseNetwork = network.replace(/^tenderly_/, "");
+    if (!roles[baseNetwork]) {
+        throw new Error(`No roles defined for network "${baseNetwork}" in roles.json`);
+    }
 
-    const [signer] = await ethers.getSigners();
-    console.log(`Setting roles with account: ${signer.address}`);
-    console.log(`Account balance: ${ethers.utils.formatEther(await signer.getBalance())} ETH`);
+    const addresses = roles[baseNetwork][roleName];
+    if (!addresses || addresses.length < 2) {
+        console.log(`No additional addresses to grant for ${roleName} on ${baseNetwork}`);
+        return;
+    }
+
+    const granter = new ethers.Wallet(granterPk, ethers.provider);
+    console.log(`Setting ${roleName} on TychoRouter at ${routerAddress} on ${network}`);
+    console.log(`Granter: ${granter.address}`);
+    console.log(`Granter balance: ${ethers.utils.formatEther(await granter.getBalance())} ETH`);
+
+    if (granter.address.toLowerCase() !== addresses[0].toLowerCase()) {
+        throw new Error(
+            `Granter address ${granter.address} does not match first address in roles.json (${addresses[0]})`
+        );
+    }
+
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const router = TychoRouter.attach(routerAddress);
+    const router = TychoRouter.attach(routerAddress).connect(granter);
+    const roleHash = ROLE_HASHES[roleName];
 
-    const rolesFilePath = path.join(__dirname, "roles.json");
-    const rolesDict = JSON.parse(fs.readFileSync(rolesFilePath, "utf8"));
-
-    const roles = {
-        EXECUTOR_SETTER_ROLE: "0x6a1dd52dcad5bd732e45b6af4e7344fa284e2d7d4b23b5b09cb55d36b0685c87",
-        PAUSER_ROLE: "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
-        UNPAUSER_ROLE: "0x427da25fe773164f88948d3e215c94b6554e2ed5e5f203a821c9f2f6131cf75a"
-    };
-
-    // Iterate through roles and grant them to the corresponding addresses
-    for (const [roleName, roleHash] of Object.entries(roles)) {
-        const addresses = rolesDict[network][roleName];
-        if (addresses && addresses.length > 0) {
-            console.log(`Granting ${roleName} to the following addresses:`, addresses);
-
-            const txData = {
-                to: router.address,
-                data: router.interface.encodeFunctionData("batchGrantRole", [roleHash, addresses]),
-                value: "0",
-            };
-
-            const txHash = await proposeOrSendTransaction(safeAddress, txData, signer, "batchGrantRole");
-            console.log(`Role ${roleName} granted at TX hash: ${txHash}`);
-        } else {
-            console.log(`No addresses found for role ${roleName}`);
-        }
+    // First address already has the role from constructor; grant to the rest
+    for (let i = 1; i < addresses.length; i++) {
+        console.log(`Granting ${roleName} to ${addresses[i]}...`);
+        const tx = await router.grantRole(roleHash, addresses[i]);
+        await tx.wait();
+        console.log(`Granted ${roleName} to ${addresses[i]}`);
     }
+
+    console.log(`Done. ${roleName} granted to ${addresses.length - 1} additional address(es).`);
 }
 
 main()

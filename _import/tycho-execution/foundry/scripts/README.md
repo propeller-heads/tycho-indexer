@@ -36,10 +36,35 @@ export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 For each of the following, you must select one of `tenderly_ethereum`, `tenderly_base`,
 `ethereum`, `base`, or `unichain` as the network.
 
-1. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
-2. Define the accounts to grant roles to in `scripts/roles.json`
-3. Export the router address to the environment variable `export ROUTER_ADDRESS=<router-address>`
-4. Grant roles: `npx hardhat run scripts/set-roles.js --network NETWORK`
+### Deploy FeeCalculator
+The FeeCalculator must be deployed **before** the TychoRouter, as the router requires its address.
+
+1. Set the fee setter address:
+   ```
+   export ROUTER_FEE_SETTER=<address-to-grant-fee-setter-role>
+   ```
+2. Deploy: `npx hardhat run scripts/deploy-fee-calculator.js --network NETWORK`
+3. Note the deployed address — you will need it in the next step.
+
+`ROUTER_FEE_SETTER` receives `ROUTER_FEE_SETTER_ROLE` to manage fee configuration.
+
+### Deploy Router
+
+1. Define the accounts to grant roles to in `scripts/roles.json`. For each role, the first address
+   receives the role in the constructor; additional addresses are granted post-deployment via `set-roles.js`.
+2. Set environment variables:
+   ```
+   export FEE_CALCULATOR=<fee-calculator-address-from-previous-step>
+   ```
+3. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
+4. Grant additional roles (run once per role, using the private key of the first address in `roles.json`):
+   ```
+   export ROUTER_ADDRESS=<router-address>
+   export ROLE_NAME=PAUSER_ROLE
+   export GRANTER_PK=<private-key-of-first-address-for-this-role>
+   npx hardhat run scripts/set-roles.js --network NETWORK
+   ```
+   Valid `ROLE_NAME` values: `EXECUTOR_SETTER_ROLE`, `PAUSER_ROLE`, `UNPAUSER_ROLE`, `ROUTER_FEE_SETTER`.
 5. Set executors: submit the transaction directly via the safe wallet UI.
 
 ### Deploy executors

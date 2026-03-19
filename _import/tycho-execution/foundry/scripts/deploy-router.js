@@ -1,29 +1,48 @@
 require('dotenv').config();
 const { ethers } = require("hardhat");
 const hre = require("hardhat");
+const roles = require("./roles.json");
+
+function resolveRolesNetwork(network) {
+    // Strip tenderly_ prefix to match roles.json keys
+    const base = network.replace(/^tenderly_/, "");
+    if (!roles[base]) {
+        throw new Error(
+            `No roles defined for network "${base}" in roles.json`
+        );
+    }
+    return roles[base];
+}
 
 async function main() {
     const network = hre.network.name;
     let permit2;
-    let feeCalculator;
+    let feeCalculator = process.env.FEE_CALCULATOR;
     if (network === "ethereum" || network === "tenderly_ethereum") {
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        feeCalculator = "";
     } else if (network === "base" || network === "tenderly_base") {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        feeCalculator = "";
     } else if (network === "unichain") {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-        feeCalculator = "";
     } else {
         throw new Error(`Unsupported network: ${network}`);
     }
 
+    const networkRoles = resolveRolesNetwork(network);
+    const pauser = networkRoles.PAUSER_ROLE[0];
+    const unpauser = networkRoles.UNPAUSER_ROLE[0];
+    const executorSetter = networkRoles.EXECUTOR_SETTER_ROLE[0];
+    const routerFeeSetter = networkRoles.ROUTER_FEE_SETTER[0];
+
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
     console.log(`- feeCalculator: ${feeCalculator}`);
+    console.log(`- pauser: ${pauser}`);
+    console.log(`- unpauser: ${unpauser}`);
+    console.log(`- executorSetter: ${executorSetter}`);
+    console.log(`- routerFeeSetter: ${routerFeeSetter}`);
 
     const [deployer] = await ethers.getSigners();
     console.log(`Deploying with account: ${deployer.address}`);
@@ -36,7 +55,14 @@ async function main() {
 
     // Get TychoRouter bytecode with constructor arguments
     const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const deployTx = TychoRouter.getDeployTransaction(permit2, feeCalculator);
+    const deployTx = TychoRouter.getDeployTransaction(
+        permit2,
+        feeCalculator,
+        pauser,
+        unpauser,
+        executorSetter,
+        routerFeeSetter
+    );
     const bytecode = deployTx.data;
 
     // Use a salt based on network and contract name for deterministic addresses
@@ -75,7 +101,14 @@ async function main() {
     try {
         await hre.run("verify:verify", {
             address: computedAddress,
-            constructorArguments: [permit2, feeCalculator],
+            constructorArguments: [
+                permit2,
+                feeCalculator,
+                pauser,
+                unpauser,
+                executorSetter,
+                routerFeeSetter,
+            ],
         });
         console.log(`TychoRouter verified successfully on blockchain explorer!`);
     } catch (error) {

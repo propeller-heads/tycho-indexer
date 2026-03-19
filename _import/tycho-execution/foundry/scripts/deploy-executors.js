@@ -7,12 +7,8 @@ const executors_to_deploy = {
     "ethereum": [
         // USV2 - Args: Fee BPS
         {exchange: "UniswapV2Executor", args: [30]},
-        // SUSHISWAP - Args: Fee BPS
-        {exchange: "UniswapV2Executor", args: [30]},
         // PANCAKESWAP V2 - Args: Fee BPS
         {exchange: "UniswapV2Executor", args: [25]},
-        // USV3 - Args: (none)
-        {exchange: "UniswapV3Executor", args: []},
         // PANCAKESWAP V3 - Args: (none)
         {exchange: "UniswapV3Executor", args: []},
         // Args: Pool manager, Angstrom hook
@@ -78,16 +74,13 @@ const executors_to_deploy = {
         {exchange: "UniswapV2Executor", args: [30]},
         // PANCAKESWAP V2 - Args: Fee BPS
         {exchange: "UniswapV2Executor", args: [25]},
-        // PANCAKESWAP V3 - Args: (none)
-        {exchange: "UniswapV3Executor", args: []},
         // USV3 - Args: (none)
         {exchange: "UniswapV3Executor", args: []},
         // USV4 - Args: Pool manager, Angstrom hook
-        // TODO: fill in Angstrom hook address for base
         {
             exchange: "UniswapV4Executor", args: [
                 "0x498581ff718922c3f8e6a244956af099b2652b2b",
-                "0x0000000000000000000000000000000000000000"
+                "0x631352Aaa9d6554848aF674106bCD8Bb9E59a5CF"
             ]
         },
         // Args: Bebop Settlement contract
