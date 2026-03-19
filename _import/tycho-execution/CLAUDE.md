@@ -9,24 +9,43 @@ DeFi swap execution framework: Solidity smart contracts (TychoRouter) + Rust enc
 
 ```
 TychoRouter (entry point)
+  inherits AccessControl           -- role-based admin (add executors, set fees)
   inherits Dispatcher              -- executor dispatch via delegatecall
-    inherits TransferManager  -- transfer limits, Permit2/ERC20/Vault funding
+    inherits TransferManager       -- input/output transfers, Permit2/ERC20/Vault funding
       inherits Vault (ERC6909)     -- multi-token vault, transient storage deltas
+  inherits EIP712                  -- client fee signature verification
 
 FeeCalculator (separate contract, called via staticcall -- read only)
+```
+
+### Swap Flow (end-to-end)
+
+```
+Entry (e.g. splitSwap)
+  → input transfer (_transfer)
+  → for each swap hop:
+      balance snapshot (balanceOf before)
+      → delegatecall executor.swap()
+      balance snapshot (balanceOf after)
+      → amountOut = diff (single source of truth)
+      → if outputToRouter: forward to receiver via _transferOut
+  → _takeFees (deduct client fee + router fees, credit vault balances)
+  → _maybeAddClientContribution (cap slippage contribution)
+  → _settleOutput (transfer/credit final amount to receiver or vault)
+  → _finalizeBalances (verify all transient deltas settled)
 ```
 
 ### Core Contracts (`foundry/src/`)
 
 | Contract | Purpose |
 |---|---|
-| `TychoRouter.sol` | Entry point. 3 swap strategies (single/sequential/split) x 3 funding modes (transferFrom/Permit2/vault) = 9 public methods |
+| `TychoRouter.sol` | Entry point. 3 swap strategies (single/sequential/split) x 3 funding modes (transferFrom/Permit2/vault) = 9 public methods. `_takeFees()` deducts fees, `_settleOutput()` transfers/credits final output to receiver or vault |
 | `Vault.sol` | ERC6909 multi-token vault (see subsection below) |
-| `Dispatcher.sol` | Executor dispatch. 3-day timelock on new executors. Queries transfer data via staticcall, executes swaps via delegatecall |
-| `TransferManager.sol` | Caps transferFrom to the declared input amount. 6 transfer scenarios depending on context |
-| `FeeCalculator.sol` | Dual fee system: router fee on output + router fee on client fee. Per-user custom rates. Upgradeable without redeploying router |
+| `Dispatcher.sol` | Executor dispatch. 3-day timelock on new executors. Balance-diff verification of swap outputs. Queries transfer data via staticcall, executes swaps via delegatecall |
+| `TransferManager.sol` | Caps transferFrom to the declared input amount. `_transferOut` for output transfers (handles FoT/rebasing tokens via balance-diff). 6 transfer scenarios depending on context |
+| `FeeCalculator.sol` | Dual fee system: router fee on output + router fee on client fee. Per-client custom rates. Upgradeable without redeploying router |
 
-Interfaces (`foundry/interfaces/`): `IExecutor` (swap, getTransferData, fundsExpectedAddress), `ICallback` (handleCallback, verifyCallback, getCallbackTransferData), `IFeeCalculator` (calculateFee, getEffectiveRouterFeeOnOutput).
+Interfaces (`foundry/interfaces/`): `IExecutor` (swap [void], getTransferData [returns transferType, receiver, tokenIn, tokenOut, outputToRouter], fundsExpectedAddress), `ICallback` (handleCallback, verifyCallback, getCallbackTransferData), `IFeeCalculator` (calculateFee [takes amountIn, client, clientFeeBps], getEffectiveRouterFeeOnOutput).
 
 ### Vault (`Vault.sol`)
 
@@ -44,31 +63,42 @@ ERC6909 multi-token vault with dual storage:
 
 **Fee accounting**: Fees credited directly to fee receivers' vault balances via `_creditVault()` -- persistent storage writes (~22k gas each) but no ERC20 transfers.
 
+**Why transient storage is kept** (even with balance-diff verification): The delta system is a cheap (~100 gas per op) safety guardrail that catches routing logic bugs and exploits. Example: a malicious encoder inserts a third split through a compromised protocol whose callback tells TransferManager to transfer PEPE instead of the expected token. The router would lose PEPE, but transient storage detects the negative PEPE delta and reverts. It also prevents overpayment in vault-funded split swaps where split percentages don't sum to 100%.
+
 ### Fee System (`FeeCalculator.sol`)
 
 Three fee layers, deducted from swap output:
 
-1. **Client fee** (encodable in calldata): `clientFeeBps` + `clientFeeReceiver` passed per-swap by the caller. The client sets their own rate and receiver.
+1. **Client fee** (EIP-712 signed): Passed per-swap via `ClientFeeParams` struct containing `clientFeeBps`, `clientFeeReceiver`, `maxClientContribution`, `deadline`, and `clientSignature`. The client signs these params with their own key; the router verifies the EIP-712 signature on-chain before applying any fee. The `clientFeeReceiver` address doubles as the client identifier. `maxClientContribution` caps how much positive slippage the client absorbs (prevents the client from claiming all surplus). Passing zero `ClientFeeParams` is allowed (no fee, no client tracking).
 2. **Router fee on output** (stored): `_routerFeeOnOutputBps` -- Tycho's cut of the swap output amount.
 3. **Router fee on client fee** (stored): `_routerFeeOnClientFeeBps` -- Tycho's cut of the client fee (deducted from the client's portion, not from the user).
 
-**Per-client overrides**: Both router fees can be overridden per user address via `_customRouterFees` mapping (`CustomFees` struct, single storage slot). If set, the custom rate replaces the default for that user. Can be removed to revert to defaults.
+**Per-client overrides**: Both router fees can be overridden per client address via `_customRouterFees` mapping (`CustomFees` struct, single storage slot). If set, the custom rate replaces the default for that client. Can be removed to revert to defaults.
 
 **Deduction order**: client fee calculated first, then router's cut of client fee subtracted from it, then router fee on output. `amountOut = amountIn - clientPortion - totalRouterFee`.
 
-**Accounting**: FeeCalculator only computes amounts (called via staticcall). Actual distribution happens in TychoRouter, which credits fee receivers' vault balances via `_creditVault()`.
+**Accounting**: FeeCalculator only computes amounts (called via staticcall). Actual distribution happens in TychoRouter's `_takeFees()`, which credits fee receivers' vault balances via `_creditVault()`. `_settleOutput()` then handles the remaining output (transfer to receiver or vault credit).
 
 ### Executors (`foundry/src/executors/`)
 
-Each executor implements `IExecutor` (`swap`, `getTransferData`, `fundsExpectedAddress`). Transfer types and receivers are hardcoded per-executor -- not encodable in calldata.
+Each executor implements `IExecutor` (`swap` [void], `getTransferData`, `fundsExpectedAddress`). Transfer types, receivers, and `outputToRouter` are hardcoded per-executor -- not encodable in calldata. Executors are intentionally simple: they just call the protocol. All balance tracking, output verification, and transfer logic lives in the Dispatcher/TransferManager.
 
-Supported: UniswapV2, UniswapV3, UniswapV4, BalancerV2, BalancerV3, Curve, Ekubo, Slipstreams, MaverickV2, Bebop (RFQ), Hashflow (RFQ), FluidV1, Rocketpool, ERC4626, WETH.
+Supported: UniswapV2, UniswapV3, UniswapV4, BalancerV2, BalancerV3, Curve, Ekubo, EkuboV3, Slipstreams, MaverickV2, Bebop (RFQ), Hashflow (RFQ), FluidV1, Rocketpool, ERC4626, Etherfi, WETH.
 
-### Executor Flow & Callbacks
+### Executor Flow, Callbacks & Output Verification
 
-Two executor categories:
+**Balance-diff verification**: The Dispatcher independently verifies every swap output. It measures `balanceOf(measureAt, tokenOut)` before and after every `swap()` delegatecall. The measured diff becomes the single source of truth for fees, delta accounting, and sequential chaining. This eliminates trust in protocol-reported amounts and handles fee-on-transfer/rebasing tokens universally.
 
-**Direct-transfer** (UniswapV2, BalancerV2, Curve): Dispatcher staticcalls `getTransferData()` to get the `TransferType` and receiver, performs the transfer, then delegatecalls `swap()`.
+**Two output categories** (via `outputToRouter` flag from `getTransferData()`):
+
+| Category | Executors | `outputToRouter` | Behavior |
+|---|---|---|---|
+| **Direct-to-receiver** | UniswapV2, UniswapV3, UniswapV4, BalancerV2, BalancerV3, Ekubo, EkuboV3, Slipstreams, MaverickV2, ERC4626, FluidV1 | `false` | Dispatcher measures balance at receiver |
+| **Output-lands-at-router** | Curve, WETH, Rocketpool, Etherfi, Bebop, Hashflow | `true` | Dispatcher measures at `address(this)`, then forwards via `_transferOut()` if receiver != router |
+
+**Two input categories**:
+
+**Direct-transfer** (UniswapV2, BalancerV2, Curve): Dispatcher staticcalls `getTransferData()` to get the `TransferType`, receiver, tokenIn, tokenOut, and outputToRouter. Performs the transfer, then delegatecalls `swap()`.
 
 **Callback-based** (UniswapV3, UniswapV4, BalancerV3, Ekubo): Also implement `ICallback`. Flow:
 
@@ -95,7 +125,9 @@ enum TransferType {
 
 ### Transfer and Receiver Resolution
 
-**Transfer resolution** (`_callSwapOnExecutor`): Before every swap, the Dispatcher **staticcalls** `getTransferData()` on the current executor. Returns a hardcoded `TransferType`, receiver address, and token address. `_transfer()` handles 6 scenarios based on (TransferType, isFirstSwap, isSplitSwap, isCallback).
+**Transfer resolution** (`_callSwapOnExecutor`): Before every swap, the Dispatcher **staticcalls** `getTransferData()` on the current executor. Returns a hardcoded `TransferType`, receiver address, `tokenIn`, `tokenOut`, and `outputToRouter`. `_transfer()` handles 6 scenarios based on (TransferType, isFirstSwap, isSplitSwap, isCallback).
+
+**Output settlement** (in TychoRouter): After all swaps complete, `_takeFees()` deducts fees and credits fee receivers' vault balances. Then `_settleOutput()` updates delta accounting and either credits the user's vault balance or transfers tokens to the receiver.
 
 **Receiver resolution** (`_sequentialSwap`): For sequential routes (A -> Pool1 -> Pool2 -> D), the Dispatcher determines each swap's output receiver by peeking ahead and **staticcalling** `fundsExpectedAddress()` on the **next** executor. Returns either:
 - The pool address (direct-transfer protocols -- tokens go straight to pool)
@@ -116,7 +148,7 @@ TychoEncoder (trait)                     -- public API, validates Solution
 
 ### TychoEncoder / TychoRouterEncoder
 
-**TychoEncoder** (`tycho_encoder.rs`): Public trait. `encode_solutions(Vec<Solution>)` returns `Vec<EncodedSolution>` with raw swap bytes, function signature, and optional Permit2 data. `encode_full_calldata()` is deprecated.
+**TychoEncoder** (`tycho_encoder.rs`): Public trait. `encode_solutions(Vec<Solution>)` returns `Vec<EncodedSolution>` with raw swap bytes, function signature, and optional Permit2 data.
 
 **TychoRouterEncoder** (`evm/tycho_encoders.rs`): Owns all three strategy encoders. Per Solution:
 1. Validates (exact input only, has swaps, no invalid cycles)
@@ -153,6 +185,8 @@ Three implementations (`evm/strategy_encoder/`), each targeting a TychoRouter me
 **PLE encoding** (`evm/utils.rs`): Prefix-length encoding: `[len: u16][data][len: u16][data]...`. Combines swap data within groups and groups within strategies. Ekubo uses concatenation instead (`NON_PLE_ENCODED_PROTOCOLS`).
 
 **Permit2** (`evm/approvals/permit2.rs`): Fetches on-chain nonce/expiration, constructs `PermitSingle`, signs via EIP-712.
+
+**Client fee params**: There is no `ClientFeeParams` struct on the Rust side. The Solidity struct is encoded as a raw ABI tuple `(uint16,address,uint256,uint256,bytes)` embedded in the function signature strings within each strategy encoder. The caller provides the pre-signed bytes; the Rust encoder just passes them through.
 
 ### Key Models (`models.rs`)
 
@@ -199,11 +233,12 @@ Features: `evm` (default, enables alloy + reqwest), `fork-tests` (mainnet fork t
 ## Adding a New Executor
 
 1. Create `foundry/src/executors/NewProtocolExecutor.sol` implementing `IExecutor`
-2. Hardcode the correct `TransferType` in `getTransferData()` -- do NOT make it encodable
-3. Return the correct `fundsExpectedAddress()` (pool address for direct-transfer protocols, `address(this)` for pull-based)
-4. Add Rust encoder in `src/encoding/evm/swap_encoder/` and register in `swap_encoder_registry.rs`
-5. Add integration tests in both `foundry/test/protocols/` and `tests/`
-6. Add test setup in `foundry/test/TychoRouterTestSetup.sol`
+2. `swap()` returns void -- just call the protocol. No balance tracking, no output transfers, no amount validation needed (the Dispatcher handles all of this via balance-diff)
+3. Hardcode the correct `TransferType`, `tokenOut`, and `outputToRouter` in `getTransferData()` -- do NOT make them encodable. Set `outputToRouter = true` if the protocol sends output to `msg.sender` rather than accepting a receiver param
+4. Return the correct `fundsExpectedAddress()` (pool address for direct-transfer protocols, `address(this)` for pull-based)
+5. Add Rust encoder in `src/encoding/evm/swap_encoder/` and register in `swap_encoder_registry.rs`
+6. Add integration tests in both `foundry/test/protocols/` and `tests/`
+7. Add test setup in `foundry/test/TychoRouterTestSetup.sol`
 
 ## Conventions
 
