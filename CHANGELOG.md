@@ -1,3 +1,15 @@
+## [0.151.0](https://github.com/propeller-heads/tycho-indexer/compare/0.150.0...0.151.0) (2026-03-19)
+
+
+### Features
+
+* add run-ci skill and nextest wrapper script ([aae965f](https://github.com/propeller-heads/tycho-indexer/commit/aae965f024509206f83ad114d3b8ab324286c573))
+
+
+### Bug Fixes
+
+* update Python client tests and DTOs for chain-in-body API ([03f1c3e](https://github.com/propeller-heads/tycho-indexer/commit/03f1c3e8c3ddab8615e794d25dcf625b93c7af1a))
+
 ## [0.150.0](https://github.com/propeller-heads/tycho-indexer/compare/0.149.0...0.150.0) (2026-03-18)
 
 
