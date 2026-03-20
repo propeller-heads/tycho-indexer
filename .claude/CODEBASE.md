@@ -54,68 +54,37 @@ Key properties:
 
 ### End-to-End Data Flow
 
-```
-── INGESTION ──────────────────────────────────────────────────────────────────
+#### Ingestion
 
-  Substreams gRPC                                    Ethereum RPC
-       │                                                   │
-       ▼                                                   │
-  ProtocolExtractor                                        │
-  ├─ Deserialize BlockScopedData (protobuf)                │
-  ├─ PartialBlockBuffer: accumulate sub-block msgs         │
-  │  until full-block signal arrives                       │
-  ├─ TokenPreProcessor: for each unknown token address ────┘
-  │  fetch metadata (symbol, decimals) via eth_call
-  └─ Produce BlockChanges (tx-level state/balance/token deltas)
-       │
-       ▼
-  ReorgBuffer (extractor-owned, one per ProtocolExtractor)
-  ├─ Insert BlockChanges for every new block
-  ├─ On BlockUndoSignal: purge blocks after reverted hash,
-  │  emit revert messages (revert=true) — no DB rollback needed
-  └─ Drain to DB when count_blocks_before(finalized_block_height)
-       >= commit_batch_size  ← only finalized blocks ever reach DB
-       │
-       ▼ (drained blocks only)
-  BlockChanges → BlockAggregatedChanges
-  │  merge all tx-level deltas into one state per component/account;
-  │  new_tokens, new_protocol_components, component_balances included
-  │
-  ├─ DB write (CachedGateway → Postgres)
-  │  upsert blocks, tokens, protocol components, state, balances
-  │  sets db_committed_block_height on outgoing message
-  │
-  └─ Broadcast BlockAggregatedChanges on internal channel
-       │ (all blocks, including pending/non-committed)
-       │
-── SERVER ─────────────────────────────────────────────────────────────────────
-       │
-       ├──► WebSocket subscribers (tycho-indexer/src/services/ws.rs)
-       │    emit message directly; revert flag signals chain reorg
-       │
-       └──► PendingDeltasBuffer (tycho-indexer/src/services/deltas_buffer.rs)
-            per-extractor ReorgBuffer of BlockAggregatedChanges
-            ├─ Insert every full block (partial blocks skipped)
-            ├─ Auto-drain blocks ≤ db_committed_block_height
-            │  (they're in DB, no longer "pending")
-            └─ Used by RPC handlers: DB snapshot + pending deltas
-               = consistent view of latest state for HTTP queries
+1. Substreams gRPC delivers `BlockScopedData` (protobuf) to `ProtocolExtractor`
+2. `ProtocolExtractor` deserializes into `BlockChanges` (tx-level state/balance/token deltas)
+   - `PartialBlockBuffer` accumulates sub-block messages until full-block signal arrives
+   - `TokenPreProcessor` fetches metadata (symbol, decimals) via Ethereum RPC for unknown tokens
+3. `BlockChanges` inserted into `ReorgBuffer` (one per `ProtocolExtractor`)
+   - On `BlockUndoSignal`: purge blocks after reverted hash, emit revert messages — no DB rollback needed
+   - Drain to DB when `count_blocks_before(finalized_block_height) >= commit_batch_size` — only finalized blocks ever reach DB
+4. Drained blocks: `BlockChanges` → `BlockAggregatedChanges` (merge all tx-level deltas into one state per component/account)
+5. DB write via `CachedGateway` → Postgres (upsert blocks, tokens, components, state, balances); sets `db_committed_block_height` on outgoing message
+6. Broadcast `BlockAggregatedChanges` on internal channel (all blocks, including pending/non-committed)
 
-── CLIENT (tycho-client) ──────────────────────────────────────────────────────
+#### Server
 
-  StateSynchronizer (one per extractor subscription)
-  ├─ 1. Subscribe to WebSocket stream (WsDeltasClient)
-  ├─ 2. On first message: query HTTP snapshot (HttpRPCClient)
-  │     fetches protocol_state / contract_state at that block height
-  └─ 3. Buffer WebSocket deltas received before snapshot arrives;
-        apply buffered deltas on top of snapshot to catch up
+7. WebSocket subscribers (`services/ws.rs`) receive broadcast directly; revert flag signals chain reorg
+8. `PendingDeltasBuffer` (`services/deltas_buffer.rs`) receives broadcast
+   - Inserts every full block (partial blocks skipped)
+   - Auto-drains blocks ≤ `db_committed_block_height` (already in DB, no longer "pending")
+   - RPC handlers query DB snapshot + pending deltas = consistent view of latest state
 
-  BlockSynchronizer (across all extractors)
-  ├─ Tracks state per synchronizer: Ready / Delayed / Stale
-  ├─ Delayed synchronizers consume buffered messages to catch up
-  └─ When all synchronizers reach the same block: emit FeedMessage
-     (unified view of all protocol state at that block) to consumer
-```
+#### Client (tycho-client)
+
+9. `StateSynchronizer` (one per extractor subscription):
+   - Subscribes to WebSocket stream via `WsDeltasClient`
+   - On first message: fetches HTTP snapshot via `HttpRPCClient` at that block height
+   - Buffers WebSocket deltas received before snapshot arrives; applies them on top to catch up
+10. `BlockSynchronizer` (across all extractors):
+    - Tracks state per synchronizer: `Ready` / `Delayed` / `Stale`
+    - Delayed synchronizers consume buffered messages to catch up
+    - When all synchronizers reach the same block: emits `FeedMessage` (unified view of all protocol state at that block) to consumer
 
 ## Key Architectural Patterns
 
