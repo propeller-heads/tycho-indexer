@@ -21,3 +21,19 @@ The vulnerabilities discovered during the audits have been acknowledged and addr
 ### Report a Vulnerability
 
 Contact [security@propellerheads.xyz](mailto:security@propellerheads.xyz)
+
+## License
+
+This repository is licensed under the [Business Source License 1.1](LICENSE) (BUSL-1.1).
+
+**What you can do:**
+- Read, audit, and review the source code
+- Use the code for non-production purposes (testing, development, research)
+- Build applications that interact with the [officially deployed](https://docs.propellerheads.xyz/tycho/for-solvers/execution/contract-addresses) Tycho Router contracts
+
+**What you cannot do:**
+- Deploy, redeploy, or operate your own instance of the Tycho Router or any derivative
+
+On **2028-03-19**, the license converts to MIT, granting full open-source rights.
+
+For commercial licensing inquiries, contact [legal@propellerheads.xyz](mailto:legal@propellerheads.xyz).
