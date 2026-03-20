@@ -72,8 +72,6 @@ const executors_to_deploy = {
     "base": [
         // USV2 - Args: Fee BPS
         {exchange: "UniswapV2Executor", args: [30]},
-        // PANCAKESWAP V2 - Args: Fee BPS
-        {exchange: "UniswapV2Executor", args: [25]},
         // USV3 - Args: (none)
         {exchange: "UniswapV3Executor", args: []},
         // USV4 - Args: Pool manager, Angstrom hook
@@ -100,8 +98,7 @@ const executors_to_deploy = {
         {
             exchange: "UniswapV4Executor", args: [
                 "0x1f98400000000000000000000000000000000004",
-                // TODO: fill in Angstrom hook address for unichain (this one is copied
-                // from mainnet)
+                // This is the Angstrom address for ethereum. There isn't one for unichain
                 "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
             ]
         },
