@@ -1,3 +1,10 @@
+## [0.44.0](https://github.com/propeller-heads/tycho-contracts/compare/0.43.0...0.44.0) (2026-03-20)
+
+
+### Features
+
+* Deploy executors and router for Ethereum, Base and Unichain ([1ce76b4](https://github.com/propeller-heads/tycho-contracts/commit/1ce76b47d0114f6bfe32e669f743189460ad99ce))
+
 ## [0.43.0](https://github.com/propeller-heads/tycho-contracts/compare/0.42.0...0.43.0) (2026-03-19)
 
 
