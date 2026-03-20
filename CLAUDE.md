@@ -22,7 +22,7 @@ you've exhausted the path of documentation.
 | Document        | Trigger                                                                 | Path                                   |
 |-----------------|-------------------------------------------------------------------------|----------------------------------------|
 | Rust            | Writing, reviewing, or debugging Rust code                              | `.claude/knowledge/rust.md`            |
-| Version control | git, branch, commit, PR, push, rebase, merge, cherry-pick, tag, release | `.claude/knowledge/version-control.md` |
+| Version control | git, branch, commit, PR, push, rebase, merge, cherry-pick, tag, release | `.claude/knowledge/version_control.md` |
 | Python          | Python code, tycho-client-py, changes to dto.rs or rpc.rs              | `.claude/knowledge/python.md`          |
 
 When spawning subagents, pass the relevant knowledge document contents to them.
@@ -32,5 +32,5 @@ When spawning subagents, pass the relevant knowledge document contents to them.
 - `plan`: Guided feature planning with iterative user input. Gathers requirements, validates assumptions, proposes a
   solution. **Always use this skill** when the user wants to plan, design, or architect a feature before coding. Trigger
   words: "plan", "design", "architect", "think through", "figure out how to".
-- `run-ci`: Run all CI checks. Optionally run solidity checks.
+- `run-ci`: Run all CI checks. Optionally DB and node RPC dependent checks.
 - `sync-docs`: Review all codebase documentation

@@ -19,11 +19,8 @@ cargo +nightly clippy --workspace --all-features --all-targets
 # Format
 cargo +nightly fmt --all
 
-# Quick tests (unit + workspace)
-cargo test --workspace --features dev,metrics-collection
-
-# Integration tests (run only when task is complete)
-cargo test --package turbine --test integration tests --features dev,test-harness
+# Tests (unit + workspace)
+cargo test --workspace
 
 # Build check (fast)
 cargo +nightly check --workspace --all-features
