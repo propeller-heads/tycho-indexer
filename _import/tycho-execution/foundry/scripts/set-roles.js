@@ -10,9 +10,20 @@ const ROLE_HASHES = {
     ROUTER_FEE_SETTER: "0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348",
 };
 
+async function grantRoleOnContract(contract, contractLabel, roleName, roleHash, addresses) {
+    // First address already has the role from constructor; grant to the rest
+    for (let i = 1; i < addresses.length; i++) {
+        console.log(`Granting ${roleName} to ${addresses[i]} on ${contractLabel}...`);
+        const tx = await contract.grantRole(roleHash, addresses[i]);
+        await tx.wait();
+        console.log(`Granted ${roleName} to ${addresses[i]} on ${contractLabel}`);
+    }
+}
+
 async function main() {
     const network = hre.network.name;
     const routerAddress = process.env.ROUTER_ADDRESS;
+    const feeCalculatorAddress = process.env.FEE_CALCULATOR;
     const roleName = process.env.ROLE_NAME;
     const granterPk = process.env.GRANTER_PK;
 
@@ -23,6 +34,9 @@ async function main() {
         throw new Error(
             `Missing or invalid ROLE_NAME env var. Valid values: ${Object.keys(ROLE_HASHES).join(", ")}`
         );
+    }
+    if (roleName === "ROUTER_FEE_SETTER" && !feeCalculatorAddress) {
+        throw new Error("Missing FEE_CALCULATOR env var (required for ROUTER_FEE_SETTER)");
     }
     if (!granterPk) {
         throw new Error("Missing GRANTER_PK env var");
@@ -40,7 +54,7 @@ async function main() {
     }
 
     const granter = new ethers.Wallet(granterPk, ethers.provider);
-    console.log(`Setting ${roleName} on TychoRouter at ${routerAddress} on ${network}`);
+    console.log(`Setting ${roleName} on ${network}`);
     console.log(`Granter: ${granter.address}`);
     console.log(`Granter balance: ${ethers.utils.formatEther(await granter.getBalance())} ETH`);
 
@@ -50,16 +64,18 @@ async function main() {
         );
     }
 
-    const TychoRouter = await ethers.getContractFactory("TychoRouter");
-    const router = TychoRouter.attach(routerAddress).connect(granter);
     const roleHash = ROLE_HASHES[roleName];
 
-    // First address already has the role from constructor; grant to the rest
-    for (let i = 1; i < addresses.length; i++) {
-        console.log(`Granting ${roleName} to ${addresses[i]}...`);
-        const tx = await router.grantRole(roleHash, addresses[i]);
-        await tx.wait();
-        console.log(`Granted ${roleName} to ${addresses[i]}`);
+    const TychoRouter = await ethers.getContractFactory("TychoRouter");
+    const router = TychoRouter.attach(routerAddress).connect(granter);
+    console.log(`TychoRouter at ${routerAddress}`);
+    await grantRoleOnContract(router, "TychoRouter", roleName, roleHash, addresses);
+
+    if (roleName === "ROUTER_FEE_SETTER") {
+        const FeeCalculator = await ethers.getContractFactory("FeeCalculator");
+        const feeCalculator = FeeCalculator.attach(feeCalculatorAddress).connect(granter);
+        console.log(`FeeCalculator at ${feeCalculatorAddress}`);
+        await grantRoleOnContract(feeCalculator, "FeeCalculator", roleName, roleHash, addresses);
     }
 
     console.log(`Done. ${roleName} granted to ${addresses.length - 1} additional address(es).`);

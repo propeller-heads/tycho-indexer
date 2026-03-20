@@ -26,7 +26,6 @@ from being stored in the shell history.
 
 ```
 export RPC_URL=<chain-rpc-url>
-export DEPLOY_WALLET=<wallet-address>
 export PRIVATE_KEY=<private-key>
 export BLOCKCHAIN_EXPLORER_API_KEY=<blockchain-explorer-api-key>
 ```
@@ -65,6 +64,9 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
    npx hardhat run scripts/set-roles.js --network NETWORK
    ```
    Valid `ROLE_NAME` values: `EXECUTOR_SETTER_ROLE`, `PAUSER_ROLE`, `UNPAUSER_ROLE`, `ROUTER_FEE_SETTER`.
+
+   > **Note:** `ROUTER_FEE_SETTER` also grants the role on the FeeCalculator contract. Make sure
+   > `FEE_CALCULATOR` is set (it should already be set from step 2).
 5. Set executors: submit the transaction directly via the safe wallet UI.
 
 ### Deploy executors
@@ -73,11 +75,6 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
 2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network NETWORK`
 3. Fill in the executor addresses in `config/executor_addresses.json`
 
-### Remove executors
-
-1. If you set a new executor for the same protocol, you need to remove the old one.
-2. Run: `npx hardhat run scripts/remove-executor.js --network NETWORK`
-3. There will be a prompt for you to insert the executor address you want to remove.
 
 ### Revoke roles
 
