@@ -1,3 +1,10 @@
+## [0.152.1](https://github.com/propeller-heads/tycho-indexer/compare/0.152.0...0.152.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* add reorg logs ([fb02bdc](https://github.com/propeller-heads/tycho-indexer/commit/fb02bdc33f8480fd62816201b5cdacd78b60ce92))
+
 ## [0.152.0](https://github.com/propeller-heads/tycho-indexer/compare/0.151.0...0.152.0) (2026-03-19)
 
 
