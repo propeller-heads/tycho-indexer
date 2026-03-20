@@ -186,8 +186,8 @@ mod tests {
 
         let success_labels = [("endpoint", "/v1/health"), ("user_identity", "alice")];
         assert_eq!(
-            counter_value(&after, "rpc_requests", &success_labels)
-                - counter_value(&before, "rpc_requests", &success_labels),
+            counter_value(&after, "rpc_requests", &success_labels) -
+                counter_value(&before, "rpc_requests", &success_labels),
             1
         );
 
@@ -223,8 +223,8 @@ mod tests {
 
         let fail_request_labels = [("endpoint", "/v1/fail"), ("user_identity", "unknown")];
         assert_eq!(
-            counter_value(&after, "rpc_requests", &fail_request_labels)
-                - counter_value(&before, "rpc_requests", &fail_request_labels),
+            counter_value(&after, "rpc_requests", &fail_request_labels) -
+                counter_value(&before, "rpc_requests", &fail_request_labels),
             1
         );
 
@@ -234,17 +234,13 @@ mod tests {
             ("user_identity", "unknown"),
         ];
         assert_eq!(
-            counter_value(&after, "rpc_requests_failed", &fail_labels)
-                - counter_value(&before, "rpc_requests_failed", &fail_labels),
+            counter_value(&after, "rpc_requests_failed", &fail_labels) -
+                counter_value(&before, "rpc_requests_failed", &fail_labels),
             1
         );
 
         assert_eq!(
-            histogram_samples(
-                &after,
-                "rpc_request_duration_seconds",
-                &[("endpoint", "/v1/fail")]
-            ),
+            histogram_samples(&after, "rpc_request_duration_seconds", &[("endpoint", "/v1/fail")]),
             1
         );
     }

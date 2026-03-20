@@ -10,6 +10,7 @@
 ### Commits
 
 - Imperative mood, ≤72 char subject line, one logical change per commit
+- Use `feat:` prefix for public interface changes (new endpoints, trait changes, wire type changes)
 - Never commit secrets, API keys, or credentials
 - Never push directly to main — use feature branches and PRs
 

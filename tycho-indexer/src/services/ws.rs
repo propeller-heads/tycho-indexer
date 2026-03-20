@@ -277,15 +277,20 @@ impl WsActor {
         ctx.spawn(
             fut.into_actor(self)
                 .map(move |result, actor, ctx| {
-                    // Step 5: Handle async completion - this runs when the subscription future finishes
-                    // If successful: add stream to actor, update metrics, send success response to client
-                    // If failed: send error response to client
+                    // Step 5: Handle async completion - this runs when the subscription future
+                    // finishes If successful: add stream to actor, update
+                    // metrics, send success response to client If failed: send
+                    // error response to client
                     match result {
                         Some((subscription_id, stream, extractor_id)) => {
                             let handle = ctx.add_stream(stream);
                             let chain = extractor_id.chain.to_string();
                             let extractor = extractor_id.name.to_string();
-                            let user_identity = actor.user_identity.as_deref().unwrap_or("unknown").to_owned();
+                            let user_identity = actor
+                                .user_identity
+                                .as_deref()
+                                .unwrap_or("unknown")
+                                .to_owned();
                             actor.subscriptions.insert(
                                 subscription_id,
                                 SubscriptionState {
@@ -390,7 +395,11 @@ impl Actor for WsActor {
         .decrement(1);
 
         // Close all remaining subscriptions
-        let user_identity = self.user_identity.as_deref().unwrap_or("unknown").to_owned();
+        let user_identity = self
+            .user_identity
+            .as_deref()
+            .unwrap_or("unknown")
+            .to_owned();
         for (_, sub) in self.subscriptions.drain() {
             ctx.cancel_future(sub.handle);
             gauge!(

@@ -1043,7 +1043,10 @@ where
             })
     }
 
-    #[instrument(skip_all, fields(current_block, target_hash, target_number))]
+    #[instrument(
+        skip_all,
+        fields(current_block, current_partial_block_index, target_hash, target_number)
+    )]
     #[allow(clippy::mutable_key_type)] // Clippy thinks that tuple with Bytes are a mutable type.
     async fn handle_revert(
         &self,
@@ -1077,6 +1080,8 @@ where
             .record("current_partial_block_index", &current_partial_block_index);
         tracing::Span::current().record("target_hash", format!("{block_hash:x}"));
         tracing::Span::current().record("target_number", block_ref.number);
+
+        warn!("Chain reorg detected");
 
         counter!(
             "extractor_revert",

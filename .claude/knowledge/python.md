@@ -93,7 +93,7 @@ endpoints on the Rust side, update the corresponding Python models manually.
 
 ## Versioning
 
-Version is in lockstep with the main tycho workspace. Currently `0.149.0` in `pyproject.toml`.
+Version is in lockstep with the main tycho workspace (`pyproject.toml` mirrors `workspace.version` in the root `Cargo.toml`).
 Update it as part of the release process (usually automated via release CI).
 
 ## Testing
