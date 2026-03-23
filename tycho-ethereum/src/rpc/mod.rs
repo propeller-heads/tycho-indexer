@@ -698,9 +698,10 @@ impl EthereumRpcClient {
         let batch_call = || async {
             let mut batch = self.inner.new_batch();
 
-            // Add eth_createAccessList call
-            let access_list_future = batch
-                .add_call::<_, AccessListResult>("eth_createAccessList", &access_list_params)?;
+            // Deserialize as Value first to handle nodes that return null
+            // instead of [] for storageKeys (non-spec-compliant but common)
+            let access_list_future =
+                batch.add_call::<_, Value>("eth_createAccessList", &access_list_params)?;
 
             // Add debug_traceCall call
             let trace_future =
@@ -709,8 +710,9 @@ impl EthereumRpcClient {
             // Send batch
             batch.send().await?;
 
-            // Await access list result
-            let access_list_data = access_list_future.await?;
+            // Await and normalize access list result
+            let access_list_value = access_list_future.await?;
+            let access_list_data = normalize_access_list_result(access_list_value)?;
 
             // Await trace result
             let pre_state_trace = trace_future.await?;
@@ -980,6 +982,33 @@ impl FeePriceGetter for EthereumRpcClient {
     async fn get_latest_fee_price(&self) -> Result<Self::FeePrice, Self::Error> {
         self.get_gas_price().await
     }
+}
+
+/// Some RPC nodes return `"storageKeys": null` instead of `"storageKeys": []` in access list
+/// entries, which violates the EIP-2930 spec. This normalizes null to an empty array before
+/// deserializing into alloy's `AccessListResult`.
+///
+/// TODO: Remove this workaround once geth >=1.17.2 (or whichever release includes
+/// https://github.com/ethereum/go-ethereum/pull/33976) is deployed on all our RPC nodes.
+fn normalize_access_list_result(
+    mut value: Value,
+) -> Result<AccessListResult, RpcError<TransportErrorKind>> {
+    if let Some(access_list) = value
+        .get_mut("accessList")
+        .and_then(|v| v.as_array_mut())
+    {
+        for entry in access_list {
+            if let Some(keys) = entry.get_mut("storageKeys") {
+                if keys.is_null() {
+                    *keys = Value::Array(vec![]);
+                }
+            }
+        }
+    }
+    serde_json::from_value(value).map_err(|err| RpcError::DeserError {
+        err,
+        text: "Failed to deserialize AccessListResult".into(),
+    })
 }
 
 #[cfg(test)]
@@ -1994,5 +2023,55 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn test_normalize_access_list_null_storage_keys() {
+        let value = serde_json::json!({
+            "accessList": [
+                {
+                    "address": "0x2d10683e941275d502173053927ad6066e6afd6b",
+                    "storageKeys": null
+                },
+                {
+                    "address": "0x308861a430be4cce5502d0a12724771fc6daf216",
+                    "storageKeys": [
+                        "0x00000000000000000000000000000000000000000000000000000000000000ce"
+                    ]
+                }
+            ],
+            "gasUsed": "0x5dc0"
+        });
+
+        let result = super::normalize_access_list_result(value).unwrap();
+        assert_eq!(result.access_list.0.len(), 2);
+        assert!(result.access_list.0[0]
+            .storage_keys
+            .is_empty());
+        assert_eq!(
+            result.access_list.0[1]
+                .storage_keys
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn test_normalize_access_list_already_valid() {
+        let value = serde_json::json!({
+            "accessList": [
+                {
+                    "address": "0x2d10683e941275d502173053927ad6066e6afd6b",
+                    "storageKeys": []
+                }
+            ],
+            "gasUsed": "0x5dc0"
+        });
+
+        let result = super::normalize_access_list_result(value).unwrap();
+        assert_eq!(result.access_list.0.len(), 1);
+        assert!(result.access_list.0[0]
+            .storage_keys
+            .is_empty());
     }
 }
