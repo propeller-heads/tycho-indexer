@@ -44,6 +44,7 @@ struct SubscriptionState {
     handle: SpawnHandle,
     chain: String,
     extractor: String,
+    partial_blocks: bool,
 }
 
 /// Actor handling a single WS connection
@@ -297,6 +298,7 @@ impl WsActor {
                                     handle,
                                     chain: chain.clone(),
                                     extractor: extractor.clone(),
+                                    partial_blocks,
                                 },
                             );
                             actor
@@ -307,6 +309,7 @@ impl WsActor {
                                 "user_identity" => user_identity,
                                 "chain" => chain,
                                 "extractor" => extractor,
+                                "partial_blocks" => partial_blocks.to_string(),
                             )
                             .increment(1);
 
@@ -348,6 +351,7 @@ impl WsActor {
                 "user_identity" => self.user_identity.as_deref().unwrap_or("unknown").to_owned(),
                 "chain" => sub.chain,
                 "extractor" => sub.extractor,
+                "partial_blocks" => sub.partial_blocks.to_string(),
             )
             .decrement(1);
 
@@ -407,6 +411,7 @@ impl Actor for WsActor {
                 "user_identity" => user_identity.clone(),
                 "chain" => sub.chain,
                 "extractor" => sub.extractor,
+                "partial_blocks" => sub.partial_blocks.to_string(),
             )
             .decrement(1);
         }
