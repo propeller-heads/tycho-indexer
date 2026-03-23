@@ -86,6 +86,7 @@
 //!             .exchange::<UniswapV2State>(
 //!                 "uniswap_v2", ComponentFilter::with_tvl_range(5.0, 10.0), None
 //!             )
+//!             .blocklist_components(vec!["0x86d257cdb7bc9c0df10e84c8709697f92770b335".to_string()])
 //!             .set_tokens(all_tokens)
 //!             .await
 //!             .build()
@@ -359,6 +360,17 @@ impl ProtocolStreamBuilder {
         self.stream_builder = self
             .stream_builder
             .enable_partial_blocks();
+        self
+    }
+
+    /// Exclude specific component IDs from all registered exchanges.
+    ///
+    /// Excluded components are never tracked, regardless of TVL or other
+    /// filter criteria.
+    pub fn blocklist_components(mut self, ids: impl IntoIterator<Item = String>) -> Self {
+        self.stream_builder = self
+            .stream_builder
+            .blocklist_components(ids);
         self
     }
 
