@@ -1,3 +1,16 @@
+## [0.45.0](https://github.com/propeller-heads/tycho-execution/compare/0.44.0...0.45.0) (2026-03-23)
+
+
+### Features
+
+* Add release and notify workflows ([560c868](https://github.com/propeller-heads/tycho-execution/commit/560c868a3de31fdbf57be57f46a12d3481ecc8f2))
+* Rename tycho-contracts -> tycho-execution ([ca197f1](https://github.com/propeller-heads/tycho-execution/commit/ca197f190c6f2f03d1e24aa66b0615e56dbe24c1))
+
+
+### Bug Fixes
+
+* Fix cargo audit ([bf953d0](https://github.com/propeller-heads/tycho-execution/commit/bf953d02ea92c3d9e35c256ab0db7ec5bd8b6e6c))
+
 ## [0.44.0](https://github.com/propeller-heads/tycho-execution/compare/0.43.0...0.44.0) (2026-03-20)
 
 
