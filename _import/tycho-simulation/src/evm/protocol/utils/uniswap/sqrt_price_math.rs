@@ -43,10 +43,14 @@ pub(crate) fn get_amount0_delta(
 ) -> Result<U256, SimulationError> {
     let (sqrt_ratio_a, sqrt_ratio_b) = maybe_flip_ratios(a, b);
 
+    if sqrt_ratio_a == U256::ZERO {
+        return Err(SimulationError::FatalError(
+            "sqrt_ratio_a must be greater than zero".to_string(),
+        ));
+    }
+
     let numerator1 = U256::from(liquidity) << RESOLUTION;
     let numerator2 = sqrt_ratio_b - sqrt_ratio_a;
-
-    assert!(sqrt_ratio_a > U256::from(0u64));
 
     if round_up {
         div_rounding_up(mul_div_rounding_up(numerator1, numerator2, sqrt_ratio_b)?, sqrt_ratio_a)
@@ -78,7 +82,11 @@ pub(super) fn get_next_sqrt_price_from_input(
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
-    assert!(sqrt_price > U256::from(0u64));
+    if sqrt_price == U256::ZERO {
+        return Err(SimulationError::FatalError(
+            "sqrt_price must be greater than zero".to_string(),
+        ));
+    }
 
     if zero_for_one {
         Ok(get_next_sqrt_price_from_amount0_rounding_up(sqrt_price, liquidity, amount_in, true)?)
@@ -93,8 +101,16 @@ pub(super) fn get_next_sqrt_price_from_output(
     amount_in: U256,
     zero_for_one: bool,
 ) -> Result<U256, SimulationError> {
-    assert!(sqrt_price > U256::from(0u64));
-    assert!(liquidity > 0);
+    if sqrt_price == U256::ZERO {
+        return Err(SimulationError::FatalError(
+            "sqrt_price must be greater than zero".to_string(),
+        ));
+    }
+    if liquidity == 0 {
+        return Err(SimulationError::FatalError(
+            "liquidity must be greater than zero".to_string(),
+        ));
+    }
 
     if zero_for_one {
         Ok(get_next_sqrt_price_from_amount1_rounding_down(sqrt_price, liquidity, amount_in, false)?)
@@ -127,7 +143,11 @@ fn get_next_sqrt_price_from_amount0_rounding_up(
         div_rounding_up(numerator1, safe_add_u256(safe_div_u256(numerator1, sqrt_price)?, amount)?)
     } else {
         let (product, _) = amount.overflowing_mul(sqrt_price);
-        assert!(safe_div_u256(product, amount)? == sqrt_price && numerator1 > product);
+        if safe_div_u256(product, amount)? != sqrt_price || numerator1 <= product {
+            return Err(SimulationError::FatalError(
+                "sqrt_price_math: overflow in get_next_sqrt_price_from_amount0".to_string(),
+            ));
+        }
         let denominator = safe_sub_u256(numerator1, product)?;
         // No overflow case: liquidity * sqrtPX96 / (liquidity +- amount * sqrtPX96)
         mul_div_rounding_up(numerator1, sqrt_price, denominator)
@@ -155,7 +175,12 @@ fn get_next_sqrt_price_from_amount1_rounding_down(
             mul_div_rounding_up(amount, Q96, U256::from(liquidity))?
         };
 
-        assert!(sqrt_price > quotient);
+        if sqrt_price <= quotient {
+            return Err(SimulationError::FatalError(
+                "sqrt_price_math: sqrt_price underflow in get_next_sqrt_price_from_amount1"
+                    .to_string(),
+            ));
+        }
         safe_sub_u256(sqrt_price, quotient)
     }
 }
@@ -420,5 +445,60 @@ mod tests {
         let res = sqrt_price_q96_to_f64(sqrt_price, t0d, t1d).expect("convert sqrt price");
 
         assert_ulps_eq!(res, exp, epsilon = f64::EPSILON);
+    }
+
+    #[test]
+    fn test_get_amount0_delta_zero_sqrt_ratio_returns_error() {
+        let result = get_amount0_delta(U256::ZERO, U256::from(1u64), 1_000_000, true);
+        assert!(
+            matches!(result, Err(SimulationError::FatalError(ref msg)) if msg.contains("sqrt_ratio_a")),
+            "expected FatalError about sqrt_ratio_a, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_get_next_sqrt_price_from_input_zero_price_returns_error() {
+        let result = get_next_sqrt_price_from_input(U256::ZERO, 1_000_000, U256::from(100u64), true);
+        assert!(matches!(result, Err(SimulationError::FatalError(_))));
+    }
+
+    #[test]
+    fn test_get_next_sqrt_price_from_output_zero_price_returns_error() {
+        let result =
+            get_next_sqrt_price_from_output(U256::ZERO, 1_000_000, U256::from(100u64), true);
+        assert!(matches!(result, Err(SimulationError::FatalError(_))));
+    }
+
+    #[test]
+    fn test_get_next_sqrt_price_from_output_zero_liquidity_returns_error() {
+        let result = get_next_sqrt_price_from_output(
+            u256("79224201403219477170569942574"),
+            0,
+            U256::from(100u64),
+            true,
+        );
+        assert!(matches!(result, Err(SimulationError::FatalError(_))));
+    }
+
+    #[test]
+    fn test_get_next_sqrt_price_from_amount0_overflow_returns_error() {
+        let result = get_next_sqrt_price_from_output(
+            u256("79224201403219477170569942574"),
+            1,
+            U256::MAX / U256::from(2u64),
+            false,
+        );
+        assert!(matches!(result, Err(SimulationError::FatalError(_))));
+    }
+
+    #[test]
+    fn test_get_next_sqrt_price_from_amount1_underflow_returns_error() {
+        let result = get_next_sqrt_price_from_output(
+            U256::from(1u64),
+            1,
+            U256::from(10u64).pow(U256::from(30u64)),
+            true,
+        );
+        assert!(matches!(result, Err(SimulationError::FatalError(_))));
     }
 }
