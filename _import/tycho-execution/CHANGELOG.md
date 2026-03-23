@@ -1,3 +1,22 @@
+## [0.166.0](https://github.com/propeller-heads/tycho-execution/compare/0.165.1...0.166.0) (2026-03-23)
+
+
+### Features
+
+* Add release and notify workflows ([560c868](https://github.com/propeller-heads/tycho-execution/commit/560c868a3de31fdbf57be57f46a12d3481ecc8f2))
+* Rename tycho-contracts -> tycho-execution ([ca197f1](https://github.com/propeller-heads/tycho-execution/commit/ca197f190c6f2f03d1e24aa66b0615e56dbe24c1))
+
+
+### Bug Fixes
+
+* Fix cargo audit ([bf953d0](https://github.com/propeller-heads/tycho-execution/commit/bf953d02ea92c3d9e35c256ab0db7ec5bd8b6e6c))
+* trigger 0.166.0 release ([#87](https://github.com/propeller-heads/tycho-execution/issues/87)) ([7c1be4e](https://github.com/propeller-heads/tycho-execution/commit/7c1be4e4415da88d67d47f62a5cedacbca68e113))
+
+
+### Reverts
+
+* Revert "chore(release): 0.45.0 [skip ci]" (#85) ([7181564](https://github.com/propeller-heads/tycho-execution/commit/7181564b0214b2d11c95cbdc9aa7b9343e564d4a)), closes [#85](https://github.com/propeller-heads/tycho-execution/issues/85)
+
 ## [0.44.0](https://github.com/propeller-heads/tycho-execution/compare/0.43.0...0.44.0) (2026-03-20)
 
 
