@@ -987,6 +987,9 @@ impl FeePriceGetter for EthereumRpcClient {
 /// Some RPC nodes return `"storageKeys": null` instead of `"storageKeys": []` in access list
 /// entries, which violates the EIP-2930 spec. This normalizes null to an empty array before
 /// deserializing into alloy's `AccessListResult`.
+///
+/// TODO: Remove this workaround once geth >=1.17.2 (or whichever release includes
+/// https://github.com/ethereum/go-ethereum/pull/33976) is deployed on all our RPC nodes.
 fn normalize_access_list_result(
     mut value: Value,
 ) -> Result<AccessListResult, RpcError<TransportErrorKind>> {
