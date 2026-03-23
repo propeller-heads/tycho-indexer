@@ -1,6 +1,5 @@
 use crate::{
     abi::party_pool,
-    contract_bytecode,
     params::{decode_addrs, encode_addr, encode_addrs, Params},
     pool_factories,
 };
@@ -197,7 +196,7 @@ fn map_protocol_changes(
     param_string: String,
     block: eth::v2::Block,
     new_components: BlockTransactionProtocolComponents,
-    killed_components: BlockTransactionProtocolComponents,
+    _killed_components: BlockTransactionProtocolComponents, // PC delete events not yet supported
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
@@ -207,37 +206,6 @@ fn map_protocol_changes(
     // We merge contract changes by transaction (identified by transaction index)
     // making it easy to sort them at the very end.
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
-
-    // Emit the bytecode for pool implementation contracts in the first block.
-    // NOTE: I tried setting components in the ProtocolComponent and also sending entrypoints, but
-    // always received an error when the block tried to flush to DB that the Account was missing
-    // for an implementation contract. Our pool creation transaction is also the transaction that
-    // funds the pool, so maybe there is a race condition on the creation of the Accounts?
-    // As a workaround, we hardcoded the deployed bytecode into contract_bytecode.rs and emit the
-    // contract update explicitly on the first discovery of any pool creation.
-    if block.number == params.start_block {
-        // Get the first transaction to attach the impl contracts to
-        if new_components.tx_components.is_empty() {
-            return Err(anyhow::anyhow!(
-                "No new components found in start block {}. At least one pool must be created in \
-                the start block to emit implementation contract bytecode.",
-                params.start_block
-            ));
-        }
-        if let Some(first_tx_component) = new_components.tx_components.first() {
-            let tx = first_tx_component.tx.as_ref().unwrap();
-            let builder = transaction_changes
-                .entry(tx.index)
-                .or_insert_with(|| TransactionChangesBuilder::new(tx));
-
-            // Add extra contracts
-            for (address, bytecode) in contract_bytecode::LIQP_EXTRA_CONTRACTS.iter() {
-                let mut contract_change = InterimContractChange::new(address, true);
-                contract_change.set_code(bytecode);
-                builder.add_contract_changes(&contract_change);
-            }
-        }
-    }
 
     // Aggregate newly created components per tx
     new_components
@@ -260,6 +228,7 @@ fn map_protocol_changes(
         });
 
     // Aggregate killed components per tx
+    /* Protocol component deletion events not yet supported
     killed_components
         .tx_components
         .iter()
@@ -278,6 +247,7 @@ fn map_protocol_changes(
                     builder.add_protocol_component(component);
                 });
         });
+     */
 
     // Aggregate absolute balances per transaction.
     aggregate_balances_changes(balance_store, deltas)
@@ -304,7 +274,11 @@ fn map_protocol_changes(
             // contains a value, that contract is of relevance.
             components_store
                 .get_last(addr_str)
-                .is_some()
+                .is_some() ||
+                addr == params.mint_impl.as_slice() ||
+                addr == params.swap_impl.as_slice() ||
+                addr == params.planner.as_slice() ||
+                addr == params.info.as_slice()
         },
         &mut transaction_changes,
     );

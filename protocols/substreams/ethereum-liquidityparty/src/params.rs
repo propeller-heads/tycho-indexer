@@ -3,7 +3,6 @@ use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 struct StringParams {
-    start_block: String,
     planner: String,
     info: String,
     mint_impl: String,
@@ -17,7 +16,6 @@ impl StringParams {
 }
 
 pub(crate) struct Params {
-    pub start_block: u64,
     pub planner: Vec<u8>,
     #[allow(dead_code)] // We keep the unused info field for future pricing/view operations
     pub info: Vec<u8>,
@@ -67,7 +65,6 @@ impl Params {
         let params = StringParams::parse(input)?;
 
         Ok(Self {
-            start_block: params.start_block.parse()?,
             planner: decode_addr(&params.planner)?,
             info: decode_addr(&params.info)?,
             mint_impl: decode_addr(&params.mint_impl)?,
