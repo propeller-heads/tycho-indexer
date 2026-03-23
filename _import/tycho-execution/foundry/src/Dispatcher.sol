@@ -100,6 +100,7 @@ contract Dispatcher is TransferManager {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
             tstore(_IS_FIRST_SWAP_SLOT, isFirstSwap)
             tstore(_IS_SPLIT_SWAP_SLOT, isSplitSwap)
+            tstore(_INPUT_TRANSFER_PERFORMED_SLOT, 0)
         }
 
         // slither-disable-next-line calls-loop
@@ -175,10 +176,17 @@ contract Dispatcher is TransferManager {
 
         // Cyclic swap detection: when tokenIn == tokenOut (e.g. grouped UniswapV4
         // swap USDC -> WETH -> USDC), we must check initial balance before any
-        // transfer and add the input amount back when needed.
+        // transfer and add the input amount back when needed. Also check that the
+        // input transfer is actually performed, to avoid any delta manipulation
+        // attacks.
         if (isCyclic && measureAt == inputSource) {
-            // Add amount before subtracting initial balance to avoid underflow
-            balanceAfterSwap += amount;
+            bool inputTransferPerformed;
+            assembly {
+                inputTransferPerformed := tload(_INPUT_TRANSFER_PERFORMED_SLOT)
+            }
+            if (inputTransferPerformed) {
+                balanceAfterSwap += amount;
+            }
         }
         amountOut = balanceAfterSwap - balanceBeforeSwap;
 

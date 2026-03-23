@@ -21,24 +21,6 @@ import {
 import "./TychoRouterTestSetup.sol";
 import {WethExecutor} from "../src/executors/WethExecutor.sol";
 
-// Fake Slipstream pool that accepts any swap call and does nothing.
-// Used to test the cyclic vault drain exploit.
-contract FakeSlipstreamPool {
-    function swap(
-        address, /* recipient */
-        bool, /* zeroForOne */
-        int256, /* amountSpecified */
-        uint160, /* sqrtPriceLimitX96 */
-        bytes calldata /* data */
-    )
-        external
-        pure
-        returns (int256, int256)
-    {
-        return (0, 0);
-    }
-}
-
 /**
  * @title TychoRouterUsingVaultTest
  * @notice Test cases for different swap scenarios relating to the Vault
@@ -672,10 +654,8 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
     function testCyclicVaultDrainIsBlocked() public {
         // Attacker calls singleSwapUsingVault with tokenIn == tokenOut and a
-        // fake pool that does nothing. Without the fix, the cyclic-correction
-        // in Dispatcher produces a phantom amountOut that gets credited to the
-        // attacker's vault for free. The fix in _settleOutput checks that the
-        // delta is <= -amountIn after settling, and reverts if it isn't.
+        // fake pool that does nothing. The dispatcher should correctly report a
+        // 0 swap output and the router should fail with NegativeSlippage.
         uint256 victimDeposit = 1000e6;
         uint256 stealAmount = 500e6;
 
@@ -693,10 +673,12 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         bytes memory swapData =
             encodeSingleSwap(address(slipstreamsExecutor), protocolData);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
-        );
         vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, 0, stealAmount
+            )
+        );
         tychoRouter.singleSwapUsingVault(
             stealAmount,
             USDC_ADDR,
@@ -706,9 +688,5 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             noClientFee(),
             swapData
         );
-
-        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 0);
-        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(USDC_ADDR))), 0);
-        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), victimDeposit);
     }
 }

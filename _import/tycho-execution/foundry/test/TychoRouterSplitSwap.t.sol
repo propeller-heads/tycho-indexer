@@ -7,6 +7,7 @@ import {
     ClientFeeParams
 } from "@src/TychoRouter.sol";
 import "./TychoRouterTestSetup.sol";
+import "./protocols/UniswapV4Utils.sol";
 import {Vault__UnexpectedNonZeroCount} from "@src/Vault.sol";
 
 import {
@@ -801,5 +802,112 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         assertEq(amountOut, usdcBalance);
         assertGt(usdcBalance, 0);
+    }
+
+    function testSplitSwapCyclicPoolLevel() public {
+        // Split swap where the WETH leg is split between a fake Slipstreams pool
+        // (cyclic, does nothing) and a real USV4 grouped cycle. Such a cycle is
+        // invalid and unsupported by our router.
+        //
+        //                         ┌─(Slipstreams, fake 60%)─┐
+        // USDC ──(USV2)──> WETH ──┤                         ├──> WETH
+        //                         └─(USV4 cycle, 40%)───────┘
+        //
+        // Delta Accounting (approximate values):
+        // First swap: - 3000 USDC  + 1.5 WETH
+        // Second swap: 0 output. Delta accounting remains + 1.5 WETH
+        // Third swap: - 0.6 WETH + 0.59 WETH
+        //
+        // WETH delta accounting at the end of swaps: 1.49 WETH
+
+        // Real WETH balance in the router: 1.49 WETH
+        // _settleOutput transfers 0.59 WETH to vault. Finally the delta accounting
+        // is 0.90 WETH.
+        //
+        // Finalize output check correctly detects two nonzero deltas:
+        // 1. -3000 USDC
+        // 2. 0.90 WETH
+
+        uint256 amountIn = 3000 * 10 ** 6;
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        FakeSlipstreamPool fakePool = new FakeSlipstreamPool();
+
+        // Leg 1: USDC -> WETH via USV2 (100%)
+        bytes memory usv2Data =
+            encodeUniswapV2Swap(USDC_WETH_USV2, USDC_ADDR, WETH_ADDR);
+
+        // Leg 2: WETH -> WETH via fake Slipstreams (50%)
+        bytes memory slipstreamsData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            bytes3(0), // tickSpacing
+            address(fakePool),
+            uint8(1) // zeroForOne
+        );
+
+        // Leg 3: WETH -> WETH via real USV4 cycle (WETH->USDC->WETH)
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](2);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDC_ADDR,
+            fee: uint24(500),
+            tickSpacing: int24(10),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        pools[1] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WETH_ADDR,
+            fee: uint24(500),
+            tickSpacing: int24(10),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        bytes memory usv4Data =
+            UniswapV4Utils.encodeExactInput(WETH_ADDR, WETH_ADDR, true, pools);
+
+        bytes[] memory swaps = new bytes[](3);
+        // USDC -> WETH, 100%
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0), // 100% (remainder)
+            address(usv2Executor),
+            usv2Data
+        );
+        // WETH -> WETH via fake Slipstreams, 50%
+        swaps[1] = encodeSplitSwap(
+            uint8(1),
+            uint8(1),
+            (0xffffff * 60) / 100,
+            address(slipstreamsExecutor),
+            slipstreamsData
+        );
+        // WETH -> WETH via USV4 cycle, remainder
+        swaps[2] = encodeSplitSwap(
+            uint8(1), uint8(1), uint24(0), address(usv4Executor), usv4Data
+        );
+
+        // Deposit USDC into vault to fund the swap
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+        tychoRouter.deposit(USDC_ADDR, amountIn);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedNonZeroCount.selector, uint256(2)
+            )
+        );
+        tychoRouter.splitSwapUsingVault(
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1, // min amount out
+            2, // nTokens
+            tychoRouterAddr, // output to vault
+            noClientFee(),
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
     }
 }

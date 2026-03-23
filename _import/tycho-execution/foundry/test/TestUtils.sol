@@ -26,3 +26,20 @@ contract TestUtils is Test {
         revert("Test calldata not found");
     }
 }
+
+// Fake Slipstream pool that accepts any swap call and does nothing.
+contract FakeSlipstreamPool {
+    function swap(
+        address, /* recipient */
+        bool, /* zeroForOne */
+        int256, /* amountSpecified */
+        uint160, /* sqrtPriceLimitX96 */
+        bytes calldata /* data */
+    )
+        external
+        returns (int256, int256)
+    {
+        return (0, 0);
+    }
+}
+
