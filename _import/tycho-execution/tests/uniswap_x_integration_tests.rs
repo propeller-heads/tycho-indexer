@@ -3,7 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 use alloy::{hex::encode, primitives::Address, sol_types::SolValue};
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, write_calldata_to_file},

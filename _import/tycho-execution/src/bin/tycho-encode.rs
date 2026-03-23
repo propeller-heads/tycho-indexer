@@ -6,7 +6,7 @@ use std::{
 use alloy::sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,

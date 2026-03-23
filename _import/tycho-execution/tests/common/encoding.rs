@@ -7,7 +7,7 @@ use alloy::{
 };
 use num_bigint::BigUint;
 use tycho_common::Bytes;
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle,

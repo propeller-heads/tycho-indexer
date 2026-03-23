@@ -7,7 +7,7 @@ use tycho_common::{
     models::{protocol::ProtocolComponent, token::Token, Chain},
     Bytes,
 };
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     evm::{
         testing_utils::MockRFQState,
         utils::{biguint_to_u256, write_calldata_to_file},
