@@ -1,3 +1,11 @@
+## [0.152.2](https://github.com/propeller-heads/tycho-indexer/compare/0.152.1...0.152.2) (2026-03-23)
+
+
+### Bug Fixes
+
+* resolve cargo audit vulnerabilities ([04fa9eb](https://github.com/propeller-heads/tycho-indexer/commit/04fa9ebebc1c5cc4b5669afa035f2e09748708b2))
+* resolve cargo audit vulnerabilities ([#883](https://github.com/propeller-heads/tycho-indexer/issues/883)) ([7a4fb8f](https://github.com/propeller-heads/tycho-indexer/commit/7a4fb8f6c500116087e664ae63ab3988594e00fe))
+
 ## [0.152.1](https://github.com/propeller-heads/tycho-indexer/compare/0.152.0...0.152.1) (2026-03-20)
 
 
