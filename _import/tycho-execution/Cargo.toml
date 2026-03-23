@@ -1,9 +1,9 @@
 [package]
-name = "tycho-contracts"
-version = "0.44.0"
+name = "tycho-execution"
+version = "0.166.0"
 edition = "2021"
 description = "Provides tools for encoding and executing swaps against Tycho router and protocol executors."
-repository = "https://github.com/propeller-heads/tycho-contracts"
+repository = "https://github.com/propeller-heads/tycho-execution"
 homepage = "https://www.propellerheads.xyz/tycho"
 documentation = "https://docs.propellerheads.xyz/tycho"
 keywords = ["propellerheads", "solver", "defi", "dex", "mev"]
@@ -44,7 +44,7 @@ async-trait = { version = "0.1.88", optional = true }
 
 [dev-dependencies]
 rstest = "0.24.0"
-tycho-contracts = { path = "../tycho-contracts", features = ["test-utils"] }
+tycho-execution = { path = ".", features = ["test-utils"] }
 
 [features]
 default = ["evm"]

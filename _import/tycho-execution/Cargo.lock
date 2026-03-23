@@ -4972,8 +4972,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-contracts"
-version = "0.44.0"
+name = "tycho-execution"
+version = "0.166.0"
 dependencies = [
  "alloy",
  "async-trait",
@@ -4990,7 +4990,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tycho-common",
- "tycho-contracts",
+ "tycho-execution",
  "typetag",
 ]
 

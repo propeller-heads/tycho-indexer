@@ -4,7 +4,7 @@ use std::{collections::HashMap, str::FromStr};
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
     models::{default_token, Solution, Swap, UserTransferType},
 };
