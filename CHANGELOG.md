@@ -1,3 +1,11 @@
+## [0.152.3](https://github.com/propeller-heads/tycho-indexer/compare/0.152.2...0.152.3) (2026-03-23)
+
+
+### Bug Fixes
+
+* handle null storageKeys in eth_createAccessList response ([586ec92](https://github.com/propeller-heads/tycho-indexer/commit/586ec92e6e5726db0faf1662e44503004ffd0014))
+* handle null storageKeys in eth_createAccessList response ([#881](https://github.com/propeller-heads/tycho-indexer/issues/881)) ([689a285](https://github.com/propeller-heads/tycho-indexer/commit/689a2858ce0ce37c412bef12b5a22ee63cad8738))
+
 ## [0.152.2](https://github.com/propeller-heads/tycho-indexer/compare/0.152.1...0.152.2) (2026-03-23)
 
 
