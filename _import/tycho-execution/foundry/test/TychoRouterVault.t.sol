@@ -21,6 +21,24 @@ import {
 import "./TychoRouterTestSetup.sol";
 import {WethExecutor} from "../src/executors/WethExecutor.sol";
 
+// Fake Slipstream pool that accepts any swap call and does nothing.
+// Used to test the cyclic vault drain exploit.
+contract FakeSlipstreamPool {
+    function swap(
+        address, /* recipient */
+        bool, /* zeroForOne */
+        int256, /* amountSpecified */
+        uint160, /* sqrtPriceLimitX96 */
+        bytes calldata /* data */
+    )
+        external
+        pure
+        returns (int256, int256)
+    {
+        return (0, 0);
+    }
+}
+
 /**
  * @title TychoRouterUsingVaultTest
  * @notice Test cases for different swap scenarios relating to the Vault
@@ -650,5 +668,47 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Router balance reflects vault balance
         uint256 routerDaiAfter = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
         assertEq(routerDaiAfter - routerDaiBefore, expectedAmountOut);
+    }
+
+    function testCyclicVaultDrainIsBlocked() public {
+        // Attacker calls singleSwapUsingVault with tokenIn == tokenOut and a
+        // fake pool that does nothing. Without the fix, the cyclic-correction
+        // in Dispatcher produces a phantom amountOut that gets credited to the
+        // attacker's vault for free. The fix in _settleOutput checks that the
+        // delta is <= -amountIn after settling, and reverts if it isn't.
+        uint256 victimDeposit = 1000e6;
+        uint256 stealAmount = 500e6;
+
+        deal(USDC_ADDR, BOB, victimDeposit);
+        vm.startPrank(BOB);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, victimDeposit);
+        tychoRouter.deposit(USDC_ADDR, victimDeposit);
+        vm.stopPrank();
+
+        FakeSlipstreamPool fakePool = new FakeSlipstreamPool();
+
+        bytes memory protocolData = abi.encodePacked(
+            USDC_ADDR, USDC_ADDR, bytes3(0), address(fakePool), uint8(1)
+        );
+        bytes memory swapData =
+            encodeSingleSwap(address(slipstreamsExecutor), protocolData);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(Vault__UnexpectedInputDelta.selector, 0)
+        );
+        vm.prank(ALICE);
+        tychoRouter.singleSwapUsingVault(
+            stealAmount,
+            USDC_ADDR,
+            USDC_ADDR,
+            stealAmount,
+            tychoRouterAddr,
+            noClientFee(),
+            swapData
+        );
+
+        assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 0);
+        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(USDC_ADDR))), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), victimDeposit);
     }
 }

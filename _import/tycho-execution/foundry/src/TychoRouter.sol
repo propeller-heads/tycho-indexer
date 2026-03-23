@@ -24,6 +24,7 @@ import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {TransferManager} from "./TransferManager.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
+import {Vault__UnexpectedInputDelta} from "./Vault.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -783,6 +784,17 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             // out tokens are still in the Router and need to be sent to the final receiver
             // or credited to the vault
             if (receiver == address(this)) {
+                // For vault-funded cyclic swaps (tokenIn == tokenOut), after
+                // settling the output the remaining delta must cover the full
+                // input. A real pool deducts the input via _transfer or
+                // callback, leaving delta <= -amountIn. A fake pool that does
+                // nothing leaves delta == 0, which this check catches.
+                if (tokenIn == tokenOut && _getUseVault()) {
+                    int256 remainingDelta = _getDelta(tokenOut);
+                    if (remainingDelta > -int256(amountIn)) {
+                        revert Vault__UnexpectedInputDelta(remainingDelta);
+                    }
+                }
                 _creditVault(msg.sender, tokenOut, amountOut);
             } else {
                 // the amountOut might actually be lower at this point (if fee/rebasing token)
