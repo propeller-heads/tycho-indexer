@@ -32,8 +32,8 @@ The `Swap` struct has the following attributes:
 | Attribute                 |              Type              |                                                        Description                                                        |
 |---------------------------|:------------------------------:|:-------------------------------------------------------------------------------------------------------------------------:|
 | **component**             |      `ProtocolComponent`       |                                            Protocol component from Tycho core                                             |
-| **token\_in**             |            `Token`             |                                               Token you provide to the pool                                               |
-| **token\_out**            |            `Token`             |                                              Token you expect from the pool                                               |
+| **token\_in**             |            `Bytes`             |                                          Address of the token you provide to the pool                                          |
+| **token\_out**            |            `Bytes`             |                                         Address of the token you expect from the pool                                          |
 | **split**                 |             `f64`              |                 Percentage of the amount in to be swapped in this operation (for example, 0.5 means 50%)                  |
 | **user\_data**            |        `Option<Bytes>`         |                                        Optional user data to be passed to encoding                                        |
 | **protocol\_state**       | `Option<Arc<dyn ProtocolSim>>` |                                     Optional protocol state used to perform the swap                                      |
@@ -380,24 +380,8 @@ echo '{
         "creation_tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
         "created_at": "2024-01-01T00:00:00"
       },
-      "token_in": {
-        "address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
-        "symbol": "DAI",
-        "decimals": 18,
-        "tax": 0,
-        "gas": [],
-        "chain": "ethereum",
-        "quality": 100
-      },
-      "token_out": {
-        "address": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-        "symbol": "WETH",
-        "decimals": 18,
-        "tax": 0,
-        "gas": [],
-        "chain": "ethereum",
-        "quality": 100
-      },
+      "token_in": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "token_out": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       "split": 0.0
     }
   ]

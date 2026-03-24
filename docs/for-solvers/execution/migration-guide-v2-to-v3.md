@@ -91,18 +91,6 @@ The `UserTransferType::None` variant has been renamed to `UserTransferType::UseV
 
 #### Swap Struct
 
-**`token_in` and `token_out` are now `Token` instead of `Bytes`:**
-
-`Token` includes the address, decimals, symbol, and transfer tax information.
-
-```rust
-// V2
-let swap = Swap::new(component, token_in_address, token_out_address);
-
-// V3
-let swap = Swap::new(component, token_in, token_out);  // Token objects
-```
-
 **Builder methods renamed** (added `with_` prefix for consistency):
 
 | V2                             | V3                                  |
