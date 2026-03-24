@@ -1,5 +1,5 @@
 pub mod approvals;
-mod constants;
+pub mod constants;
 pub mod encoder_builders;
 mod encoding_utils;
 mod group_swaps;

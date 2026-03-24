@@ -1,9 +1,32 @@
-use std::{collections::HashSet, sync::LazyLock};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::LazyLock,
+};
+
+use tycho_common::{models::Chain, Bytes};
+
+use crate::encoding::errors::EncodingError;
 
 pub const DEFAULT_EXECUTORS_JSON: &str = include_str!("../../../config/executor_addresses.json");
 pub const DEFAULT_ROUTERS_JSON: &str = include_str!("../../../config/router_addresses.json");
 pub const PROTOCOL_SPECIFIC_CONFIG: &str =
     include_str!("../../../config/protocol_specific_addresses.json");
+
+/// Default router addresses keyed by chain, parsed from `config/router_addresses.json`.
+pub static DEFAULT_ROUTER_ADDRESSES: LazyLock<HashMap<Chain, Bytes>> = LazyLock::new(|| {
+    serde_json::from_str(DEFAULT_ROUTERS_JSON).expect("valid router_addresses.json")
+});
+
+/// Returns the default Tycho router address for `chain`, or an error if none is configured.
+pub fn get_router_address(chain: &Chain) -> Result<&'static Bytes, EncodingError> {
+    DEFAULT_ROUTER_ADDRESSES
+        .get(chain)
+        .ok_or_else(|| {
+            EncodingError::FatalError(format!(
+                "No default router address found for chain {chain:?}"
+            ))
+        })
+}
 
 /// The number of blocks in the future for which to fetch Angstrom Attestations
 ///
