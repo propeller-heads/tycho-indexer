@@ -1,3 +1,12 @@
+## [0.166.1](https://github.com/propeller-heads/tycho-execution/compare/0.166.0...0.166.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* Block cyclic vault drain via fake pool ([75184f2](https://github.com/propeller-heads/tycho-execution/commit/75184f207cdcf3551a8de1ec46d48b3f7992826d))
+* Dispatcher phantom output reporting for TransferType.None ([5554488](https://github.com/propeller-heads/tycho-execution/commit/5554488106a3f92ccebbc9041632ae49092fe8d7))
+* Fix cargo audit ([cec0e5a](https://github.com/propeller-heads/tycho-execution/commit/cec0e5a59a9dcd467866aae6cfef06aefa99af98))
+
 ## [0.166.0](https://github.com/propeller-heads/tycho-execution/compare/0.165.1...0.166.0) (2026-03-23)
 
 
