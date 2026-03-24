@@ -6,6 +6,10 @@ description: Execute swaps through any protocol.
 
 <figure><img src="../../.gitbook/assets/image (8).png" alt=""><figcaption></figcaption></figure>
 
+{% hint style="danger" %}
+**Router V3 is still undergoing an audit.** Use at your own discretion. Funds stored in the router (including vault deposits) might be lost.
+{% endhint %}
+
 Tycho Execution provides tools for **encoding and executing swaps** against Tycho Router and protocol executors. It is divided into two main components:
 
 * **Encoding**: A Rust crate that encodes swaps and generates calldata for execution.
@@ -47,6 +51,10 @@ More on the Vault [here](vault.md).
 
 ## Security and Audits
 
-The Tycho Router has been audited by [Maximilian Krüger](https://snd.github.io/). We continuously work to improve security and welcome feedback from the community. The current audits are [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/docs/audits).
+The Tycho Router V2 has been audited by [Maximilian Krüger](https://snd.github.io/). Past audits are [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/docs/audits).
+
+{% hint style="danger" %}
+**Router V3 is still undergoing an audit.** Use at your own discretion. Funds stored in the router (including vault deposits) might be lost.
+{% endhint %}
 
 If you discover potential security issues or have suggestions for improvements, please reach out through our official channels.
