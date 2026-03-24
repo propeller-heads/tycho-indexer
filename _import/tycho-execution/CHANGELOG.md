@@ -1,3 +1,10 @@
+## [0.167.0](https://github.com/propeller-heads/tycho-execution/compare/0.166.2...0.167.0) (2026-03-24)
+
+
+### Features
+
+* Change Swap token_in/token_out from Token to Bytes ([#89](https://github.com/propeller-heads/tycho-execution/issues/89)) ([d9a4e0e](https://github.com/propeller-heads/tycho-execution/commit/d9a4e0e0eff2269152179ec50f022a575a815679))
+
 ## [0.166.2](https://github.com/propeller-heads/tycho-execution/compare/0.166.1...0.166.2) (2026-03-24)
 
 
