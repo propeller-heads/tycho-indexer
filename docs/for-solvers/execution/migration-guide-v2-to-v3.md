@@ -20,7 +20,7 @@ This guide covers the breaking changes between V2 and V3 from the perspective of
 | Field                                 | Replacement                                                                                                                                                            |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `native_action: Option<NativeAction>` | No longer needed. The encoder automatically inserts WETH wrap/unwrap swaps (see [Wrapping and Unwrapping](encoding/native-token-handling-wrapping-and-unwrapping.md)). |
-| `exact_out: bool`                     | Only exact in was supported already. This field was removed for simplicity.                                                                                            |
+| `exact_out: bool`                     | Only exact-in was ever supported. Removed for simplicity.                                                                                            |
 
 **New fields:**
 
@@ -90,18 +90,6 @@ let solution = Solution::new(/* ... */)
 The `UserTransferType::None` variant has been renamed to `UserTransferType::UseVaultsFunds`, reflecting the new vault-based architecture.
 
 #### Swap Struct
-
-**`token_in` and `token_out` are now `Token` instead of `Bytes`:**
-
-`Token` includes the address, decimals, symbol, and transfer tax information.&#x20;
-
-```rust
-// V2
-let swap = Swap::new(component, token_in_address, token_out_address);
-
-// V3
-let swap = Swap::new(component, token_in, token_out);  // Token objects
-```
 
 **Builder methods renamed** (added `with_` prefix for consistency):
 
@@ -223,7 +211,7 @@ struct ClientFeeParams {
 }
 ```
 
-When you are constructing the outer calldata yourself (as recommended), you must encode this struct as part of the function arguments. Even if you are not charging fees, you still need to pass this parameter (with zero values).
+When constructing calldata yourself (recommended), encode this struct as part of the function arguments. Even if you are not charging fees, you must pass this parameter with zero values.
 
 #### Vault Integration
 
@@ -237,11 +225,11 @@ For more see [Vault](vault.md).
 
 #### No More Wrap/Unwrap Flags
 
-The router no longer accepts `wrap` or `unwrap` boolean flags. If your calldata construction includes these parameters, remove them. Wrapping and unwrapping are handled by the WETH executor as part of the swap path - see [native-token-handling-wrapping-and-unwrapping.md](encoding/native-token-handling-wrapping-and-unwrapping.md "mention").
+The router no longer accepts `wrap` or `unwrap` boolean flags. If your calldata construction includes these parameters, remove them. The WETH executor handles wrapping and unwrapping as part of the swap path. See [native-token-handling-wrapping-and-unwrapping.md](encoding/native-token-handling-wrapping-and-unwrapping.md "mention").
 
 #### Method Variants
 
-Each swap strategy (single, sequential, split) now has three variants instead of two and the UsingVault variant was introduced:
+Each swap strategy (single, sequential, split) now has three variants instead of two, with a new UsingVault variant:
 
 | V2                       | V3                          |
 | ------------------------ | --------------------------- |

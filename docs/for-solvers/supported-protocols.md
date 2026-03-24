@@ -81,4 +81,4 @@ Angstrom requires querying their [API for attestations](https://docs.angstrom.xy
 **Required configuration**:
 
 * Set the `ANGSTROM_API_KEY` environment variable (request one from the Angstrom team directly)
-* Set `ANGSTROM_BLOCKS_IN_FUTURE` environment variable (if you want to override the [default value](https://github.com/propeller-heads/tycho-execution/blob/1d9ef9ed90a096639af66920a592f48ad14a802a/src/encoding/evm/constants.rs#L13) of 5 blocks). **Important trade-off**: The more blocks you fetch, the more calldata will be sent to the Tycho Router, making execution more gas expensive.&#x20;
+* Set `ANGSTROM_BLOCKS_IN_FUTURE` environment variable (if you want to override the [default value](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src/encoding/evm/constants.rs#L13) of 5 blocks). **Important trade-off**: The more blocks you fetch, the more calldata will be sent to the Tycho Router, making execution more gas expensive.&#x20;

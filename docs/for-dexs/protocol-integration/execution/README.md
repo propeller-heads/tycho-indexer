@@ -19,14 +19,14 @@ fn encode_swap(
 ) -> Result<Vec<u8>, EncodingError>;
 ```
 
-This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/main/src/encoding/evm/swap_encoder).
+This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src/encoding/evm/swap_encoder).
 
-If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/protocol_specific_addresses.json).
+If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/protocol_specific_addresses.json).
 
 After implementing your `SwapEncoder` , you need to:
 
-* Add your protocol with a placeholder address in: [config/executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/executor_addresses.json) and [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/test_executor_addresses.json)
-* Add your protocol in the [`SwapEncoderRegister`](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/swap_encoder/swap_encoder_registry.rs#L95) (if you want it to be one of the default protocols)
+* Add your protocol with a placeholder address in: [config/executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/executor_addresses.json) and [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/test_executor_addresses.json)
+* Add your protocol in the [`SwapEncoderRegister`](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src/encoding/evm/swap_encoder/swap_encoder_registry.rs#L38) (if you want it to be one of the default protocols)
 
 <details>
 
@@ -86,7 +86,7 @@ Called by the Dispatcher via `staticcall` before each swap to determine how inpu
 * `receiver`: Where tokens should be sent (typically the pool address or the router).
 * `tokenIn`: The input token address.
 * `tokenOut`: The output token address.
-* `outputToRouter`: Whether this protocol automatically transfers the output token back to the caller (the TychoRouter). This is necessary for our Dispatcher to know whether it needs to manually transfer the token to the intended swap receiver.
+* `outputToRouter`: Whether the protocol automatically sends the output token back to the TychoRouter. The Dispatcher uses this to decide whether it needs to transfer the token to the intended receiver.
 
 `transferType`, `receiver` and `outputToRouter` must be **hardcoded** per-executor based on the protocol's requirements — they are not encodable in calldata.
 
@@ -195,7 +195,7 @@ This ensures compatibility with your protocol's on-chain contracts while maintai
 
 ## Fee Tokens
 
-Thanks to balance checks performed before and after input and output token transfers, fee-on-transfer tokens and rebasing tokens should be fully supported on most protocols. Problems will only arise for Uniswap V3-like protocols, which require declaration of the input swap amount when calling the protocol's swap function, while only performing the input token transfer in the callback.&#x20;
+Balance checks before and after token transfers mean fee-on-transfer tokens and rebasing tokens work on most protocols. The exception is Uniswap V3-like protocols, which require declaring the input swap amount when calling swap but only transfer the input token in the callback.
 
 ## Testing
 
@@ -220,7 +220,7 @@ These helpers save and load the calldata to/from `calldata.txt`.
 
 * In `tests/protocol_integration_tests.rs`, write a Rust test that encodes a single swap and saves the calldata using `write_calldata_to_file()`.
 * In `TychoRouterTestSetup`, deploy your new executor and add it to executors list in `deployExecutors`.
-* Run the setup to retrieve your executor’s deployed address and add it to [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/main/config/test_executor_addresses.json).
+* Run the setup to retrieve your executor’s deployed address and add it to [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/test_executor_addresses.json).
 * Create a new Solidity test contract that inherits from `TychoRouterTestSetup`. For example:
 
 ```solidity
@@ -241,8 +241,8 @@ These tests ensure your integration works end-to-end within Tycho’s architectu
 
 Once your implementation is approved:
 
-1. **Deploy the executor contract** on the appropriate network (more [here](https://github.com/propeller-heads/tycho-execution/blob/main/foundry/scripts/README.md)).
+1. **Deploy the executor contract** on the appropriate network (more [here](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/scripts/README.md)).
 2. **Contact us** to whitelist the new executor address on our main router contract.
 3. **Update the configuration** by adding the new executor address to `executor_addresses.json` and register the `SwapEncoder` within the `SwapEncoderBuilder` .
 
-By following these steps, your protocol will be fully integrated with Tycho, enabling it to execute swaps seamlessly.
+By following these steps, your protocol will be fully integrated with Tycho.
