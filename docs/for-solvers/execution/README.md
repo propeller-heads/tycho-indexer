@@ -37,9 +37,9 @@ Tycho also supports traditional ERC20 approvals. In this model, you explicitly c
 
 ### Using the Vault
 
-The TychoRouter includes a built-in vault ([ERC6909](https://eips.ethereum.org/EIPS/eip-6909)) that allows users to deposit, hold, and withdraw tokens directly in the router contract. The vault tracks per-user balances, meaning your tokens are only accessible by you.&#x20;
+The TychoRouter includes a built-in vault ([ERC6909](https://eips.ethereum.org/EIPS/eip-6909)) that lets you deposit, hold, and withdraw tokens directly in the router contract. The vault tracks per-user balances, so your tokens are only accessible by you.
 
-The router will draw from your deposited balance instead of performing a `transferFrom` on your wallet. This saves gas (no approval or external transfer needed) and enables workflows where fees, proceeds from previous trades, or pre-positioned liquidity can be used directly.&#x20;
+The router draws from your deposited balance instead of performing a `transferFrom` on your wallet. This saves gas (no approval or external transfer needed) and lets you use fees, proceeds from previous trades, or pre-positioned liquidity directly.
 
 Fees earned through the fee-taking system are automatically credited to the fee receiver's vault balance, making them immediately available for future swaps or withdrawals.
 
@@ -47,6 +47,6 @@ More on the Vault [here](vault.md).
 
 ## Security and Audits
 
-The Tycho Router has been audited by [Maximilian Krüger](https://snd.github.io/). We continuously work to improve security and welcome feedback from the community. The current audits are [here](https://github.com/propeller-heads/tycho-execution/tree/main/docs/audits).
+The Tycho Router has been audited by [Maximilian Krüger](https://snd.github.io/). We continuously work to improve security and welcome feedback from the community. The current audits are [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/docs/audits).
 
 If you discover potential security issues or have suggestions for improvements, please reach out through our official channels.

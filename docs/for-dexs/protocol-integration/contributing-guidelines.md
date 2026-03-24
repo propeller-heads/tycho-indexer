@@ -50,7 +50,7 @@ foundryup
 For security purposes, new Executors must have:
 
 * No ERC20 token transfers
-* No `delegatecall`s&#x20;
+* No `delegatecall`s
 * Only perform native ETH transfers if this behaviour is safely reflected in `getTransferData` or `getCallbackTransferData`
 
 #### Running tests <a href="#running-tests" id="running-tests"></a>
