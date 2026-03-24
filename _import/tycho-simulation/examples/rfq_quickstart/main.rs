@@ -728,7 +728,7 @@ fn create_solution(
     expected_amount: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap = Swap::new(component, sell_token.clone(), buy_token.clone())
+    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
         .with_protocol_state(state)
         .with_estimated_amount_in(sell_amount.clone());
 

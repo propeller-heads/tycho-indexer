@@ -96,7 +96,7 @@ fn create_solution(
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut swap = Swap::new(component, sell_token.clone(), buy_token.clone())
+        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
             .with_estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
