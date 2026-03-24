@@ -651,4 +651,42 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         uint256 routerDaiAfter = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
         assertEq(routerDaiAfter - routerDaiBefore, expectedAmountOut);
     }
+
+    function testCyclicVaultDrainIsBlocked() public {
+        // Attacker calls singleSwapUsingVault with tokenIn == tokenOut and a
+        // fake pool that does nothing. The dispatcher should correctly report a
+        // 0 swap output and the router should fail with NegativeSlippage.
+        uint256 victimDeposit = 1000e6;
+        uint256 stealAmount = 500e6;
+
+        deal(USDC_ADDR, BOB, victimDeposit);
+        vm.startPrank(BOB);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, victimDeposit);
+        tychoRouter.deposit(USDC_ADDR, victimDeposit);
+        vm.stopPrank();
+
+        FakeSlipstreamPool fakePool = new FakeSlipstreamPool();
+
+        bytes memory protocolData = abi.encodePacked(
+            USDC_ADDR, USDC_ADDR, bytes3(0), address(fakePool), uint8(1)
+        );
+        bytes memory swapData =
+            encodeSingleSwap(address(slipstreamsExecutor), protocolData);
+
+        vm.prank(ALICE);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, 0, stealAmount
+            )
+        );
+        tychoRouter.singleSwapUsingVault(
+            stealAmount,
+            USDC_ADDR,
+            USDC_ADDR,
+            stealAmount,
+            tychoRouterAddr,
+            noClientFee(),
+            swapData
+        );
+    }
 }
