@@ -80,7 +80,7 @@ The indexer subsystem processes blockchain data, maintains an up-to-date represe
 
 ### Extractor
 
-An Extractor processes incoming blockchain data, either at the block level or at shorter intervals (e.g. mempool data or partial blocks from builders).&#x20;
+An Extractor processes incoming blockchain data, either at the block level or at shorter intervals (e.g. mempool data or partial blocks from builders).
 
 The Extractor:
 
@@ -105,7 +105,7 @@ While the system supports versioning, alternative persistence implementations ar
 
 ### Reorg Buffer
 
-ReorgBuffers store unfinalized blockchain state changes that haven't yet reached sufficient confirmation depth.&#x20;
+ReorgBuffers store unfinalized blockchain state changes that haven't yet reached sufficient confirmation depth.
 
 This approach allows Tycho to:
 
@@ -159,17 +159,11 @@ Tycho offers two approaches for simulating protocol operations:
 
 The Solution represents a complete pathway for moving tokens through one or more protocols to fulfil a trade. It bridges the gap between finding the best trade route and actually executing it on-chain.
 
-The flexible nature of Solutions allows them to represent simple single-hop swaps, sequential multi-hop trades, or split routes where a token amount is distributed across multiple pools simultaneously. You can see more about Solutions [here](for-solvers/execution/encoding.md#solution-struct).
-
-### Transaction
-
-A Transaction turns a Solution into actual blockchain instructions. It contains the specific data needed to execute your trade: which contract to call, what function to use, what parameters to pass, and how much native token to send.
-
-This is the final product that you submit to the blockchain. It handles approvals, native token wrapping/unwrapping, and proper contract interactions so you don't have to. For more about Transactions, see [here](for-solvers/execution/encoding.md#transaction-struct).
+The flexible nature of Solutions allows them to represent simple single-hop swaps, sequential multi-hop trades, or split routes where a token amount is distributed across multiple pools simultaneously. You can see more about Solutions [here](for-solvers/execution/encoding/#solution-struct).
 
 ### Strategy
 
-Strategies define how Solutions are translated into Transactions, offering different tradeoffs between complexity, gas efficiency, and security. They encapsulate the logic for how trades should be executed on-chain.&#x20;
+Strategies define how Solutions are translated into Transactions, offering different tradeoffs between complexity, gas efficiency, and security. They encapsulate the logic for how trades should be executed on-chain.
 
 Tycho currently supports three distinct strategies for executing trades: **Single**, **Sequential**, and **Split**.
 
@@ -192,4 +186,4 @@ The encoder uses the **sequential** strategy when your Solution has multiple seq
 
 With the **Split** strategy, you can encode the most advanced solutions: Trades that involve multiple swaps, where you split amounts either in parallel paths or within stages of a multi-hop route.
 
-For more about split swaps, see [here](for-solvers/execution/encoding.md#split-swaps).
+For more about split swaps, see [here](for-solvers/execution/encoding/#split-swaps).

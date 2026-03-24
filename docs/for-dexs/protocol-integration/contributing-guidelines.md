@@ -45,6 +45,14 @@ curl -L https://foundry.paradigm.xyz | bash
 foundryup
 ```
 
+#### Executors <a href="#running-tests" id="running-tests"></a>
+
+For security purposes, new Executors must have:
+
+* No ERC20 token transfers
+* No `delegatecall`s&#x20;
+* Only perform native ETH transfers if this behaviour is safely reflected in `getTransferData` or `getCallbackTransferData`
+
 #### Running tests <a href="#running-tests" id="running-tests"></a>
 
 ```bash

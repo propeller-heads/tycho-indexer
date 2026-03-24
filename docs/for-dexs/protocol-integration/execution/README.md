@@ -32,7 +32,7 @@ After implementing your `SwapEncoder` , you need to:
 
 <summary>Protocols Supporting Consecutive Swap Optimizations</summary>
 
-As described in the [Swap Group](../../../for-solvers/execution/encoding.md#swap-group) section, our encoding supports protocols which save token transfers between consecutive swaps using systems such as flash accounting. In such cases, as shown in the diagram below using Uniswap V4 as an example, the `SwapEncoder` is still only in charge of encoding a **single swap**. These swaps will then be concatenated at the `StrategyEncoder` level as a single executor call.
+As described in the [Swap Group](../../../for-solvers/execution/encoding/#swap-group) section, our encoding supports protocols which save token transfers between consecutive swaps using systems such as flash accounting. In such cases, as shown in the diagram below using Uniswap V4 as an example, the `SwapEncoder` is still only in charge of encoding a **single swap**. These swaps will then be concatenated at the `StrategyEncoder` level as a single executor call.
 
 Depending on the index of the swap in the swap group, the encoder may be responsible for adding additional information which is not necessary in other swaps of the sequence (see the first swap in the diagram below).
 
@@ -44,33 +44,68 @@ Depending on the index of the swap in the swap group, the encoder may be respons
 
 ## Swap Interface
 
-Every integrated protocol requires its own swap executor contract. This contract must conform to the `IExecutor` interface, allowing it to interact with the protocol and perform swaps by leveraging the `RestrictTransferFrom` contract. See currently implemented executors [here](https://github.com/propeller-heads/tycho-execution/tree/main/foundry/src/executors).
+Every integrated protocol requires its own swap executor contract. This contract must implement the [`IExecutor`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/interfaces/IExecutor.sol) interface. See currently implemented executors [here](https://github.com/propeller-heads/tycho-contracts/tree/main/foundry/src/executors). Please also look through our [Contributing Guidelines for Solidity](../contributing-guidelines.md#changing-solidity-code).
 
-The `IExecutor` interface has the main method:
+The `IExecutor` interface requires three methods:
+
+#### `swap`
 
 ```solidity
-function swap(uint256 givenAmount, bytes calldata data)
+function swap(uint256 amountIn, bytes calldata data, address receiver)
     external
-    payable
-    returns (uint256 calculatedAmount)
-{
+    payable;
 ```
 
-This function:
+Called by the Dispatcher via `delegatecall`. This function:
 
-* Accepts the input amount (`givenAmount`). Note that the input amount is calculated at execution time and not during encoding. This is to account for possible slippage.
-* Processes the swap using the provided calldata (`data`) which is the output of the `SwapEncoder`.
-* Returns the final output amount (`calculatedAmount`).
+* Accepts the input amount (`amountIn`). The input amount is calculated at execution time, not during encoding, to account for possible slippage.
+* Processes the swap using the provided calldata (`data`), which is the output of the `SwapEncoder`.
+* Sends output tokens to `receiver`.
+* Does not return any `amountOut` - for security purposes, this information is automatically detected using balance checks in the `Dispatcher`
 
-Ensure that the implementation supports transferring received tokens to a designated receiver address, either within the swap function or through an additional transfer step.
+**Important:** Executors must not transfer **any** ERC20 tokens. All input and output token transfers are handled by the Dispatcher (via the `TransferManager`). The only exception is native ETH — executors that interact with protocols requiring ETH as `msg.value` (e.g., Fluid, Rocketpool) handle this themselves and declare `TransferNativeInExecutor` as their transfer type.
 
-If the protocol requires token approvals (allowances) before swaps can occur, manage these approvals within the implementation to ensure smooth execution of the swap.
+#### `getTransferData`
 
-Please look through our [Contributing Guidelines for Solidity](../contributing-guidelines.md#changing-solidity-code).
+```solidity
+function getTransferData(bytes calldata data)
+    external
+    payable
+    returns (
+        TransferManager.TransferType transferType,
+        address receiver,
+        address tokenIn,
+        address tokenOut,
+        bool outputToRouter
+    );
+```
+
+Called by the Dispatcher via `staticcall` before each swap to determine how input tokens should be transferred. The executor returns:
+
+* `transferType`: How the protocol expects to receive tokens (see [Token Transfers](./#token-transfers)).
+* `receiver`: Where tokens should be sent (typically the pool address or the router).
+* `tokenIn`: The input token address.
+* `tokenOut`: The output token address.
+* `outputToRouter`: Whether this protocol automatically transfers the output token back to the caller (the TychoRouter). This is necessary for our Dispatcher to know whether it needs to manually transfer the token to the intended swap receiver.
+
+`transferType`, `receiver` and `outputToRouter` must be **hardcoded** per-executor based on the protocol's requirements — they are not encodable in calldata.
+
+#### `fundsExpectedAddress`
+
+```solidity
+function fundsExpectedAddress(bytes calldata data)
+    external
+    returns (address receiver);
+```
+
+Used during [sequential swaps](../../../concepts.md#sequential) to determine where the **previous** swap should send its output tokens. For example, in a route WBTC → USDC → DAI, before executing the first swap, the Dispatcher calls `fundsExpectedAddress` on the second executor to decide where to send USDC.
+
+* Return the pool address if the protocol accepts direct transfers (e.g., Uniswap V2 pools).
+* Return `msg.sender` (the router) if the protocol expects tokens in the router (e.g., callback-based protocols).
 
 ### Callbacks
 
-Some protocols require a callback during swap execution. In these cases, the executor contract must inherit from [`ICallback`](https://github.com/propeller-heads/tycho-execution/blob/main/foundry/interfaces/ICallback.sol) and implement the necessary callback functions.
+Some protocols require a callback during swap execution (e.g., Uniswap V3, Uniswap V4, Balancer V3). In these cases, the executor contract must also implement [`ICallback`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/interfaces/ICallback.sol).
 
 **Required Methods**
 
@@ -80,49 +115,67 @@ function handleCallback(
 ) external returns (bytes memory result);
 
 function verifyCallback(bytes calldata data) external view;
+
+function getCallbackTransferData(bytes calldata data)
+    external
+    payable
+    returns (
+        TransferManager.TransferType transferType,
+        address receiver,
+        address tokenIn,
+        uint256 amountIn
+    );
 ```
 
 * `handleCallback`: The main entry point for handling callbacks.
 * `verifyCallback`: Should be called within `handleCallback` to ensure that the `msg.sender` is a valid pool from the expected protocol.
+* `getCallbackTransferData`: Called by the Dispatcher during the callback to determine how tokens should be transferred. Like `getTransferData`, the transfer type must be hardcoded — the Dispatcher handles the actual transfer based on the returned values.
 
 **Callback Flow**
 
-When a protocol initiates a callback during swap execution, it flows through the `TychoRouter`'s `fallback()` method first, which acts as the entry point for all callback requests. The router's fallback function then delegates the call to the dispatcher, which is responsible for routing the callback to the appropriate executor's `handleCallback` method.
+When a protocol initiates a callback during swap execution, it flows through the `TychoRouter`'s `fallback()` method, which acts as the entry point for all callback requests. The router's fallback function delegates the call to the Dispatcher, which:
 
-This architecture ensures that:
-
-* All callbacks pass through a single controlled entry point in the `TychoRouter`
-* The dispatcher can validate and route callbacks to the correct executor implementation
-* Each executor maintains its own callback logic while adhering to the standardized interface
+1. Calls `getCallbackTransferData` on the executor to determine transfer requirements.
+2. Performs the token transfer via the `TransferManager` (the executor does not transfer tokens itself).
+3. Calls `handleCallback` on the executor to complete the swap interaction.
 
 The callback data passed through this flow should include the function selector and all necessary information for the executor to complete the swap operation, such as token addresses, amounts, and any protocol-specific parameters required by the pool contract.
 
 ## Token Transfers
 
-The **Executor** contracts manage token transfers between the user, protocols, and the Tycho Router. The only exception is when unwrapping WETH to ETH after a swap—in this case, the router performs the final transfer to the receiver.
+**Executors do not handle any token transfers**. All ERC20 token transfers are orchestrated by the Dispatcher via the [`TransferManager`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/src/TransferManager.sol). The Dispatcher calls `getTransferData` (or `getCallbackTransferData` during callbacks) on the executor to learn _how_ the protocol expects to receive tokens, and then performs the transfer itself.
 
-The `TychoRouter` architecture optimizes token transfers and reduces gas costs during both single and sequential swaps. Whenever possible:
+This design reduces the attack surface — a malicious or buggy executor cannot misroute user funds because it never touches the input token directly.
 
-* The executor transfers input tokens directly from the user to the target protocol.
-* The executor instructs the protocol to send output tokens directly to the next protocol in the swap sequence.
-* For the final hop in a sequence, the protocol sends output tokens directly to the user.
+#### TransferType
 
-Each executor must inherit from the `RestrictTransferFrom` contract, which enables flexible and safe transfer logic. During encoding, the executor receives instructions specifying one of the following transfer types:
+Each executor must return a hardcoded `TransferManager.TransferType` from `getTransferData` (and `getCallbackTransferData` for callback executors). The available types are:
 
-| Transfer Type   | Description                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `TRANSFER_FROM` | Transfers tokens from the user's wallet into the `TychoRouter` or into the pool. It can use permit2 or normal token transfers. |
-| `TRANSFER`      | Assumes funds are already in the `TychoRouter` and transfers tokens into the pool                                              |
-| `NONE`          | Assumes tokens are already in place for the swap; no transfer action is taken.                                                 |
+| Transfer Type              | Description                                                                                                                                                                            |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Transfer`                 | The Dispatcher transfers tokens to the pool (or router) before calling `swap`. Used by protocols that expect tokens to be present in the pool before the swap call (e.g., Uniswap V2). |
+| `ProtocolWillDebit`        | The protocol pulls tokens from the router via an approval. The Dispatcher approves the protocol to spend the required amount. Used by protocols like Curve and Balancer V2.            |
+| `TransferNativeInExecutor` | The executor sends native ETH as `msg.value` during the swap. The Dispatcher only performs accounting — no ERC-20 transfer occurs. Used by protocols like Fluid and Rocketpool.        |
+| `None`                     | No transfer is needed at this point. Typically returned by `getTransferData` for callback-based protocols where the transfer happens inside the callback instead.                      |
 
-Two key [constants](https://github.com/propeller-heads/tycho-execution/blob/main/src/encoding/evm/constants.rs) are used in encoding to configure protocol-specific behavior:
+**The only case where an executor handles a token transfer is native ETH** (`TransferNativeInExecutor`). For all ERC-20 tokens, the Dispatcher is solely responsible for transfers.
 
-| Constant                         | Description                                                                                                                                                                                                                       |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FUNDS_IN_ROUTER_PROTOCOLS`      | A list of protocols that perform a `transferFrom` during the `swap` themselves. These protocols do not need tokens to be transferred into the pool prior to swapping, and therefore require tokens to be available in the Router. |
-| `CALLBACK_CONSTRAINED_PROTOCOLS` | Protocols that require owed tokens to be transferred during a callback. In these cases, tokens cannot be transferred directly from the previous pool before the current swap begins.                                              |
+#### How the Dispatcher Resolves Transfers
 
-Include your protocol in these constants if necessary.
+Before each swap, the Dispatcher:
+
+1. Calls `getTransferData` on the executor to get the `TransferType`, `receiver`, token addresses, and whether the protocol sends out tokens back to the router automatically.
+2. Determines the transfer strategy based on the swap context (first swap vs. subsequent, split swap, vault-funded, etc.).
+3. Performs the input token transfer via the `TransferManager`.
+
+After each swap, the Dispatcher:
+
+1. Performs a balance check to determine the token output amount of the swap
+2. If `outputToRouter` is true, forwards output tokens to swap receiver
+
+For sequential swaps, the Dispatcher also calls `fundsExpectedAddress` on the _next_ executor to decide where the current swap should send its output tokens — either directly to the next pool or back to the router.
+
+The transfer behavior is fully determined by the values your executor returns from `getTransferData` and `fundsExpectedAddress`.
 
 ### Native Token Address Handling
 
@@ -139,6 +192,10 @@ Tycho uses the zero address (`0x0000000000000000000000000000000000000000`) to re
 3. Ensure the conversion happens only in the calldata generation, not in the protocol state
 
 This ensures compatibility with your protocol's on-chain contracts while maintaining Tycho's standardized native token representation throughout indexing and simulation.
+
+## Fee Tokens
+
+Thanks to balance checks performed before and after input and output token transfers, fee-on-transfer tokens and rebasing tokens should be fully supported on most protocols. Problems will only arise for Uniswap V3-like protocols, which require declaration of the input swap amount when calling the protocol's swap function, while only performing the input token transfer in the callback.&#x20;
 
 ## Testing
 

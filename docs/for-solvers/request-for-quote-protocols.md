@@ -129,18 +129,17 @@ Build the Swap and Solution:
     Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
         .protocol_state(state)
         .estimated_amount_in(sell_amount.clone());
-
-<strong>let solution = Solution {
-</strong>    sender: user_address.clone(),
-    receiver: user_address,
-    given_token: sell_token.address,
-    given_amount: sell_amount,
-    checked_token: buy_token.address,
-    exact_out: false,
-    checked_amount: min_amount_out,
-    swaps: vec![simple_swap],
-    ..Default::default()
-}
+<strong>
+</strong><strong>let solution = Solution::new(
+</strong>    user_address.clone(),
+    user_address,
+    sell_token.address,
+    buy_token.address,
+    sell_amount,
+    min_amount_out,
+    vec![simple_swap],
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2);
 </code></pre>
 
 When working with RFQs, two fields are **required** in Swap:
@@ -167,7 +166,6 @@ let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
     
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(chain)
-    .user_transfer_type(UserTransferType::TransferFromPermit2)
     .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
@@ -197,7 +195,7 @@ let tx = encode_tycho_router_call(
 {% hint style="danger" %}
 These functions are only examples intended for use within the quickstart. **Do not use them in production.** You must write your own logic to:
 
-* Control parameters like `minAmountOut`, `receiver`, and transfer type.
+* Control parameters like `minAmountOut` and `receiver`
 * Sign the permit2 object safely and correctly.
 
 This gives you full control over execution. And it protects you from MEV and slippage risks.

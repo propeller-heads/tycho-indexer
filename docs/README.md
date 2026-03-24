@@ -20,6 +20,7 @@ Run the quickstart with execution using the following commands:
 {% tabs %}
 {% tab title="Mainnet" %}
 ```sh
+unset HISTFILE # to not save your private key to your bash history
 export RPC_URL=https://ethereum.publicnode.com
 export PRIVATE_KEY=<your-private-key>
 cargo run --release --example quickstart --
@@ -28,6 +29,7 @@ cargo run --release --example quickstart --
 
 {% tab title="Base" %}
 ```bash
+unset HISTFILE # to not save your private key to your bash history
 export RPC_URL=https://base-rpc.publicnode.com
 export PRIVATE_KEY=<your-private-key>
 cargo run --release --example quickstart -- --chain base
@@ -36,6 +38,7 @@ cargo run --release --example quickstart -- --chain base
 
 {% tab title="Unichain" %}
 ```sh
+unset HISTFILE # to not save your private key to your bash history
 export RPC_URL=https://unichain-rpc.publicnode.com
 export PRIVATE_KEY=<your-private-key>
 cargo run --release --example quickstart -- --chain unichain
@@ -181,24 +184,23 @@ let min_amount_out = (expected_amount * &multiplier) / &bps;
 For maximum security, you should determine the minimum amount from a **third-party source.**
 {% endhint %}
 
-After this, you can create the Swap and Solution objects. For more info about the `Swap` and `Solution` models, see [here](for-solvers/execution/encoding.md#solution-struct).
+After this, you can create the Swap and Solution objects. For more info about the `Swap` and `Solution` models, see [here](for-solvers/execution/encoding/#solution-struct).
 
 ```rust
 let simple_swap =
-    Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
+    Swap::new(component, sell_token.clone(), buy_token.clone());
 
 // Then we create a solution object with the previous swap
-let solution = Solution {
-    sender: user_address.clone(),
-    receiver: user_address,
-    given_token: sell_token.address,
-    given_amount: sell_amount,
-    checked_token: buy_token.address,
-    exact_out: false,     // it's an exact in solution
-    checked_amount: min_amount_out,
-    swaps: vec![simple_swap],
-    ..Default::default()
-};
+let solution = Solution::new(
+    user_address.clone(),
+    user_address,
+    sell_token.address,
+    buy_token.address,
+    sell_amount,
+    min_amount_out,
+    vec![simple_swap],
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2);
 ```
 
 #### b. Encode solution
@@ -210,7 +212,6 @@ let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
     
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(chain)
-    .user_transfer_type(UserTransferType::TransferFromPermit2)
     .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
@@ -241,7 +242,7 @@ let tx = encode_tycho_router_call(
 :warning: These functions are only examples intended for use within the quickstart.\
 **Do not use them in production.** You must write your own logic to:
 
-* Control parameters like `minAmountOut`, `receiver`, and transfer type.
+* Control parameters like `minAmountOut` and `receiver` .
 * Sign the permit2 object safely and correctly.
 
 This gives you full control over execution. And it protects you from MEV and slippage risks.

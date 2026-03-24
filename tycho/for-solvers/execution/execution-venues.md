@@ -17,7 +17,6 @@ let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
     
 let encoder = TychoRouterEncoderBuilder::new()
     .chain(Chain::Ethereum)
-    .user_transfer_type(UserTransferType::TransferFrom)
     .swap_encoder_registry(swap_encoder_registry)
     .build()
     .expect("Failed to build encoder");
