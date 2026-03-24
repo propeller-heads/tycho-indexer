@@ -398,9 +398,6 @@ mod cli_tests {
             "--blocklist",
             "0xdef",
         ]);
-        assert_eq!(
-            args.blocklist,
-            vec!["0xabc".to_string(), "0xdef".to_string()]
-        );
+        assert_eq!(args.blocklist, vec!["0xabc".to_string(), "0xdef".to_string()]);
     }
 }
