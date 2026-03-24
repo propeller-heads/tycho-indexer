@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(cargo:*), Bash(diesel:*), Bash(psql:*), Bash(bash .claude/scripts/run-nextest.sh:*), Bash(printenv:*), Bash(git diff:*), Bash(git branch:*), Bash(git status:*), Read
+allowed-tools: Bash(cargo:*), Bash(diesel:*), Bash(psql:*), Bash(bash .claude/scripts/run-nextest.sh:*), Bash(printenv:*), Bash(git diff:*), Bash(git branch:*), Bash(git status:*), Bash(git log:*), Read
 description: "Run the full CI pipeline locally to catch failures before pushing. Use this skill before creating a PR, before pushing commits, or whenever you want to verify that CI will pass. Also use it when the user says 'run ci', 'check ci', 'run tests', 'lint', or 'will ci pass'."
 user-invocable: true
 ---
@@ -70,7 +70,31 @@ If the reset fails because other connections are active, terminate them first us
 retry the reset. If migrations still fail after reset (e.g. Postgres not running), mark DB as
 unavailable with the same behavior as above.
 
-### Phase 1: Format (sequential)
+### Phase 0.5: Scope detection
+
+Determine which areas changed to avoid running unnecessary checks. Compare against the merge base
+with `main`:
+
+```bash
+git diff --name-only $(git merge-base HEAD origin/main)..HEAD
+```
+
+If the branch IS `main` (no feature branch), or the command fails, default to **full scope** (all
+checks run). Otherwise, map changed file patterns to check categories:
+
+| File pattern | Category |
+|---|---|
+| `tycho-*/src/**/*.rs`, `Cargo.toml`, `Cargo.lock` | `rust` |
+| `tycho-client-py/**` | `python` |
+| `.github/workflows/**` | `ci` (always run full) |
+
+If only `python` files changed, skip Rust format/clippy/tests entirely and only run Python checks.
+If only `rust` files changed, skip Python checks. If both changed (or `ci`), run everything.
+
+Report the detected scope before proceeding: `Scope: rust`, `Scope: python`, `Scope: rust + python`,
+or `Scope: full`.
+
+### Phase 1: Format (sequential) — skip if scope is `python` only
 
 Run formatting first because it modifies source files that all subsequent checks depend on.
 
@@ -80,7 +104,7 @@ cargo +nightly fmt --all
 
 Check `git diff --stat -- '*.rs'` and report whether any files were reformatted.
 
-### Phase 2: Clippy (sequential, gate for tests)
+### Phase 2: Clippy (sequential, gate for tests) — skip if scope is `python` only
 
 Run clippy next. If clippy fails, tests won't compile either, so there's no point running them.
 
@@ -143,8 +167,9 @@ tests run in the other phase.
 
 | Step     | Status            | Details                              |
 |----------|-------------------|--------------------------------------|
-| Format   | pass/fail         | files reformatted or clean           |
-| Clippy   | pass/fail         | warning/error count                  |
+| Scope    | detected          | rust / python / rust + python / full |
+| Format   | pass/fail/skipped | files reformatted or clean           |
+| Clippy   | pass/fail/skipped | warning/error count                  |
 | Tests    | pass/fail/skipped | X passed, Y failed, Z skipped        |
 
 If clippy failed, mark tests as "skipped (clippy failed)".

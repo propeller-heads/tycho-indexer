@@ -10,21 +10,8 @@ cargo test
 cargo clippy --all-features
 ```
 
-After a task is done:
-
-```bash
-# Lint (always use nightly)
-cargo +nightly clippy --workspace --all-features --all-targets
-
-# Format
-cargo +nightly fmt --all
-
-# Tests (unit + workspace)
-cargo test --workspace
-
-# Build check (fast)
-cargo +nightly check --workspace --all-features
-```
+After a task is done, run the `/run-ci` skill. It runs format, clippy, and tests
+matching what CI does. See `.claude/skills/run-ci/SKILL.md` for the canonical commands.
 
 ## Coding Style
 
@@ -58,5 +45,4 @@ refactor the code instead. Comments explain WHY, not WHAT. Wrap comment lines at
   don't control. Use the `testing.rs` mocks (`MockBlockchainGateway`, etc.) and `test-utils` feature.
 - **Verify tests catch failures.** Break the code, confirm the test fails, then fix.
 
-After every task is done, run the `run-ci` task. If that is done, check whether docs need updating with the sync-docs
-skill.
+After every task is done, run `/run-ci`. If that passes, check whether docs need updating with `/sync-docs`.

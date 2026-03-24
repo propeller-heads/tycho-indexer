@@ -1,5 +1,5 @@
 ---
-allowed-tools: Read, Edit, Write, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git branch *), Bash(git status *), Bash(ls *), Glob, Grep, Agent
+allowed-tools: Read, Edit, Write, Bash(git log *), Bash(git diff *), Bash(git rev-parse *), Bash(git branch *), Bash(git status *), Bash(ls *), Glob, Grep, LSP, Agent
 description: "Review all codebase documentation files under `.claude/` and per-crate `CLAUDE.md` files, and fix any that have drifted from the actual code. This is a documentation-only task -- do not modify any source code."
 user-invocable: true
 ---
@@ -80,6 +80,10 @@ it only reports discrepancies.
 
 > You are auditing documentation against the actual Rust source code in a Cargo workspace. Do NOT edit any files. Only
 > report discrepancies.
+>
+> **Prefer LSP over Glob/Grep for code exploration.** Use `documentSymbol` to list module contents, `goToDefinition`
+> and `findReferences` for trait/type verification, `workspaceSymbol` for locating types across crates. Fall back to
+> Glob/Grep/Read for docs, config files, and non-Rust files.
 >
 > For each doc file below, read it, then read the corresponding source files and report any concrete discrepancy that
 > would mislead an agent. Focus on: wrong/missing modules, wrong trait signatures, wrong struct fields/variants, wrong

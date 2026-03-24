@@ -1,5 +1,5 @@
 ---
-allowed-tools: AskUserQuestion, Read, Glob, Grep, Agent, Write, Edit, Bash(mkdir *), Bash(cargo check *), Bash(maturin *), Bash(pytest *)
+allowed-tools: AskUserQuestion, Read, Glob, Grep, LSP, Agent, Write, Edit, Bash(mkdir *), Bash(cargo check *), Bash(maturin *), Bash(pytest *)
 description: |
   Guided feature planning with iterative user input. Gathers requirements, validates assumptions against the codebase, proposes a solution, and optionally scaffolds or implements it.
   TRIGGER when: user wants to plan, design, architect, or think through a feature before coding. Keywords: "plan", "make a plan", "design", "architect", "think through", "figure out how to", "how should we", "what's the best way to".
@@ -20,26 +20,24 @@ is written.
 
 Collect the plan proposal from the user. If the `goal` argument was provided, use it and skip the first question.
 
-Ask the user the following questions **one at a time as plain text output** (NOT `AskUserQuestion` — these are
-open-ended and need free-text responses). After each answer, acknowledge it briefly before asking the next question.
-**Stop and wait for the user's reply after each question.** Do not ask multiple questions in one message.
+Ask the user the following questions **one at a time** using `AskUserQuestion`. After each answer, acknowledge it
+briefly before asking the next question. **Stop and wait for the user's reply after each question.** Do not ask
+multiple questions in one message.
 
 1. **High-level goal** — "What is the high-level goal of this feature or change?"
 2. **Essential requirements** — "What are the essential requirements? (things that must be true for this to be done)"
-3. **Nice-to-haves** (optional) — "Any non-essential requirements or nice-to-haves? (say 'skip' if none)"
-4. **Considerations** (optional) — "Anything specific to consider? (existing patterns, performance constraints,
+3. **Considerations** (optional) — "Anything specific to consider? (existing patterns, performance constraints,
    compatibility, etc. — say 'skip' if none)"
-5. **Things to avoid** (optional) — "Anything to explicitly avoid? (approaches, dependencies, patterns, etc. — say '
+4. **Things to avoid** (optional) — "Anything to explicitly avoid? (approaches, dependencies, patterns, etc. — say '
    skip' if none)"
 
-For questions 3-5, accept "skip" or "none" as valid answers and move on.
+For questions 3-4, accept "skip" or "none" as valid answers and move on.
 
 After collecting all answers, summarize the proposal back to the user in a compact format:
 
 ```
 **Goal:** ...
 **Must have:** ...
-**Nice to have:** ...
 **Consider:** ...
 **Avoid:** ...
 ```
@@ -51,12 +49,13 @@ Ask the user to confirm the proposal is correct before proceeding.
 Read the codebase documentation to understand the problem space:
 
 1. Read `.claude/CODEBASE.md` and any linked docs relevant to the goal.
-2. Use Glob/Grep/Read to examine specific files as needed.
+2. Use LSP (`documentSymbol`, `goToDefinition`, `findReferences`, `workspaceSymbol`) for Rust/TS code exploration.
+   Fall back to Glob/Grep/Read for docs, config files, and when LSP is unavailable.
 3. Identify the modules, traits, and types involved.
 
 Then list your **assumptions** — things you believe to be true based on your research that affect the solution design.
-Present these to the user as a numbered list and ask them to confirm, correct, or add to them **as plain text** (free
-text response needed — do not use `AskUserQuestion`).
+Present these to the user as a numbered list and ask them to confirm, correct, or add to them using `AskUserQuestion`
+with options like "Confirmed", "Need corrections" (user types details), "Add more assumptions".
 
 Example format:
 > Based on my research, here are my assumptions:
