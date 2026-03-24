@@ -10,7 +10,7 @@ use tokio_retry2::{
     strategy::{jitter, ExponentialFactorBackoff},
     Retry, RetryError,
 };
-use tycho_contracts::encoding::evm::utils::bytes_to_address;
+use tycho_execution::encoding::evm::utils::bytes_to_address;
 use tycho_simulation::evm::protocol::u256_num::u256_to_biguint;
 
 use crate::{
@@ -42,7 +42,7 @@ pub async fn simulate_swap_transaction(
     (miette::Error, Option<AddressHashMap<AccountOverride>>, Option<tenderly::OverwriteMetadata>),
 > {
     let mut inputs: HashMap<String, SimulationInput> = HashMap::new();
-    let mut tycho_contracts_results: HashMap<String, TychoExecutionResult> = HashMap::new();
+    let mut tycho_execution_results: HashMap<String, TychoExecutionResult> = HashMap::new();
 
     // Get to_address from the first transaction (same for all transactions - tycho router)
     let to_address = execution_info
@@ -81,7 +81,7 @@ pub async fn simulate_swap_transaction(
         let request = match encoding::swap_request(&info.transaction, block) {
             Ok(request) => request,
             Err(e) => {
-                tycho_contracts_results.insert(
+                tycho_execution_results.insert(
                     simulation_id.clone(),
                     TychoExecutionResult::Failed {
                         error_msg: format!("Failed to create swap request: {}", e),
@@ -99,7 +99,7 @@ pub async fn simulate_swap_transaction(
                 slots,
             ),
             None => {
-                tycho_contracts_results.insert(
+                tycho_execution_results.insert(
                     simulation_id.clone(),
                     TychoExecutionResult::Failed {
                         error_msg: format!(
@@ -151,7 +151,7 @@ pub async fn simulate_swap_transaction(
 
     // If no transactions left to simulate, return early
     if inputs.is_empty() {
-        return Ok(tycho_contracts_results);
+        return Ok(tycho_execution_results);
     }
 
     // Use debug_traceCall from the start with retry logic
@@ -182,7 +182,7 @@ pub async fn simulate_swap_transaction(
         (miette!("{e}").wrap_err("Failed to simulate transaction after retries"), None, None)
     })?;
 
-    // Process simulation results and add successful simulations to tycho_contracts_results
+    // Process simulation results and add successful simulations to tycho_execution_results
     for (simulation_id, result) in execution_results {
         match result {
             SimulationResult::Success { return_data, gas_used } => {
@@ -194,7 +194,7 @@ pub async fn simulate_swap_transaction(
                             .clone();
                         let overwrite_metadata = simulation_input.overwrite_metadata;
                         let state_overwrites = simulation_input.state_overwrites;
-                        tycho_contracts_results.insert(
+                        tycho_execution_results.insert(
                             simulation_id,
                             TychoExecutionResult::Success {
                                 amount_out: u256_to_biguint(amount_out),
@@ -205,7 +205,7 @@ pub async fn simulate_swap_transaction(
                         );
                     }
                     Err(e) => {
-                        tycho_contracts_results.insert(
+                        tycho_execution_results.insert(
                             simulation_id,
                             TychoExecutionResult::Failed {
                                 error_msg: format!("Failed to decode swap amount: {e:?}"),
@@ -221,7 +221,7 @@ pub async fn simulate_swap_transaction(
                     .clone();
                 let overwrite_metadata = simulation_input.overwrite_metadata;
                 let state_overwrites = simulation_input.state_overwrites;
-                tycho_contracts_results.insert(
+                tycho_execution_results.insert(
                     simulation_id,
                     TychoExecutionResult::Revert { reason, state_overwrites, overwrite_metadata },
                 );
@@ -229,5 +229,5 @@ pub async fn simulate_swap_transaction(
         }
     }
 
-    Ok(tycho_contracts_results)
+    Ok(tycho_execution_results)
 }

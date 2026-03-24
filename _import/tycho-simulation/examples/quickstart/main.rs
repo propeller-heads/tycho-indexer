@@ -28,7 +28,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, Bytes};
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,

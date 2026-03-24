@@ -5,7 +5,7 @@ use alloy::{
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use tycho_common::Bytes;
-use tycho_contracts::encoding::models::Solution;
+use tycho_execution::encoding::models::Solution;
 
 use crate::execution::tenderly::OverwriteMetadata;
 

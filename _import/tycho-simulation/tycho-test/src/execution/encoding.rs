@@ -14,7 +14,7 @@ use tycho_common::{
     traits::{AllowanceSlotDetector, BalanceSlotDetector},
     Bytes,
 };
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     evm::{
         encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,

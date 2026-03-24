@@ -24,7 +24,7 @@ use num_traits::ToPrimitive;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
 use tycho_common::{models::token::Token, simulation::protocol_sim::ProtocolSim, Bytes};
-use tycho_contracts::encoding::{
+use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
         approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,

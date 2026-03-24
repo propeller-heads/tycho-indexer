@@ -33,7 +33,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.17", default-features = false }
 
 # Utility
-ruint = { version = "1.17.0", features = ["num-traits"] }
+ruint = { version = "1.17.1", features = ["num-traits"] }
 num-traits = "0.2.17"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 dotenv = "0.15.0"
@@ -46,7 +46,7 @@ async-trait = "0.1.88"
 tycho-client = ">=0.147.1"
 tycho-common = ">=0.147.1"
 tycho-ethereum = ">=0.147.1"
-tycho-contracts = { path = "../tycho-contracts" }
+tycho-execution = ">=0.166.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
@@ -120,7 +120,7 @@ hex-literal.workspace = true
 
 [dev-dependencies]
 # tycho execution for quickstart
-tycho-contracts = { workspace = true }
+tycho-execution = { workspace = true }
 tycho-test = { path = "tycho-test" }
 tokio-test = "0.4.4"
 approx = "0.5.1"
