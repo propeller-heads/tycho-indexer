@@ -177,8 +177,8 @@ contract Dispatcher is TransferManager {
         // Cyclic swap detection: when tokenIn == tokenOut (e.g. grouped UniswapV4
         // swap USDC -> WETH -> USDC), we must check initial balance before any
         // transfer and add the input amount back when needed. Also check that the
-        // input transfer is actually performed, to avoid any delta manipulation
-        // attacks.
+        // input transfer is actually performed, either as a pre-swap transfer or
+        // as a callback transfer, to avoid any delta manipulation attacks.
         if (isCyclic && measureAt == inputSource) {
             bool inputTransferPerformed;
             assembly {

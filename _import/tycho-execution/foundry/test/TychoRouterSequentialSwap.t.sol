@@ -480,17 +480,16 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         //
         // USDC ──(USV2)──> WETH ──(Slipstreams, fake)──> WETH
         //
-        // Delta Accounting:
+        // Delta Accounting (approximate values):
         // First swap: - 2000 USDC  + 1 WETH
-        // Second swap: + 1 WETH + 0 WETH output
+        // Second swap: input doesn't touch delta accounting, 0 WETH output
         // Total WETH in Delta accounting: + 1 WETH
         // Real WETH balance in the router: 1 WETH
         //
-        // After transferring the calculated output amount (1 WETH) to the user's
-        // vault balance, we are left with Deltas: -2000 USDC and 1 WETH
-        // This results in Vault__UnexpectedNonZeroCount(2)
+        // The dispatcher correctly labels the swap output as 0, resulting in
+        // TychoRouter__NegativeSlippage
 
-        uint256 amountIn = 3000 * 10 ** 6;
+        uint256 amountIn = 2000 * 10 ** 6;
         deal(USDC_ADDR, ALICE, amountIn);
 
         FakeSlipstreamPool fakePool = new FakeSlipstreamPool();
@@ -609,8 +608,10 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         //             + 1 WETH phantom amount (total = 0)
         //
         // Real WETH balance in the router: 1 WETH
-        // Second swap: - 1 WETH  + 2000 USDC
+        // Second swap: - 1 WETH  + approx. 2000 USDC
         // After settling: - 1 WETH + 0 USDC
+        //
+        // The transaction passes since the first swap serves as a no-op
         uint256 amountIn = 1 ether;
         deal(WETH_ADDR, ALICE, amountIn);
 
@@ -671,17 +672,18 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         //
         // USDC ──(USV2)──> WETH ──(mock debit, fake)──> WETH
         //
-        // Delta Accounting:
-        // First swap: - 3000 USDC  + 1.5 WETH
-        // Second swap: - 1.5 WETH (delta only, no transfer) + 1.5 WETH phantom
-        //              (total WETH delta = + 1.5)
-        // Real WETH balance in the router: 1.5 WETH
+        // Delta Accounting (approximate values):
+        // First swap: - 2000 USDC  + 1 WETH
+        // Second swap: - 1 WETH (delta only, no transfer) + 1 WETH phantom
         //
-        // After settling 1.5 WETH to vault: Delta(USDC) = -3000, Delta(WETH) = 0
-        // _finalizeBalances: nonZeroDeltaCount = 1, inputDelta = -3000 USDC
-        // Burns 3000 USDC from vault. Swap succeeds — not an exploit, since the
+        // Total WETH delta = + 1
+        // Real WETH balance in the router: 1 WETH
+        //
+        // After settling 1 WETH to vault: Delta(USDC) = -2000, Delta(WETH) = 0
+        //
+        // Burns 2000 USDC from vault. Swap succeeds — not an exploit, since the
         // second hop only serves as a no-op.
-        uint256 amountIn = 3000 * 10 ** 6;
+        uint256 amountIn = 2000 * 10 ** 6;
         deal(USDC_ADDR, ALICE, amountIn);
 
         MockProtocolWillDebitExecutor mockExecutor =
