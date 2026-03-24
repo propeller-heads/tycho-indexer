@@ -85,7 +85,7 @@ contract Dispatcher is TransferManager {
      * @dev Calls an executor, assumes swap.protocolData contains
      *  protocol-specific data required by the executor.
      */
-    // slither-disable-next-line delegatecall-loop,assembly,controlled-delegatecall
+    // slither-disable-next-line delegatecall-loop,assembly,controlled-delegatecall,cyclomatic-complexity
     function _callSwapOnExecutor(
         address executor,
         uint256 amount,
@@ -160,6 +160,11 @@ contract Dispatcher is TransferManager {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
             tstore(_IS_FIRST_SWAP_SLOT, 0)
             tstore(_IS_SPLIT_SWAP_SLOT, 0)
+        }
+
+        // Revoke any lingering allowance the protocol didn't consume.
+        if (transferType == TransferType.ProtocolWillDebit) {
+            _revokeUnconsumedApproval(tokenIn, transferReceiver);
         }
 
         if (!success) {
@@ -267,6 +272,11 @@ contract Dispatcher is TransferManager {
                         : abi.encodePacked("Callback failed")
                 )
             );
+        }
+
+        // Revoke any lingering allowance the protocol didn't consume.
+        if (transferType == TransferType.ProtocolWillDebit) {
+            _revokeUnconsumedApproval(tokenIn, receiver);
         }
 
         // to prevent multiple callbacks

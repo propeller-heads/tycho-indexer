@@ -250,6 +250,20 @@ contract TransferManager is Vault {
     }
 
     /**
+     * @dev Revokes a token approval if the spender didn't fully consume it.
+     * In the normal case the protocol consumed the approval, so we skip the expensive
+     * forceApprove.
+     */
+    // slither-disable-next-line calls-loop
+    function _revokeUnconsumedApproval(address token, address spender)
+        internal
+    {
+        if (IERC20(token).allowance(address(this), spender) > 0) {
+            IERC20(token).forceApprove(spender, 0);
+        }
+    }
+
+    /**
      * @dev Transfers tokens from user wallet using either Permit2 or regular transferFrom.
      * Validates the transfer doesn't exceed allowed amount and updates allowance tracking.
      * @return The actual amount received by the receiver, measured as the balance

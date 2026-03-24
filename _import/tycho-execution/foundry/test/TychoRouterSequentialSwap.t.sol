@@ -661,6 +661,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), vaultUsdc);
         // No leftover WETH in router
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 0);
+        // No lingering WETH allowance to the fake pool
+        assertEq(IERC20(WETH_ADDR).allowance(tychoRouterAddr, fakePool), 0);
 
         vm.stopPrank();
     }
@@ -733,6 +735,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), vaultWeth);
         // No leftover USDC in router
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
+        // No lingering WETH allowance to the fake pool
+        assertEq(IERC20(WETH_ADDR).allowance(tychoRouterAddr, fakePool), 0);
 
         vm.stopPrank();
     }
