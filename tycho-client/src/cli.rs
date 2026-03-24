@@ -123,6 +123,10 @@ struct CliArgs {
     /// Maximum number of retry attempts for failed startups
     #[clap(long, default_value = "32")]
     max_retries: u64,
+
+    /// Component IDs to exclude from tracking. Can be specified multiple times.
+    #[clap(long, number_of_values = 1)]
+    blocklist: Vec<String>,
 }
 
 impl CliArgs {
@@ -269,7 +273,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             ComponentFilter::with_tvl_range(remove_tvl, add_tvl)
         } else {
             ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
-        };
+        }
+        .blocklist(args.blocklist.clone());
         let uses_dci = dci_protocols.contains(&name);
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
@@ -379,5 +384,23 @@ mod cli_tests {
         assert!(args.example);
         assert_eq!(args.disable_compression, false);
         assert_eq!(args.partial_blocks, false);
+        assert!(args.blocklist.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_cli_args_with_blocklist() {
+        let args = CliArgs::parse_from([
+            "tycho-client",
+            "--exchange",
+            "uniswap_v2",
+            "--blocklist",
+            "0xabc",
+            "--blocklist",
+            "0xdef",
+        ]);
+        assert_eq!(
+            args.blocklist,
+            vec!["0xabc".to_string(), "0xdef".to_string()]
+        );
     }
 }
