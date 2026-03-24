@@ -1,3 +1,10 @@
+## [0.166.2](https://github.com/propeller-heads/tycho-execution/compare/0.166.1...0.166.2) (2026-03-24)
+
+
+### Bug Fixes
+
+* Revoke unconsumed approvals ([387fc03](https://github.com/propeller-heads/tycho-execution/commit/387fc03072ab01ca9bd795af57735492848fed5e))
+
 ## [0.166.1](https://github.com/propeller-heads/tycho-execution/compare/0.166.0...0.166.1) (2026-03-24)
 
 
