@@ -1,5 +1,6 @@
 pub mod approvals;
-pub mod constants;
+mod constants;
+pub use constants::{get_router_address, DEFAULT_ROUTER_ADDRESSES};
 pub mod encoder_builders;
 mod encoding_utils;
 mod group_swaps;
