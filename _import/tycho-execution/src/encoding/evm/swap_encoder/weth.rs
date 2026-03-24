@@ -35,7 +35,7 @@ impl SwapEncoder for WethSwapEncoder {
         swap: &Swap,
         _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let is_wrapping = *swap.token_in().address == self.native_token_address;
+        let is_wrapping = *swap.token_in() == self.native_token_address;
         Ok(is_wrapping.abi_encode_packed())
     }
 
@@ -53,7 +53,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{evm::utils::write_calldata_to_file, models::default_token};
+    use crate::encoding::evm::utils::write_calldata_to_file;
     #[test]
     fn test_encode_weth_wrapping() {
         // ETH -> (weth) -> wETH
@@ -61,8 +61,7 @@ mod tests {
             ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
         let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
-        let swap =
-            Swap::new(pool, default_token(token_in.clone()), default_token(token_out.clone()));
+        let swap = Swap::new(pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
@@ -95,8 +94,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let token_out = Bytes::from("0x0000000000000000000000000000000000000000");
-        let swap =
-            Swap::new(pool, default_token(token_in.clone()), default_token(token_out.clone()));
+        let swap = Swap::new(pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),

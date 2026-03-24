@@ -8,7 +8,7 @@ use tycho_execution::encoding::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
         utils::{bytes_to_address, write_calldata_to_file},
     },
-    models::{default_token, Solution, Swap},
+    models::{Solution, Swap},
 };
 
 use crate::common::{
@@ -47,8 +47,8 @@ fn test_sequential_swap_usx() {
             },
             ..Default::default()
         },
-        default_token(dai.clone()),
-        default_token(usdc.clone()),
+        dai.clone(),
+        usdc.clone(),
     );
     let swap_usdc_usdt = Swap::new(
         ProtocolComponent {
@@ -62,8 +62,8 @@ fn test_sequential_swap_usx() {
             },
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(usdt.clone()),
+        usdc.clone(),
+        usdt.clone(),
     );
     let encoder = get_tycho_router_encoder();
 

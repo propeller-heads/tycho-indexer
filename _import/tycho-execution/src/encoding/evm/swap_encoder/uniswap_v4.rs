@@ -175,9 +175,9 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         let hook_data_length = (hook_data.len() as u16).to_be_bytes();
 
         // Early check if this is not the first swap
-        if encoding_context.group_token_in != *swap.token_in().address {
+        if encoding_context.group_token_in != *swap.token_in() {
             return Ok((
-                bytes_to_address(&swap.token_out().address)?,
+                bytes_to_address(swap.token_out())?,
                 pool_fee_u24,
                 pool_tick_spacing_u24,
                 hook_address,
@@ -188,8 +188,8 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         }
 
         // This is the first swap, compute all necessary values
-        let token_in_address = bytes_to_address(&swap.token_in().address)?;
-        let token_out_address = bytes_to_address(&swap.token_out().address)?;
+        let token_in_address = bytes_to_address(swap.token_in())?;
+        let token_out_address = bytes_to_address(swap.token_out())?;
         let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
         let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
@@ -249,7 +249,7 @@ mod tests {
     use super::*;
     use crate::encoding::{
         evm::utils::{ple_encode, write_calldata_to_file},
-        models::{default_token, Swap},
+        models::Swap,
     };
 
     #[test]
@@ -270,8 +270,7 @@ mod tests {
             static_attributes,
             ..Default::default()
         };
-        let swap =
-            Swap::new(usv4_pool, default_token(token_in.clone()), default_token(token_out.clone()));
+        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             // Same as the executor address
             router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
@@ -333,8 +332,7 @@ mod tests {
             ..Default::default()
         };
 
-        let swap =
-            Swap::new(usv4_pool, default_token(token_in.clone()), default_token(token_out.clone()));
+        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
 
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
@@ -422,16 +420,10 @@ mod tests {
             ..Default::default()
         };
 
-        let initial_swap = Swap::new(
-            usde_usdt_component,
-            default_token(usde_address.clone()),
-            default_token(usdt_address.clone()),
-        );
-        let second_swap = Swap::new(
-            usdt_wbtc_component,
-            default_token(usdt_address.clone()),
-            default_token(wbtc_address.clone()),
-        );
+        let initial_swap =
+            Swap::new(usde_usdt_component, usde_address.clone(), usdt_address.clone());
+        let second_swap =
+            Swap::new(usdt_wbtc_component, usdt_address.clone(), wbtc_address.clone());
 
         let encoder = UniswapV4SwapEncoder::new(
             Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -584,16 +576,8 @@ mod tests {
                 ..Default::default()
             };
 
-            let first_swap = Swap::new(
-                usdc_weth_pool,
-                default_token(usdc_address.clone()),
-                default_token(weth_address.clone()),
-            );
-            let second_swap = Swap::new(
-                weth_usdt_pool,
-                default_token(weth_address.clone()),
-                default_token(usdt_address.clone()),
-            );
+            let first_swap = Swap::new(usdc_weth_pool, usdc_address.clone(), weth_address.clone());
+            let second_swap = Swap::new(weth_usdt_pool, weth_address.clone(), usdt_address.clone());
 
             // Encoder reads Angstrom config from environment variables:
             // - ANGSTROM_API_KEY (required)

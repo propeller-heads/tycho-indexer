@@ -145,15 +145,15 @@ impl SwapEncoder for CurveSwapEncoder {
         _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
         let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
-        let token_in = if *swap.token_in().address == self.native_token_address {
+        let token_in = if *swap.token_in() == self.native_token_address {
             native_token_curve_address
         } else {
-            bytes_to_address(&swap.token_in().address)?
+            bytes_to_address(swap.token_in())?
         };
-        let token_out = if *swap.token_out().address == self.native_token_address {
+        let token_out = if *swap.token_out() == self.native_token_address {
             native_token_curve_address
         } else {
-            bytes_to_address(&swap.token_out().address)?
+            bytes_to_address(swap.token_out())?
         };
 
         let component_address = Address::from_str(&swap.component().id)
@@ -203,7 +203,7 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{evm::swap_encoder::curve::CurveSwapEncoder, models::default_token};
+    use crate::encoding::{evm::swap_encoder::curve::CurveSwapEncoder, models::Swap};
 
     fn curve_config() -> Option<HashMap<String, String>> {
         Some(HashMap::from([
@@ -279,8 +279,8 @@ mod tests {
                 static_attributes,
                 ..Default::default()
             },
-            default_token(Bytes::from(token_in)),
-            default_token(Bytes::from(token_out)),
+            Bytes::from(token_in),
+            Bytes::from(token_out),
         );
 
         let encoder =
@@ -316,11 +316,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F");
         let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-        let swap = Swap::new(
-            curve_tri_pool,
-            default_token(token_in.clone()),
-            default_token(token_out.clone()),
-        );
+        let swap = Swap::new(curve_tri_pool, token_in.clone(), token_out.clone());
 
         let encoding_context = EncodingContext {
             router_address: None,
@@ -377,11 +373,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
         let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
-        let swap = Swap::new(
-            curve_pool,
-            default_token(token_in.clone()),
-            default_token(token_out.clone()),
-        );
+        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             router_address: None,
             group_token_in: token_in.clone(),
@@ -438,11 +430,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
         let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
-        let swap = Swap::new(
-            curve_pool,
-            default_token(token_in.clone()),
-            default_token(token_out.clone()),
-        );
+        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             router_address: None,
             group_token_in: token_in.clone(),

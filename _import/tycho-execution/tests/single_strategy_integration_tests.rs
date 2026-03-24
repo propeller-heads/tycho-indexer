@@ -7,7 +7,7 @@ use num_bigint::BigUint;
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::{biguint_to_u256, write_calldata_to_file},
-    models::{default_token, Solution, Swap, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -29,8 +29,8 @@ fn test_single_swap_strategy_encoder() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(dai.clone()),
+        weth.clone(),
+        dai.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -111,8 +111,8 @@ fn test_single_swap_strategy_encoder_transfer_from() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(dai.clone()),
+        weth.clone(),
+        dai.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -194,8 +194,8 @@ fn test_single_swap_with_client_fees() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(dai.clone()),
+        weth.clone(),
+        dai.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -249,8 +249,8 @@ fn test_single_swap_with_fees_and_client_contribution() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(dai.clone()),
+        weth.clone(),
+        dai.clone(),
     );
     let encoder = get_tycho_router_encoder();
 

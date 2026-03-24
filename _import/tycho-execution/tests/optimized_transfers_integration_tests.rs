@@ -5,7 +5,7 @@ use num_bigint::{BigInt, BigUint};
 use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
-    models::{default_token, Solution, Swap, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -44,8 +44,8 @@ fn test_uniswap_v3_uniswap_v2() {
             },
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -53,8 +53,8 @@ fn test_uniswap_v3_uniswap_v2() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(usdc.clone()),
+        wbtc.clone(),
+        usdc.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -119,8 +119,8 @@ fn test_uniswap_v3_uniswap_v3() {
             },
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -136,8 +136,8 @@ fn test_uniswap_v3_uniswap_v3() {
             },
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(usdc.clone()),
+        wbtc.clone(),
+        usdc.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -201,8 +201,8 @@ fn test_uniswap_v3_curve() {
             },
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
 
     let swap_wbtc_usdt = Swap::new(
@@ -228,8 +228,8 @@ fn test_uniswap_v3_curve() {
             },
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(usdt.clone()),
+        wbtc.clone(),
+        usdt.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -285,8 +285,8 @@ fn test_balancer_v2_uniswap_v2() {
             protocol_system: "vm:balancer_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
 
     let swap_wbtc_usdc = Swap::new(
@@ -295,8 +295,8 @@ fn test_balancer_v2_uniswap_v2() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(usdc.clone()),
+        wbtc.clone(),
+        usdc.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -355,8 +355,8 @@ fn test_multi_protocol() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(dai.clone()),
-        default_token(weth.clone()),
+        dai.clone(),
+        weth.clone(),
     );
 
     let balancer_swap_weth_wbtc = Swap::new(
@@ -365,8 +365,8 @@ fn test_multi_protocol() {
             protocol_system: "vm:balancer_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
 
     let curve_swap_wbtc_usdt = Swap::new(
@@ -392,8 +392,8 @@ fn test_multi_protocol() {
             },
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(usdt.clone()),
+        wbtc.clone(),
+        usdt.clone(),
     );
 
     // Ekubo
@@ -410,8 +410,7 @@ fn test_multi_protocol() {
         ]),
         ..Default::default()
     };
-    let ekubo_swap_usdt_usdc =
-        Swap::new(component, default_token(usdt.clone()), default_token(usdc.clone()));
+    let ekubo_swap_usdt_usdc = Swap::new(component, usdt.clone(), usdc.clone());
 
     // USV4
     // Fee and tick spacing information for this test is obtained by querying the
@@ -430,8 +429,8 @@ fn test_multi_protocol() {
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(eth.clone()),
+        usdc.clone(),
+        eth.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -501,8 +500,8 @@ fn test_uniswap_v3_balancer_v3() {
             },
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(wbtc.clone()),
+        weth.clone(),
+        wbtc.clone(),
     );
     let swap_wbtc_qnt = Swap::new(
         ProtocolComponent {
@@ -510,8 +509,8 @@ fn test_uniswap_v3_balancer_v3() {
             protocol_system: "vm:balancer_v3".to_string(),
             ..Default::default()
         },
-        default_token(wbtc.clone()),
-        default_token(qnt.clone()),
+        wbtc.clone(),
+        qnt.clone(),
     );
     let encoder = get_tycho_router_encoder();
 

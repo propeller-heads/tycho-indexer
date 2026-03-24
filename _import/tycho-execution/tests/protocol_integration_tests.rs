@@ -3,16 +3,13 @@ use std::{collections::HashMap, default::Default, str::FromStr, sync::Arc};
 
 use alloy::{hex, hex::encode};
 use num_bigint::{BigInt, BigUint};
-use tycho_common::{
-    models::{protocol::ProtocolComponent, token::Token, Chain},
-    Bytes,
-};
+use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 use tycho_execution::encoding::{
     evm::{
         testing_utils::MockRFQState,
         utils::{biguint_to_u256, write_calldata_to_file},
     },
-    models::{default_token, Solution, Swap, UserTransferType},
+    models::{Solution, Swap, UserTransferType},
 };
 
 use crate::common::{
@@ -42,8 +39,7 @@ fn test_single_encoding_strategy_ekubo() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -99,8 +95,7 @@ fn test_single_encoding_strategy_ekubo_erc20() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -156,8 +151,7 @@ fn test_single_encoding_strategy_ekubo_mev_resist() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -202,8 +196,7 @@ fn test_single_encoding_strategy_maverick() {
     };
     let token_in = Bytes::from("0x40D16FC0246aD3160Ccc09B8D0D3A2cD28aE6C2f");
     let token_out = usdc();
-    let swap =
-        Swap::new(maverick_pool, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(maverick_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -262,8 +255,8 @@ fn test_single_encoding_strategy_usv4_eth_in() {
             static_attributes: static_attributes_eth_pepe,
             ..Default::default()
         },
-        default_token(eth.clone()),
-        default_token(pepe.clone()),
+        eth.clone(),
+        pepe.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -326,8 +319,8 @@ fn test_single_encoding_strategy_usv4_eth_out() {
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(eth.clone()),
+        usdc.clone(),
+        eth.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -399,8 +392,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(eth.clone()),
+        usdc.clone(),
+        eth.clone(),
     );
 
     let swap_eth_pepe = Swap::new(
@@ -410,8 +403,8 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
             static_attributes: static_attributes_eth_pepe,
             ..Default::default()
         },
-        default_token(eth.clone()),
-        default_token(pepe.clone()),
+        eth.clone(),
+        pepe.clone(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -528,8 +521,8 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
             static_attributes: static_attributes_weth_usdt,
             ..Default::default()
         },
-        default_token(weth.clone()),
-        default_token(usdc.clone()),
+        weth.clone(),
+        usdc.clone(),
     );
 
     let swap_usdc_eth = Swap::new(
@@ -539,8 +532,8 @@ fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
             static_attributes: static_attributes_usdc_eth,
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(eth.clone()),
+        usdc.clone(),
+        eth.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -606,8 +599,8 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
             ]),
             ..Default::default()
         },
-        default_token(usde.clone()),
-        default_token(usdc.clone()),
+        usde.clone(),
+        usdc.clone(),
     );
 
     // Second swap: USDC -> USDT
@@ -625,8 +618,8 @@ fn test_single_encoding_strategy_ekubo_grouped_swap() {
             ]),
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(usdt.clone()),
+        usdc.clone(),
+        usdt.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -687,8 +680,7 @@ fn test_single_encoding_strategy_curve() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -748,8 +740,7 @@ fn test_single_encoding_strategy_curve_st_eth() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -818,7 +809,7 @@ fn test_single_encoding_strategy_curve_protocol_will_debit_from_vault() {
         ..Default::default()
     };
 
-    let swap = Swap::new(curve_tripool, default_token(dai.clone()), default_token(usdc.clone()));
+    let swap = Swap::new(curve_tripool, dai.clone(), usdc.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -868,8 +859,7 @@ fn test_single_encoding_strategy_balancer_v3() {
     };
     let token_in = Bytes::from("0x097ffedb80d4b2ca6105a07a4d90eb739c45a666");
     let token_out = Bytes::from("0x30881baa943777f92dc934d53d3bfdf33382cab3");
-    let swap =
-        Swap::new(balancer_pool, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(balancer_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -940,13 +930,9 @@ fn test_single_encoding_strategy_bebop() {
         ..Default::default()
     };
 
-    let swap = Swap::new(
-        bebop_component,
-        default_token(token_in.clone()),
-        default_token(token_out.clone()),
-    )
-    .with_estimated_amount_in(BigUint::from_str("200000000").unwrap())
-    .with_protocol_state(Arc::new(bebop_state));
+    let swap = Swap::new(bebop_component, token_in.clone(), token_out.clone())
+        .with_estimated_amount_in(BigUint::from_str("200000000").unwrap())
+        .with_protocol_state(Arc::new(bebop_state));
 
     let encoder = get_tycho_router_encoder();
 
@@ -1017,13 +1003,9 @@ fn test_single_encoding_strategy_bebop_aggregate() {
         ..Default::default()
     };
 
-    let swap = Swap::new(
-        bebop_component,
-        default_token(token_in.clone()),
-        default_token(token_out.clone()),
-    )
-    .with_estimated_amount_in(BigUint::from_str("20000000000").unwrap())
-    .with_protocol_state(Arc::new(bebop_state));
+    let swap = Swap::new(bebop_component, token_in.clone(), token_out.clone())
+        .with_estimated_amount_in(BigUint::from_str("20000000000").unwrap())
+        .with_protocol_state(Arc::new(bebop_state));
 
     let encoder = get_tycho_router_encoder();
 
@@ -1117,10 +1099,9 @@ fn test_single_encoding_strategy_hashflow() {
         ..Default::default()
     };
 
-    let swap_usdc_wbtc =
-        Swap::new(hashflow_component, default_token(usdc.clone()), default_token(wbtc.clone()))
-            .with_estimated_amount_in(BigUint::from_str("4308094737").unwrap())
-            .with_protocol_state(Arc::new(hashflow_state));
+    let swap_usdc_wbtc = Swap::new(hashflow_component, usdc.clone(), wbtc.clone())
+        .with_estimated_amount_in(BigUint::from_str("4308094737").unwrap())
+        .with_protocol_state(Arc::new(hashflow_state));
     let encoder = get_tycho_router_encoder();
 
     let solution = Solution::new(
@@ -1165,8 +1146,7 @@ fn test_single_encoding_strategy_fluid() {
     let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");
     let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
     let alice = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap();
-    let swap =
-        Swap::new(fluid_dex, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(fluid_dex, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1217,10 +1197,8 @@ fn test_sequential_encoding_strategy_fluid() {
     let usdt = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
     let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
     let alice = Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap();
-    let swap_1 =
-        Swap::new(fluid_dex_1, default_token(token_in.clone()), default_token(usdt.clone()));
-    let swap_2 =
-        Swap::new(fluid_dex_2, default_token(usdt.clone()), default_token(token_out.clone()));
+    let swap_1 = Swap::new(fluid_dex_1, token_in.clone(), usdt.clone());
+    let swap_2 = Swap::new(fluid_dex_2, usdt.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1267,11 +1245,7 @@ fn test_single_encoding_strategy_rocketpool_deposit() {
     };
     let token_in = eth();
     let token_out = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
-    let swap = Swap::new(
-        rocketpool_pool,
-        default_token(token_in.clone()),
-        default_token(token_out.clone()),
-    );
+    let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1322,11 +1296,7 @@ fn test_single_encoding_strategy_rocketpool_burn() {
     };
     let token_in = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
     let token_out = eth();
-    let swap = Swap::new(
-        rocketpool_pool,
-        default_token(token_in.clone()),
-        default_token(token_out.clone()),
-    );
+    let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1377,11 +1347,7 @@ fn test_single_encoding_strategy_slipstreams() {
     };
     let token_in = Bytes::from("0x4200000000000000000000000000000000000006");
     let token_out = Bytes::from("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
-    let swap = Swap::new(
-        slipstreams_pool,
-        default_token(token_in.clone()),
-        default_token(token_out.clone()),
-    );
+    let swap = Swap::new(slipstreams_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_base_tycho_router_encoder();
 
@@ -1430,11 +1396,7 @@ fn test_sequential_encoding_strategy_slipstreams() {
     };
     let weth = Bytes::from("0x4200000000000000000000000000000000000006");
     let usdc = Bytes::from("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
-    let swap1 = Swap::new(
-        slipstreams_weth_usdc_pool,
-        default_token(weth.clone()),
-        default_token(usdc.clone()),
-    );
+    let swap1 = Swap::new(slipstreams_weth_usdc_pool, weth.clone(), usdc.clone());
     let slipstreams_cbbtc_usdc_pool = ProtocolComponent {
         id: String::from("0x4e962BB3889Bf030368F56810A9c96B83CB3E778"),
         protocol_system: String::from("aerodrome_slipstreams"),
@@ -1445,11 +1407,7 @@ fn test_sequential_encoding_strategy_slipstreams() {
         ..Default::default()
     };
     let btc = Bytes::from("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf");
-    let swap2 = Swap::new(
-        slipstreams_cbbtc_usdc_pool,
-        default_token(usdc.clone()),
-        default_token(btc.clone()),
-    );
+    let swap2 = Swap::new(slipstreams_cbbtc_usdc_pool, usdc.clone(), btc.clone());
 
     let encoder = get_base_tycho_router_encoder();
 
@@ -1494,8 +1452,7 @@ fn test_single_encoding_strategy_erc4626() {
     };
     let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
     let token_out = Bytes::from("0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f");
-    let swap =
-        Swap::new(erc4626_pool, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(erc4626_pool, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1540,14 +1497,14 @@ fn test_sequential_encoding_strategy_erc4626() {
     };
     let sp_usdc = Bytes::from("0x28b3a8fb53b741a8fd78c0fb9a6b2393d896a43d");
     let usdc = Bytes::from("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
-    let swap1 = Swap::new(spusdc_pool, default_token(sp_usdc.clone()), default_token(usdc.clone()));
+    let swap1 = Swap::new(spusdc_pool, sp_usdc.clone(), usdc.clone());
     let susdc_pool = ProtocolComponent {
         id: String::from("0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe"),
         protocol_system: String::from("erc4626"),
         ..Default::default()
     };
     let susdc = Bytes::from("0xbc65ad17c5c0a2a4d159fa5a503f4992c7b545fe");
-    let swap2 = Swap::new(susdc_pool, default_token(usdc.clone()), default_token(susdc.clone()));
+    let swap2 = Swap::new(susdc_pool, usdc.clone(), susdc.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1605,8 +1562,8 @@ fn test_single_swap_with_univ4_angstrom() {
             static_attributes: usdc_weth_attributes,
             ..Default::default()
         },
-        default_token(usdc.clone()),
-        default_token(weth.clone()),
+        usdc.clone(),
+        weth.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -1652,8 +1609,7 @@ fn test_single_encoding_strategy_weth_wrap() {
         ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
     let token_in = eth();
     let token_out = weth();
-    let swap =
-        Swap::new(weth_executor, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(weth_executor, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1694,8 +1650,7 @@ fn test_single_encoding_strategy_weth_unwrap() {
         ProtocolComponent { protocol_system: String::from("weth"), ..Default::default() };
     let token_in = weth();
     let token_out = eth();
-    let swap =
-        Swap::new(weth_executor, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(weth_executor, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1742,8 +1697,8 @@ fn test_sequential_encoding_strategy_weth_wrap_added() {
             protocol_system: "uniswap_v2".to_string(),
             ..Default::default()
         },
-        default_token(weth().clone()),
-        default_token(dai().clone()),
+        weth(),
+        dai(),
     );
     let encoder = get_tycho_router_encoder();
 
@@ -1802,8 +1757,7 @@ fn test_single_encoding_strategy_ekubo_v3() {
         ..Default::default()
     };
 
-    let swap =
-        Swap::new(component, default_token(token_in.clone()), default_token(token_out.clone()));
+    let swap = Swap::new(component, token_in.clone(), token_out.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1859,8 +1813,8 @@ fn test_single_ekubo_v3_grouped_swap() {
             ]),
             ..Default::default()
         },
-        default_token(usdt()),
-        default_token(usdc()),
+        usdt(),
+        usdc(),
     );
 
     // Second swap: USDC -> ETH
@@ -1878,8 +1832,8 @@ fn test_single_ekubo_v3_grouped_swap() {
             ]),
             ..Default::default()
         },
-        default_token(usdc()),
-        default_token(eth()),
+        usdc(),
+        eth(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -1926,13 +1880,13 @@ fn test_sequential_encoding_strategy_etherfi_unwrap_weeth() {
     };
     let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
     let eeth = Bytes::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2");
-    let swap1 = Swap::new(weeth_pool, default_token(weeth.clone()), default_token(eeth.clone()));
+    let swap1 = Swap::new(weeth_pool, weeth.clone(), eeth.clone());
     let eeth_pool = ProtocolComponent {
         id: String::from("0x35fA164735182de50811E8e2E824cFb9B6118ac2"),
         protocol_system: String::from("etherfi"),
         ..Default::default()
     };
-    let swap2 = Swap::new(eeth_pool, default_token(eeth.clone()), default_token(eth()));
+    let swap2 = Swap::new(eeth_pool, eeth.clone(), eth());
 
     let encoder = get_tycho_router_encoder();
 
@@ -1982,7 +1936,7 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
         protocol_system: String::from("etherfi"),
         ..Default::default()
     };
-    let swap1 = Swap::new(eeth_pool, default_token(eth()), default_token(eeth.clone()));
+    let swap1 = Swap::new(eeth_pool, eth(), eeth.clone());
 
     let weeth_pool = ProtocolComponent {
         id: String::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"),
@@ -1990,7 +1944,7 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
         ..Default::default()
     };
     let weeth = Bytes::from("0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
-    let swap2 = Swap::new(weeth_pool, default_token(eeth.clone()), default_token(weeth.clone()));
+    let swap2 = Swap::new(weeth_pool, eeth.clone(), weeth.clone());
 
     let encoder = get_tycho_router_encoder();
 
@@ -2046,9 +2000,6 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
     static_attributes.insert("key_lp_fee".into(), pool_fee);
     static_attributes.insert("tick_spacing".into(), tick_spacing);
 
-    let twif_token = Token::new(&twif, "TWIF", 18, 600, &[], Chain::Ethereum, 50);
-    let usdc_token = Token::new(&usdc, "USDC", 6, 0, &[], Chain::Ethereum, 100);
-
     let swap = Swap::new(
         ProtocolComponent {
             id: "0x66315f75b2071302fa143f44ae0ec79c0c98f837693fa7150f8ac7ed1fa7576e".to_string(),
@@ -2056,8 +2007,8 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
             static_attributes,
             ..Default::default()
         },
-        twif_token,
-        usdc_token,
+        twif.clone(),
+        usdc.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -2123,9 +2074,6 @@ fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
     static_attributes.insert("key_lp_fee".into(), pool_fee);
     static_attributes.insert("tick_spacing".into(), tick_spacing);
 
-    let usdc_token = Token::new(&usdc, "USDC", 6, 0, &[], Chain::Ethereum, 100);
-    let twif_token = Token::new(&twif, "TWIF", 18, 600, &[], Chain::Ethereum, 50);
-
     let swap = Swap::new(
         ProtocolComponent {
             id: "0x66315f75b2071302fa143f44ae0ec79c0c98f837693fa7150f8ac7ed1fa7576e".to_string(),
@@ -2133,8 +2081,8 @@ fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
             static_attributes,
             ..Default::default()
         },
-        usdc_token,
-        twif_token,
+        usdc.clone(),
+        twif.clone(),
     );
 
     let encoder = get_tycho_router_encoder();
@@ -2204,9 +2152,6 @@ fn test_single_encoding_strategy_usv4_grouped_twif_intermediary() {
     static_attributes_2.insert("key_lp_fee".into(), pool_fee);
     static_attributes_2.insert("tick_spacing".into(), tick_spacing);
 
-    let usdc_token = Token::new(&usdc, "USDC", 6, 0, &[], Chain::Ethereum, 100);
-    let twif_token = Token::new(&twif, "TWIF", 18, 600, &[], Chain::Ethereum, 50);
-
     let pool_id = "0x66315f75b2071302fa143f44ae0ec79c0c98f837693fa7150f8ac7ed1fa7576e";
 
     // First swap: USDC -> TWIF
@@ -2217,8 +2162,8 @@ fn test_single_encoding_strategy_usv4_grouped_twif_intermediary() {
             static_attributes: static_attributes_1,
             ..Default::default()
         },
-        usdc_token.clone(),
-        twif_token.clone(),
+        usdc.clone(),
+        twif.clone(),
     );
 
     // Second swap: TWIF -> USDC (same pool, reversed)
@@ -2229,8 +2174,8 @@ fn test_single_encoding_strategy_usv4_grouped_twif_intermediary() {
             static_attributes: static_attributes_2,
             ..Default::default()
         },
-        twif_token,
-        usdc_token,
+        twif.clone(),
+        usdc.clone(),
     );
 
     let encoder = get_tycho_router_encoder();

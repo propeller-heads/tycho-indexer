@@ -47,8 +47,8 @@ impl SwapEncoder for BebopSwapEncoder {
         swap: &Swap,
         encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let token_in = bytes_to_address(&swap.token_in().address)?;
-        let token_out = bytes_to_address(&swap.token_out().address)?;
+        let token_in = bytes_to_address(swap.token_in())?;
+        let token_out = bytes_to_address(swap.token_out())?;
 
         let protocol_state = swap
             .protocol_state()
@@ -68,8 +68,8 @@ impl SwapEncoder for BebopSwapEncoder {
                 .ok_or(EncodingError::FatalError(
                     "Estimated amount in is mandatory for a Bebop swap".to_string(),
                 ))?;
-            let token_in = swap.token_in().address.clone();
-            let token_out = swap.token_out().address.clone();
+            let token_in = swap.token_in().clone();
+            let token_out = swap.token_out().clone();
             let router_address = encoding_context
                 .router_address
                 .clone()
@@ -144,9 +144,8 @@ mod tests {
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
-    use crate::encoding::{
-        evm::{swap_encoder::bebop::BebopSwapEncoder, testing_utils::MockRFQState},
-        models::default_token,
+    use crate::encoding::evm::{
+        swap_encoder::bebop::BebopSwapEncoder, testing_utils::MockRFQState,
     };
 
     #[test]
@@ -179,13 +178,9 @@ mod tests {
         let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
         let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
 
-        let swap = Swap::new(
-            bebop_component,
-            default_token(token_in.clone()),
-            default_token(token_out.clone()),
-        )
-        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-        .with_protocol_state(Arc::new(bebop_state));
+        let swap = Swap::new(bebop_component, token_in.clone(), token_out.clone())
+            .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+            .with_protocol_state(Arc::new(bebop_state));
 
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
