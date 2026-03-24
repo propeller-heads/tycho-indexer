@@ -90,7 +90,17 @@ impl ComponentFilter {
 
     /// Blocklist specific component IDs from tracking regardless of other
     /// filter criteria. IDs are normalized to lowercase.
+    ///
+    /// Has no effect when the filter variant is `Ids`, since the
+    /// inclusion list already defines exactly which components to track.
     pub fn blocklist(mut self, ids: impl IntoIterator<Item = ComponentId>) -> Self {
+        if matches!(self.variant, ComponentFilterVariant::Ids(_)) {
+            warn!(
+                "blocklist() has no effect on ComponentFilter::Ids; \
+                 remove the component from the ID list instead"
+            );
+            return self;
+        }
         self.blocklisted_ids.extend(
             ids.into_iter()
                 .map(|id| id.to_lowercase()),
@@ -388,16 +398,7 @@ where
         deltas: &BlockChanges,
     ) -> (Vec<ComponentId>, Vec<ComponentId>) {
         match &self.filter.variant {
-            ComponentFilterVariant::Ids(_) => {
-                // Remove any currently-tracked components that are now blocklisted
-                let to_remove: Vec<_> = self
-                    .components
-                    .keys()
-                    .filter(|id| self.filter.is_blocklisted(id))
-                    .cloned()
-                    .collect();
-                (Default::default(), to_remove)
-            }
+            ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
             ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => {
                 let (mut to_add, mut to_remove): (Vec<_>, Vec<_>) = deltas
                     .component_tvl
@@ -627,5 +628,16 @@ mod test {
             "Non-blocklisted component should be in to_add"
         );
         assert!(to_remove.is_empty());
+    }
+
+    #[test]
+    fn test_blocklist_not_applied_on_ids_filter() {
+        let filter =
+            ComponentFilter::Ids(vec!["pool_a".to_string()]).blocklist(vec!["pool_a".to_string()]);
+
+        assert!(
+            filter.blocklisted_ids.is_empty(),
+            "blocklist() should have no effect on Ids variant"
+        );
     }
 }
