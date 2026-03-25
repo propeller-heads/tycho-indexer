@@ -7352,9 +7352,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.149.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d95b2e9b5fa5524bcb8e4edddd57896a8ac26a91fba9ba116a5afab1474ae19"
+version = "0.152.3"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
 dependencies = [
  "async-trait",
  "backoff",
@@ -7381,9 +7380,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.149.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad9dccc88f2add1d0f18fe565f9cc02dcdf62624cbd3dfc50221e42098bf756"
+version = "0.152.3"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7408,9 +7406,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.149.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88debbd05b68617ed04ff856eb4660846b9eeefbe68c4947ad453128afb2604e"
+version = "0.152.3"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
 dependencies = [
  "alloy",
  "async-trait",
@@ -7430,30 +7427,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.165.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e6a51bf94daa33f83a46b09881a03e0c06554df630af92e9956d21d3bcb863f"
-dependencies = [
- "alloy",
- "chrono",
- "clap",
- "dotenv",
- "hex",
- "num-bigint",
- "once_cell",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "tycho-common",
-]
-
-[[package]]
-name = "tycho-execution"
-version = "0.169.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c508534303c5c51590a0efdc3010fabdcbddd0a1aa12c531c2bb8ad929b072fa"
+version = "0.167.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=3e768a0e1b1075a487ba5cfebaea17627006255e#3e768a0e1b1075a487ba5cfebaea17627006255e"
 dependencies = [
  "alloy",
  "chrono",
