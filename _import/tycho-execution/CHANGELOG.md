@@ -1,3 +1,10 @@
+## [0.168.1](https://github.com/propeller-heads/tycho-execution/compare/0.168.0...0.168.1) (2026-03-25)
+
+
+### Bug Fixes
+
+* Check input delta > 0 when using vault ([91ccd07](https://github.com/propeller-heads/tycho-execution/commit/91ccd07b9b4146b1b683394da5ef2bc2ec88f69d))
+
 ## [0.168.0](https://github.com/propeller-heads/tycho-execution/compare/0.167.0...0.168.0) (2026-03-25)
 
 
