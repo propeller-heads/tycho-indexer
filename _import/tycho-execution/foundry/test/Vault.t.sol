@@ -363,6 +363,20 @@ contract VaultTest is Constants, TestUtils {
         vault.finalizeBalances(BOB, USDC_ADDR, inputAmount);
     }
 
+    function testFinalizeBalancesZeroDeltaReverts() public {
+        vault.setUseVault(true);
+        vault.setNonZeroDeltaCount(1);
+        vault.setDelta(USDC_ADDR, 0);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Vault__UnexpectedInputDelta.selector, int256(0)
+            )
+        );
+
+        vault.finalizeBalances(BOB, USDC_ADDR, 0);
+    }
+
     function testFinalizeBalancesSuccess() public {
         uint256 inputAmount = 2_000_000;
         int256 inputDelta = -2_000_000;
