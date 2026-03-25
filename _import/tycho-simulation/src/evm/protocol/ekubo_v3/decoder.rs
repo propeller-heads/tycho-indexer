@@ -258,8 +258,8 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EkuboV3State {
     }
 }
 
-/// Determines the extension type, trying address-based detection first,
-/// then falling back to the legacy `extension_id` static attribute.
+/// Determines the extension type, checking the legacy `extension_id` static
+/// attribute first if present, then falling back to address-based detection.
 fn extension_type_from_attributes_or_address(
     static_attrs: &HashMap<String, Bytes>,
     extension: Address,
