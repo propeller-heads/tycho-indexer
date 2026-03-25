@@ -1,3 +1,13 @@
+## [0.251.1](https://github.com/propeller-heads/tycho-simulation/compare/0.251.0...0.251.1) (2026-03-25)
+
+
+### Bug Fixes
+
+* Add backward compatibility for Ekubo v3 attribute decoding ([384ede2](https://github.com/propeller-heads/tycho-simulation/commit/384ede2891fe8d9a717cc67567554a63a571bb14)), closes [#538](https://github.com/propeller-heads/tycho-simulation/issues/538)
+* add ekubo_v3 filter functions in examples ([4bdae22](https://github.com/propeller-heads/tycho-simulation/commit/4bdae22b5e6b11c5628aa843badcc366fb3b5faf))
+* Correct doc comment on extension_type_from_attributes_or_address ([95359de](https://github.com/propeller-heads/tycho-simulation/commit/95359def39a27009b42a73b862267d845be33f4e))
+* Fall through to address-based detection when extension_id is 0 or unknown ([ffcdf65](https://github.com/propeller-heads/tycho-simulation/commit/ffcdf65af032823bf622e961bfebafe76a65a9e8))
+
 ## [0.251.0](https://github.com/propeller-heads/tycho-simulation/compare/0.250.1...0.251.0) (2026-03-25)
 
 
