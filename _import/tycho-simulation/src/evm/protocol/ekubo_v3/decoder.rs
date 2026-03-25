@@ -397,9 +397,9 @@ mod tests {
     #[tokio::test]
     async fn test_try_from_legacy_format(case: TestCase) {
         let extension_id: i32 = match &case.state_before_transition {
-            EkuboV3State::Concentrated(_)
-            | EkuboV3State::FullRange(_)
-            | EkuboV3State::Stableswap(_) => 1,
+            EkuboV3State::Concentrated(_) |
+            EkuboV3State::FullRange(_) |
+            EkuboV3State::Stableswap(_) => 1,
             EkuboV3State::Oracle(_) => 2,
             EkuboV3State::Twamm(_) => 3,
             EkuboV3State::MevCapture(_) => 4,
@@ -433,10 +433,7 @@ mod tests {
             .collect();
 
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
-                attributes: state_attributes,
-                ..Default::default()
-            },
+            state: ResponseProtocolState { attributes: state_attributes, ..Default::default() },
             component,
             component_tvl: None,
             entrypoints: Vec::new(),
