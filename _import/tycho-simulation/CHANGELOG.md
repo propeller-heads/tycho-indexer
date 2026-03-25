@@ -1,3 +1,10 @@
+## [0.250.1](https://github.com/propeller-heads/tycho-simulation/compare/0.250.0...0.250.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* replace assert\! panics with error returns in sqrt_price_math ([bb6a1f8](https://github.com/propeller-heads/tycho-simulation/commit/bb6a1f84b5a5508b8611036efd600eb5a44d4e50))
+
 ## [0.250.0](https://github.com/propeller-heads/tycho-simulation/compare/0.249.0...0.250.0) (2026-03-16)
 
 
