@@ -179,6 +179,15 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         );
     }
 
+    function testSequentialSwapZeroInput() public {
+        bytes[] memory swaps = _getSequentialSwaps();
+
+        vm.expectRevert(TychoRouter__ZeroInput.selector);
+        tychoRouter.sequentialSwap(
+            0, WETH_ADDR, USDC_ADDR, 1, ALICE, noClientFee(), pleEncode(swaps)
+        );
+    }
+
     function testSequentialSwapInsufficientApproval() public {
         // Trade 1 WETH for USDC through DAI - see _getSequentialSwaps for more info
         uint256 amountIn = 1 ether;
