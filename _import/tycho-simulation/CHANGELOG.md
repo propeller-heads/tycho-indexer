@@ -1,3 +1,16 @@
+## [0.251.0](https://github.com/propeller-heads/tycho-simulation/compare/0.250.1...0.251.0) (2026-03-25)
+
+
+### Features
+
+* Upgrade to use tycho_contracts (Router v3) ([41d783e](https://github.com/propeller-heads/tycho-simulation/commit/41d783e2abb205b1182a885571696b25140131e9))
+* Use newly deploy tycho-execution (Router v3) ([8201331](https://github.com/propeller-heads/tycho-simulation/commit/820133189419592c0b2e8e8e79b93db4b6a78463))
+
+
+### Bug Fixes
+
+* Update tycho-execution to 0.167.0 ([1d57d89](https://github.com/propeller-heads/tycho-simulation/commit/1d57d897d6fcfebd8a3499ba97819f904d75304b))
+
 ## [0.250.1](https://github.com/propeller-heads/tycho-simulation/compare/0.250.0...0.250.1) (2026-03-24)
 
 
