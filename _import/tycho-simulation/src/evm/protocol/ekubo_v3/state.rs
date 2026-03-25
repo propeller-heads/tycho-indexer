@@ -22,22 +22,26 @@ use tycho_common::{
 };
 
 use super::pool::{
-    base::BasePool, full_range::FullRangePool, oracle::OraclePool, twamm::TwammPool, EkuboPool,
+    concentrated::ConcentratedPool, full_range::FullRangePool, oracle::OraclePool,
+    twamm::TwammPool, EkuboPool,
 };
 use crate::evm::protocol::{
-    ekubo_v3::pool::{mev_capture::MevCapturePool, stableswap::StableswapPool},
+    ekubo_v3::pool::{
+        boosted_fees::BoostedFeesPool, mev_capture::MevCapturePool, stableswap::StableswapPool,
+    },
     u256_num::u256_to_f64,
 };
 
 #[enum_delegate::implement(EkuboPool)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EkuboV3State {
-    Base(BasePool),
+    Concentrated(ConcentratedPool),
     FullRange(FullRangePool),
     Stableswap(StableswapPool),
     Oracle(OraclePool),
     Twamm(TwammPool),
     MevCapture(MevCapturePool),
+    BoostedFees(BoostedFeesPool),
 }
 
 fn sqrt_price_q128_to_f64(
