@@ -34,6 +34,6 @@ This repository is licensed under the [Business Source License 1.1](LICENSE) (BU
 **What you cannot do:**
 - Deploy, redeploy, or operate your own instance of the Tycho Router or any derivative
 
-On **2028-03-19**, the license converts to MIT, granting full open-source rights.
+On **2030-03-19**, the license converts to MIT, granting full open-source rights.
 
 For commercial licensing inquiries, contact [legal@propellerheads.xyz](mailto:legal@propellerheads.xyz).
