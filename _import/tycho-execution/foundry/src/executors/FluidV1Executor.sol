@@ -140,16 +140,16 @@ contract FluidV1Executor is IExecutor, ICallback {
             bool outputToRouter
         )
     {
-        if (data.length >= 41) {
-            tokenOut = address(bytes20(data[21:41]));
+        tokenOut = address(bytes20(data[21:41]));
+        bool isNativeSell = uint8(data[41]) > 0;
+        // ETH transfers are handled before the callback by calling dex.swapIn
+        // instead of dex.swapInWithCallback.
+        if (isNativeSell) {
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
+        } else {
+            transferType = TransferManager.TransferType.None;
         }
-        return (
-            TransferManager.TransferType.None,
-            address(0),
-            address(0),
-            tokenOut,
-            false
-        );
+        return (transferType, address(0), address(0), tokenOut, false);
     }
 
     function getCallbackTransferData(bytes calldata data)
@@ -164,8 +164,8 @@ contract FluidV1Executor is IExecutor, ICallback {
     {
         (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
         if (tokenIn == address(0)) {
-            // ETH transfers are handled in the Executor, so we need to set the transferType to TransferNativeInExecutor
-            // to update the delta accounting accordingly.
+            // ETH transfers are handled before the callback by calling dex.swapIn
+            // instead of dex.swapInWithCallback.
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             transferType = TransferManager.TransferType.Transfer;

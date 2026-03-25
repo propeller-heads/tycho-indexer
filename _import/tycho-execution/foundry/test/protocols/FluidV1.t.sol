@@ -62,7 +62,12 @@ contract FluidV1ExecutorTest is Test, Constants {
     }
 
     function testGetTransferData() public {
-        bytes memory params = "";
+        address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+        bool zero2one = true;
+        bool isNative = false;
+        bytes memory params =
+            abi.encodePacked(dex, zero2one, outputToken, isNative);
 
         (
             TransferManager.TransferType transferType,
@@ -75,7 +80,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
         assertEq(tokenIn, address(0));
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, 0xdAC17F958D2ee523a2206206994597C13D831ec7);
         assertEq(outputToRouter, false);
     }
 
@@ -234,5 +239,32 @@ contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
         assertEq(balanceAfter - balanceBefore, 1201417);
         assertEq(sUSDe.balanceOf(tychoRouterAddr), 0);
         assertEq(USDC.balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testSingleSwapNativeSell() public {
+        address fluidDex = 0xDD72157A021804141817d46D9852A97addfB9F59;
+        IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
+        uint256 amountIn = 1 ether;
+
+        deal(ALICE, amountIn);
+        uint256 balanceBefore = ezETH.balanceOf(ALICE);
+
+        bytes memory protocolData = abi.encodePacked(
+            fluidDex,
+            false, // zero2one
+            address(ezETH),
+            true // isNativeSell
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(fluidV1Executor), protocolData);
+
+        vm.prank(ALICE);
+        uint256 amountOut = tychoRouter.singleSwap{value: amountIn}(
+            amountIn, address(0), address(ezETH), 1, ALICE, noClientFee(), swap
+        );
+
+        assertGt(amountOut, 0);
+        assertEq(ezETH.balanceOf(ALICE) - balanceBefore, amountOut);
+        assertEq(tychoRouterAddr.balance, 0);
     }
 }
