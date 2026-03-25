@@ -120,10 +120,10 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     constructor(
         address permit2_,
         address feeCalculator,
-        address pauser,
-        address unpauser,
-        address executorSetter,
-        address routerFeeSetter
+        address pauserAdmin,
+        address unpauserAdmin,
+        address executorSetterAdmin,
+        address routerFeeSetterAdmin
     ) Dispatcher(permit2_) EIP712("TychoRouter", "1") {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
@@ -136,11 +136,11 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         _setRoleAdmin(EXECUTOR_SETTER_ROLE, EXECUTOR_SETTER_ROLE);
         _setRoleAdmin(ROUTER_FEE_SETTER_ROLE, ROUTER_FEE_SETTER_ROLE);
 
-        // Grant initial roles
-        _grantRole(PAUSER_ROLE, pauser);
-        _grantRole(UNPAUSER_ROLE, unpauser);
-        _grantRole(EXECUTOR_SETTER_ROLE, executorSetter);
-        _grantRole(ROUTER_FEE_SETTER_ROLE, routerFeeSetter);
+        // Grant initial roles - only these ones are admin of the corresponding role
+        _grantRole(PAUSER_ROLE, pauserAdmin);
+        _grantRole(UNPAUSER_ROLE, unpauserAdmin);
+        _grantRole(EXECUTOR_SETTER_ROLE, executorSetterAdmin);
+        _grantRole(ROUTER_FEE_SETTER_ROLE, routerFeeSetterAdmin);
     }
 
     /**
