@@ -264,20 +264,17 @@ fn extension_type_from_attributes_or_address(
     static_attrs: &HashMap<String, Bytes>,
     extension: Address,
 ) -> Result<ExtensionType, InvalidSnapshotError> {
-    // Backward compat: use extension_id attribute if present (legacy format)
+    // Backward compat: use extension_id attribute if present (legacy format).
+    // A value of 0 means unset — fall through to address-based detection.
     if let Some(extension_id) = static_attrs.get("extension_id") {
-        return match i32::from(extension_id.clone()) {
-            0 => {
-                Err(InvalidSnapshotError::ValueError("Unknown Ekubo extension".to_string()))
-            }
-            1 => Ok(ExtensionType::NoSwapCallPoints),
-            2 => Ok(ExtensionType::Oracle),
-            3 => Ok(ExtensionType::Twamm),
-            4 => Ok(ExtensionType::MevCapture),
-            discriminant => Err(InvalidSnapshotError::ValueError(format!(
-                "Unknown Ekubo extension_id discriminant {discriminant}"
-            ))),
-        };
+        match i32::from(extension_id.clone()) {
+            0 => {}
+            1 => return Ok(ExtensionType::NoSwapCallPoints),
+            2 => return Ok(ExtensionType::Oracle),
+            3 => return Ok(ExtensionType::Twamm),
+            4 => return Ok(ExtensionType::MevCapture),
+            _ => {}
+        }
     }
 
     // New way: detect from extension address
