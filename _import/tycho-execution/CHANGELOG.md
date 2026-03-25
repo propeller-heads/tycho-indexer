@@ -1,3 +1,10 @@
+## [0.169.0](https://github.com/propeller-heads/tycho-execution/compare/0.168.1...0.169.0) (2026-03-25)
+
+
+### Features
+
+* Deploy routers again ([#95](https://github.com/propeller-heads/tycho-execution/issues/95)) ([8a74f78](https://github.com/propeller-heads/tycho-execution/commit/8a74f78c1b901673eb7512a5c8475dc9531617fd))
+
 ## [0.168.1](https://github.com/propeller-heads/tycho-execution/compare/0.168.0...0.168.1) (2026-03-25)
 
 
