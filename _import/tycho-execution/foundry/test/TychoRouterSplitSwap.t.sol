@@ -223,6 +223,22 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
+    function testSplitSwapZeroInput() public {
+        bytes[] memory swaps = _getSplitSwaps();
+
+        vm.expectRevert(TychoRouter__ZeroInput.selector);
+        tychoRouter.splitSwap(
+            0,
+            WETH_ADDR,
+            USDC_ADDR,
+            1,
+            4,
+            ALICE,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+    }
+
     function testSplitSwapInsufficientApproval() public {
         // Trade 1 WETH for USDC through DAI and WBTC - see _getSplitSwaps for more info
         uint256 amountIn = 1 ether;

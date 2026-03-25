@@ -78,6 +78,7 @@ error TychoRouter__InvalidClientSignature();
 error TychoRouter__ExpiredClientSignature(
     uint256 deadline, uint256 blockTimestamp
 );
+error TychoRouter__ZeroInput();
 
 struct ClientFeeParams {
     uint16 clientFeeBps;
@@ -588,6 +589,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        if (amountIn == 0) {
+            revert TychoRouter__ZeroInput();
+        }
         if (receiver == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -657,6 +661,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swap_
     ) internal returns (uint256 amountOut) {
+        if (amountIn == 0) {
+            revert TychoRouter__ZeroInput();
+        }
         if (receiver == address(0)) {
             revert TychoRouter__AddressZero();
         }
@@ -723,6 +730,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) internal returns (uint256 amountOut) {
+        if (amountIn == 0) {
+            revert TychoRouter__ZeroInput();
+        }
         if (receiver == address(0)) {
             revert TychoRouter__AddressZero();
         }

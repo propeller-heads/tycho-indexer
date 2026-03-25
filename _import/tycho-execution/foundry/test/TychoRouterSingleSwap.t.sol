@@ -120,6 +120,18 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         );
     }
 
+    function testSingleSwapZeroInput() public {
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        vm.expectRevert(TychoRouter__ZeroInput.selector);
+        tychoRouter.singleSwap(
+            0, WETH_ADDR, DAI_ADDR, 1, ALICE, noClientFee(), swap
+        );
+    }
+
     function testSingleSwapInsufficientApproval() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2
         // Checks amount out at the end
