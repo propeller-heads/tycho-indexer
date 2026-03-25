@@ -6,7 +6,7 @@ use std::{
 
 use chrono::{TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{info, trace};
 use tycho_common::dto;
 
 use crate::services::rpc::RpcError;
@@ -173,9 +173,9 @@ impl PlansConfig {
         self.plans.get(plan_name).or_else(|| {
             let default = self.plans.get("default");
             if default.is_some() {
-                warn!("unknown plan '{plan_name}', falling back to 'default' plan");
+                trace!("unknown plan '{plan_name}', falling back to 'default' plan");
             } else {
-                warn!(
+                trace!(
                     "unknown plan '{plan_name}' and no 'default' plan configured, \
                      defaulting to unrestricted"
                 );
@@ -195,7 +195,7 @@ impl PlansConfig {
     pub fn from_yaml(path: &str) -> Result<Self, String> {
         let path = Path::new(path);
         if !path.exists() {
-            warn!("No plans config found at {}, running without plan restrictions", path.display());
+            info!("No plans config found at {}, running without plan restrictions", path.display());
             return Ok(Self::default());
         }
         let contents = fs::read_to_string(path)

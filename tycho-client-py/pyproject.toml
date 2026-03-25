@@ -34,7 +34,7 @@ testing = [
 ]
 
 [project.urls]
-homepage = "https://propellerswap.xyz"
+homepage = "https://propellerheads.xyz/"
 repository = "https://github.com/propeller-heads/tycho-indexer"
 
 [tool.setuptools.packages.find]
