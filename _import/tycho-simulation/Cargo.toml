@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.248.1"
+version = "0.251.0"
 
 [package]
 name = "tycho-simulation"
@@ -33,7 +33,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.17", default-features = false }
 
 # Utility
-ruint = { version = "1.17.0", features = ["num-traits"] }
+ruint = { version = "1.17.1", features = ["num-traits"] }
 num-traits = "0.2.17"
 num-bigint = { version = "0.4.6", features = ["serde"] }
 dotenv = "0.15.0"
@@ -43,10 +43,10 @@ hex = "0.4.3"
 async-trait = "0.1.88"
 
 # Tycho dependencies
-tycho-client = ">=0.144.0"
-tycho-common = ">=0.144.0"
-tycho-ethereum = ">=0.144.0"
-tycho-execution = ">=0.165.0"
+tycho-client = ">=0.147.1"
+tycho-common = ">=0.147.1"
+tycho-ethereum = ">=0.147.1"
+tycho-execution = ">=0.167.0"
 
 # EVM dependencies
 # Alloy's dyn-abi 1.4.0 has a security vulnerability, so we require at least 1.4.1
@@ -104,8 +104,9 @@ tokio-stream = "0.1.16"
 dialoguer = "0.10.4"
 
 # Ekubo
-evm_ekubo_sdk = {version = "0.6.5", features = ["serde"]}
+evm_ekubo_sdk = { version = "0.6.5", features = ["serde"] }
 ekubo_sdk = { version = "3", features = ["evm", "serde"] }
+
 
 # rfq
 reqwest = { version = "0.12.22", optional = true }
@@ -121,6 +122,7 @@ hex-literal.workspace = true
 [dev-dependencies]
 # tycho execution for quickstart
 tycho-execution = { workspace = true }
+tycho-test = { path = "tycho-test" }
 tokio-test = "0.4.4"
 approx = "0.5.1"
 rstest = "0.23.0"

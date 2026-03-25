@@ -13,7 +13,7 @@ dotenv = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
 itertools = { workspace = true }
-lru = "0.16.1"
+lru = "0.16.3"
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 miette = { version = "7.6.0" }

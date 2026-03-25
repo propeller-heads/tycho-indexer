@@ -117,6 +117,21 @@ struct Cli {
     /// Maximum number of blocks to process before exiting (0 = run indefinitely)
     #[arg(long, default_value_t = 0)]
     max_blocks: u64,
+
+    /// Ratio used to define the lower bound of the TVL filter for hysteresis.
+    /// Components are added when TVL >= tvl_threshold and removed when TVL drops below
+    /// tvl_threshold / tvl_buffer_ratio.
+    #[arg(long, default_value_t = 1.1)]
+    tvl_buffer_ratio: f64,
+
+    /// Minimum token quality to filter by (defaults to 100 if not provided)
+    #[arg(long)]
+    min_token_quality: Option<i32>,
+
+    /// Maximum number of days since a token was last traded (chain-specific defaults if not
+    /// provided)
+    #[arg(long)]
+    max_days_since_last_trade: Option<u64>,
 }
 
 impl Debug for Cli {
@@ -224,8 +239,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
         Some(cli.tycho_api_key.as_str()),
         true,
         chain,
-        None,
-        None,
+        cli.min_token_quality,
+        cli.max_days_since_last_trade,
     )
     .await
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
@@ -242,6 +257,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
             cli.tvl_threshold,
+            cli.tvl_buffer_ratio,
             cli.protocols.clone(),
         ) {
             protocol_handle = Some(
@@ -1019,7 +1035,6 @@ async fn process_state(
             amount_in.clone(),
             chain,
             None,
-            false,
         ) {
             Ok(res) => res,
             Err(e) => {
@@ -1110,7 +1125,7 @@ fn process_execution_result(
                 &overrides,
                 Some(&execution_info.transaction),
                 Some(&block),
-                Address::from_slice(&execution_info.solution.sender[..20]),
+                Address::from_slice(&execution_info.solution.sender()[..20]),
             );
 
             let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
@@ -1124,7 +1139,7 @@ fn process_execution_result(
                     event_type = "execution_slippage",
                     token_in = %execution_info.token_in,
                     token_out = %execution_info.token_out,
-                    amount_in = %execution_info.solution.given_amount,
+                    amount_in = %execution_info.solution.amount_in(),
                     simulated_amount  = %amount_out,
                     executed_amount = %execution_info.expected_amount_out,
                     slippage_ratio = slippage,
@@ -1182,7 +1197,7 @@ fn process_execution_result(
                 &overrides,
                 Some(&execution_info.transaction),
                 Some(&block),
-                Address::from_slice(&execution_info.solution.sender[..20]),
+                Address::from_slice(&execution_info.solution.sender()[..20]),
             );
 
             let overwrites_string = if let Some(overwrites) = state_overwrites.as_ref() {
@@ -1196,7 +1211,7 @@ fn process_execution_result(
                 error_message = %revert_reason,
                 error_name = %error_name,
                 error_category = %error_category,
-                amount_in =%execution_info.solution.given_amount,
+                amount_in =%execution_info.solution.amount_in(),
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 tenderly_url = %tenderly_url,
@@ -1219,7 +1234,7 @@ fn process_execution_result(
                 event_type = "simulation_execution_failure",
                 error_message = %error_msg,
                 error_category = %error_category,
-                amount_in =%execution_info.solution.given_amount,
+                amount_in =%execution_info.solution.amount_in(),
                 token_in = %execution_info.token_in,
                 token_out = %execution_info.token_out,
                 "Failed to simulate swap: {error_msg}"

@@ -48,13 +48,13 @@ pub async fn simulate_swap_transaction(
     let to_address = execution_info
         .values()
         .next()
-        .map(|info| info.transaction.to.clone())
+        .map(|info| info.transaction.to().clone())
         .expect("To address must be set");
 
     // Gather all unique token addresses for batch slot detection
     let token_addresses: Vec<_> = execution_info
         .values()
-        .map(|info| info.solution.given_token.clone())
+        .map(|info| info.solution.token_in().clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
@@ -68,6 +68,7 @@ pub async fn simulate_swap_transaction(
                     bytes_to_address(&to_address).map_err(|e| (miette!("{e}"), None, None))?,
                     router_overwrites_data.router_bytecode,
                     router_overwrites_data.executor_bytecode,
+                    router_overwrites_data.fee_calculator_bytecode,
                 )
                 .await
                 .map_err(|e| (e, None, None))?,
@@ -90,11 +91,11 @@ pub async fn simulate_swap_transaction(
             }
         };
 
-        let (mut state_overwrites, metadata) = match token_slots.get(&info.solution.given_token) {
+        let (mut state_overwrites, metadata) = match token_slots.get(info.solution.token_in()) {
             Some(slots) => encoding::setup_user_overwrites(
                 &to_address,
-                &info.solution.given_token,
-                &info.solution.given_amount,
+                info.solution.token_in(),
+                info.solution.amount_in(),
                 slots,
             ),
             None => {
@@ -103,7 +104,7 @@ pub async fn simulate_swap_transaction(
                     TychoExecutionResult::Failed {
                         error_msg: format!(
                             "Couldn't find storage slots for token {}",
-                            info.solution.given_token
+                            info.solution.token_in()
                         ),
                     },
                 );
@@ -115,7 +116,7 @@ pub async fn simulate_swap_transaction(
         }
 
         // Add protocol-specific overwrites for Angstrom hooks
-        if let Some(first_swap) = info.solution.swaps.first() {
+        if let Some(first_swap) = info.solution.swaps().first() {
             if let Some(hook_identifier) = first_swap
                 .component()
                 .static_attributes

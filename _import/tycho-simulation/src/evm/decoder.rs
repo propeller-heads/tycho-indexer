@@ -399,14 +399,36 @@ where
                     }
                 }
 
+                // Split proxy accounts by change type:
+                // - Creation: new proxies that must overwrite any existing placeholder
+                // - Update: existing proxies whose storage is being refreshed (handled normally)
+                let mut proxy_creates: Vec<AccountUpdate> = Vec::new();
+                let mut proxy_updates: HashMap<Address, AccountUpdate> = HashMap::new();
+                for (addr, update) in proxy_token_accounts {
+                    if matches!(update.change, ChangeType::Creation) {
+                        proxy_creates.push(update);
+                    } else {
+                        proxy_updates.insert(addr, update);
+                    }
+                }
+
                 info!("Updating engine with {} contracts from snapshots", storage_by_address.len());
                 update_engine(
                     SHARED_TYCHO_DB.clone(),
                     header.clone().block(),
                     Some(storage_by_address),
-                    proxy_token_accounts,
+                    proxy_updates,
                 )
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
+
+                // Force-overwrite new proxy token accounts so that authoritative vm_storage data
+                // always wins over any empty placeholder previously inserted by another
+                // decoder's snapshot loop (which uses init_account / init-if-not-exists).
+                if !proxy_creates.is_empty() {
+                    SHARED_TYCHO_DB
+                        .force_update_accounts(proxy_creates)
+                        .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
+                }
                 info!("Engine updated");
                 drop(state_guard);
             }
@@ -604,6 +626,8 @@ where
                 let mut state_guard = self.state.write().await;
 
                 let mut account_update_by_address: HashMap<Address, AccountUpdate> = HashMap::new();
+                // New proxy token accounts that must overwrite any existing placeholder.
+                let mut new_proxy_accounts: Vec<AccountUpdate> = Vec::new();
                 for (key, value) in deltas.account_updates.iter() {
                     let mut update: AccountUpdate = value.clone().into();
 
@@ -654,7 +678,9 @@ where
                                     .insert(original_address, impl_addr);
 
                                 // Create proxy token account with original account's storage (at
-                                // original address)
+                                // original address). Track it separately so it can be
+                                // force-overwritten and win over any placeholder that another
+                                // decoder's snapshot loop may have written earlier.
                                 let proxy_state = create_proxy_token_account(
                                     original_address,
                                     Some(impl_addr),
@@ -662,7 +688,7 @@ where
                                     update.chain,
                                     update.balance,
                                 );
-                                account_update_by_address.insert(original_address, proxy_state);
+                                new_proxy_accounts.push(proxy_state);
 
                                 impl_addr
                             }
@@ -693,6 +719,14 @@ where
                     account_update_by_address,
                 )
                 .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
+
+                // Force-overwrite any newly-created proxy token accounts so they always win
+                // over placeholder entries inserted by other decoders' snapshot loops.
+                if !new_proxy_accounts.is_empty() {
+                    SHARED_TYCHO_DB
+                        .force_update_accounts(new_proxy_accounts)
+                        .map_err(|e| StreamDecodeError::Fatal(e.to_string()))?;
+                }
                 info!("Engine updated");
 
                 // Collect all pools related to the updated accounts

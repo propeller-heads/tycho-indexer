@@ -1,3 +1,54 @@
+## [0.251.0](https://github.com/propeller-heads/tycho-simulation/compare/0.250.1...0.251.0) (2026-03-25)
+
+
+### Features
+
+* Upgrade to use tycho_contracts (Router v3) ([41d783e](https://github.com/propeller-heads/tycho-simulation/commit/41d783e2abb205b1182a885571696b25140131e9))
+* Use newly deploy tycho-execution (Router v3) ([8201331](https://github.com/propeller-heads/tycho-simulation/commit/820133189419592c0b2e8e8e79b93db4b6a78463))
+
+
+### Bug Fixes
+
+* Update tycho-execution to 0.167.0 ([1d57d89](https://github.com/propeller-heads/tycho-simulation/commit/1d57d897d6fcfebd8a3499ba97819f904d75304b))
+
+## [0.250.1](https://github.com/propeller-heads/tycho-simulation/compare/0.250.0...0.250.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* replace assert\! panics with error returns in sqrt_price_math ([bb6a1f8](https://github.com/propeller-heads/tycho-simulation/commit/bb6a1f84b5a5508b8611036efd600eb5a44d4e50))
+
+## [0.250.0](https://github.com/propeller-heads/tycho-simulation/compare/0.249.0...0.250.0) (2026-03-16)
+
+
+### Features
+
+* update lru dependency ([87a6694](https://github.com/propeller-heads/tycho-simulation/commit/87a6694caa703bf27e89439c9c1e6b82e7af3c23))
+
+## [0.249.0](https://github.com/propeller-heads/tycho-simulation/compare/0.248.3...0.249.0) (2026-03-16)
+
+
+### Features
+
+* add TVL buffer ratio to integration test CLI ([647875a](https://github.com/propeller-heads/tycho-simulation/commit/647875a4ca625d3524656a4a7cb1d3a859c67282))
+* expose token quality and traded days filtering on integration test CLI ([0fa87c0](https://github.com/propeller-heads/tycho-simulation/commit/0fa87c0699375e046bc63d1e2fe0af28f8a52abb))
+
+## [0.248.3](https://github.com/propeller-heads/tycho-simulation/compare/0.248.2...0.248.3) (2026-03-12)
+
+
+### Bug Fixes
+
+* force-overwrite proxy token accounts to prevent stale placeholders ([45f87ae](https://github.com/propeller-heads/tycho-simulation/commit/45f87aed01c01dcbb81fc026704f421edf00007f))
+* overwrite existing accounts on ChangeType::Creation ([af6bb78](https://github.com/propeller-heads/tycho-simulation/commit/af6bb787fbe8aab240ab379d703a71c915eeac59))
+* split proxy account updates by change type for proper handling ([1061193](https://github.com/propeller-heads/tycho-simulation/commit/1061193bf05b56e02d3c98bacdbda48410d7b440))
+
+## [0.248.2](https://github.com/propeller-heads/tycho-simulation/compare/0.248.1...0.248.2) (2026-03-12)
+
+
+### Bug Fixes
+
+* replace assert! panics with SimulationError in swap price limit checks ([bcaa584](https://github.com/propeller-heads/tycho-simulation/commit/bcaa58407ac68698153d1e303ba8a2ae1074c39f))
+
 ## [0.248.1](https://github.com/propeller-heads/tycho-simulation/compare/0.248.0...0.248.1) (2026-03-06)
 
 
