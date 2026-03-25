@@ -31,7 +31,6 @@ async function main() {
     }
 
     const networkRoles = resolveRolesNetwork(network);
-    const pauser = networkRoles.PAUSER_ROLE[0];
     const unpauser = networkRoles.UNPAUSER_ROLE[0];
     const executorSetter = networkRoles.EXECUTOR_SETTER_ROLE[0];
     const routerFeeSetter = networkRoles.ROUTER_FEE_SETTER[0];
@@ -39,10 +38,10 @@ async function main() {
     console.log(`Deploying TychoRouter to ${network} with:`);
     console.log(`- permit2: ${permit2}`);
     console.log(`- feeCalculator: ${feeCalculator}`);
-    console.log(`- pauser: ${pauser}`);
-    console.log(`- unpauser: ${unpauser}`);
-    console.log(`- executorSetter: ${executorSetter}`);
-    console.log(`- routerFeeSetter: ${routerFeeSetter}`);
+    console.log(`- pauserAdmin: ${unpauser}`);
+    console.log(`- unpauserAdmin: ${unpauser}`);
+    console.log(`- executorSetterAdmin: ${executorSetter}`);
+    console.log(`- routerFeeSetterAdmin: ${routerFeeSetter}`);
 
     const [deployer] = await ethers.getSigners();
     console.log(`Deploying with account: ${deployer.address}`);
@@ -58,7 +57,7 @@ async function main() {
     const deployTx = TychoRouter.getDeployTransaction(
         permit2,
         feeCalculator,
-        pauser,
+        unpauser,
         unpauser,
         executorSetter,
         routerFeeSetter
@@ -104,7 +103,7 @@ async function main() {
             constructorArguments: [
                 permit2,
                 feeCalculator,
-                pauser,
+                unpauser,
                 unpauser,
                 executorSetter,
                 routerFeeSetter,

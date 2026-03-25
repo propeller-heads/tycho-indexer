@@ -56,18 +56,8 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
    export FEE_CALCULATOR=<fee-calculator-address-from-previous-step>
    ```
 3. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
-4. Grant additional roles (run once per role, using the private key of the first address in `roles.json`):
-   ```
-   export ROUTER_ADDRESS=<router-address>
-   export ROLE_NAME=PAUSER_ROLE
-   export GRANTER_PK=<private-key-of-first-address-for-this-role>
-   npx hardhat run scripts/set-roles.js --network NETWORK
-   ```
-   Valid `ROLE_NAME` values: `EXECUTOR_SETTER_ROLE`, `PAUSER_ROLE`, `UNPAUSER_ROLE`, `ROUTER_FEE_SETTER`.
-
-   > **Note:** `ROUTER_FEE_SETTER` also grants the role on the FeeCalculator contract. Make sure
-   > `FEE_CALCULATOR` is set (it should already be set from step 2).
-5. Set executors: submit the transaction directly via the safe wallet UI.
+4. Set executors: submit the transaction directly via the safe wallet UI.
+5. Set fee amounts and router fee receiver in FeeCalculator
 
 ### Deploy executors
 
