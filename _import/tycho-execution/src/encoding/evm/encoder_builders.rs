@@ -1,11 +1,9 @@
-use std::collections::HashMap;
-
 use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        constants::DEFAULT_ROUTERS_JSON,
+        constants::get_router_address,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         tycho_encoders::{TychoExecutorEncoder, TychoRouterEncoder},
     },
@@ -53,19 +51,11 @@ impl TychoRouterEncoderBuilder {
     pub fn build(self) -> Result<Box<dyn TychoEncoder>, EncodingError> {
         if let (Some(chain), Some(swap_encoder_registry)) = (self.chain, self.swap_encoder_registry)
         {
-            let tycho_router_address;
-            if let Some(address) = self.router_address {
-                tycho_router_address = address;
+            let tycho_router_address = if let Some(address) = self.router_address {
+                address
             } else {
-                let default_routers: HashMap<Chain, Bytes> =
-                    serde_json::from_str(DEFAULT_ROUTERS_JSON)?;
-                tycho_router_address = default_routers
-                    .get(&chain)
-                    .ok_or(EncodingError::FatalError(
-                        "No default router address found for chain".to_string(),
-                    ))?
-                    .to_owned();
-            }
+                get_router_address(&chain)?.clone()
+            };
 
             Ok(Box::new(TychoRouterEncoder::new(
                 chain,
