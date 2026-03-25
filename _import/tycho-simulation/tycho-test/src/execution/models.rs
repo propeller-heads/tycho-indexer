@@ -3,7 +3,9 @@ use alloy::{
     rpc::types::{state::AccountOverride, TransactionRequest},
 };
 use num_bigint::BigUint;
-use tycho_execution::encoding::models::{Solution, Transaction};
+use serde::{Deserialize, Serialize};
+use tycho_common::Bytes;
+use tycho_execution::encoding::models::Solution;
 
 use crate::execution::tenderly::OverwriteMetadata;
 
@@ -74,4 +76,38 @@ pub(super) enum SimulationResult {
 pub struct RouterOverwritesData {
     pub router_bytecode: Vec<u8>,
     pub executor_bytecode: Vec<u8>,
+    pub fee_calculator_bytecode: Vec<u8>,
+}
+
+/// An encoded EVM transaction ready to be submitted on-chain.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Transaction {
+    /// Contract address to call.
+    to: Bytes,
+    /// Native token value to send with the transaction.
+    value: BigUint,
+    /// ABI-encoded calldata.
+    data: Vec<u8>,
+}
+
+impl Transaction {
+    /// Creates a new transaction.
+    pub fn new(to: Bytes, value: BigUint, data: Vec<u8>) -> Self {
+        Self { to, value, data }
+    }
+
+    /// Returns the contract address to call.
+    pub fn to(&self) -> &Bytes {
+        &self.to
+    }
+
+    /// Returns the native token value to send.
+    pub fn value(&self) -> &BigUint {
+        &self.value
+    }
+
+    /// Returns the ABI-encoded calldata.
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
 }

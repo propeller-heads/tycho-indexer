@@ -2771,6 +2771,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5958,9 +5964,9 @@ dependencies = [
 
 [[package]]
 name = "ruint"
-version = "1.17.0"
+version = "1.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a68df0380e5c9d20ce49534f292a36a7514ae21350726efe1865bdb1fa91d278"
+checksum = "c141e807189ad38a07276942c6623032d3753c8859c146104ac2e4d68865945a"
 dependencies = [
  "alloy-rlp",
  "ark-ff 0.3.0",
@@ -7424,14 +7430,14 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.165.0"
+version = "0.167.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89406dc3ce6e8b851ad8ca9794070e236cee4378d110a89470eda067a6056ded"
+checksum = "fac8ca361b53cc88433652dffa3c53071aed30ec6059153e207c38820b4fb386"
 dependencies = [
  "alloy",
  "chrono",
  "clap",
- "dotenv",
+ "dotenvy",
  "hex",
  "num-bigint",
  "once_cell",
@@ -7526,6 +7532,7 @@ dependencies = [
  "tycho-common",
  "tycho-ethereum",
  "tycho-execution",
+ "tycho-test",
  "typetag",
  "unicode-width 0.1.14",
  "uuid",
