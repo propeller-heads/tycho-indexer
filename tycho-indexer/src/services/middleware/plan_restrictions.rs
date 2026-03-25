@@ -6,7 +6,7 @@ use std::{
 
 use chrono::{TimeDelta, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{trace, warn};
 use tycho_common::dto;
 
 use crate::services::rpc::RpcError;
@@ -173,9 +173,9 @@ impl PlansConfig {
         self.plans.get(plan_name).or_else(|| {
             let default = self.plans.get("default");
             if default.is_some() {
-                warn!("unknown plan '{plan_name}', falling back to 'default' plan");
+                trace!("unknown plan '{plan_name}', falling back to 'default' plan");
             } else {
-                warn!(
+                trace!(
                     "unknown plan '{plan_name}' and no 'default' plan configured, \
                      defaulting to unrestricted"
                 );
