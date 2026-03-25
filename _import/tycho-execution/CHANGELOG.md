@@ -1,3 +1,10 @@
+## [0.168.0](https://github.com/propeller-heads/tycho-execution/compare/0.167.0...0.168.0) (2026-03-25)
+
+
+### Features
+
+* expose default router addresses via public constant and helper ([e77408f](https://github.com/propeller-heads/tycho-execution/commit/e77408fddc522d9a25052c9570576094bf8bec09))
+
 ## [0.167.0](https://github.com/propeller-heads/tycho-execution/compare/0.166.2...0.167.0) (2026-03-24)
 
 
