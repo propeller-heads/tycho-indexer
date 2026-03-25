@@ -11,7 +11,8 @@ pub fn ticks_from_attributes<'a, T: IntoIterator<Item = (impl AsRef<str>, Cow<'a
         .into_iter()
         .filter_map(|(key, value)| {
             let key = key.as_ref();
-            key.starts_with("tick/").then(|| {
+            // Support both new "tick/" and legacy "ticks/" prefix
+            (key.starts_with("tick/") || key.starts_with("ticks/")).then(|| {
                 key.split('/')
                     .nth(1)
                     .ok_or_else(|| "expected key name to contain tick index".to_string())?
@@ -37,13 +38,14 @@ pub fn rate_deltas_from_attributes<
         .filter_map(|(key, value)| {
             let key = key.as_ref();
 
-            if !key.starts_with("rate_delta/") {
+            // Support both new "rate_delta/" and legacy "orders/" prefix
+            if !key.starts_with("rate_delta/") && !key.starts_with("orders/") {
                 return None;
             }
 
             let Some((token_str, time_str)) = key.split('/').skip(1).collect_tuple() else {
                 return Some(Err(format!(
-                    "failed to parse rate_delta attribute segments of \"{key}\""
+                    "failed to parse rate delta attribute segments of \"{key}\""
                 )));
             };
 

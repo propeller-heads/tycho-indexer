@@ -46,12 +46,15 @@ pub fn finish_transition(
     let (rate_token0, rate_token1, new_last_time) = (
         updated_attributes
             .remove("rate_token0")
+            .or_else(|| updated_attributes.remove("token0_sale_rate"))
             .map(u128::from),
         updated_attributes
             .remove("rate_token1")
+            .or_else(|| updated_attributes.remove("token1_sale_rate"))
             .map(u128::from),
         updated_attributes
             .remove("last_time")
+            .or_else(|| updated_attributes.remove("last_execution_time"))
             .map(u64::from),
     );
 
