@@ -29,9 +29,9 @@ See how to change between these options when encoding [here](encoding/#usertrans
 
 ### Permit2
 
-Tycho Execution leverages **Permit2** for token approvals. Before executing a swap via our router, you must approve the **Permit2 contract** for the specified token and amount. This ensures the router has the necessary permissions to execute trades on your behalf.
+Tycho Execution supports **Permit2** for token approvals. Before executing a swap via our router, you must approve the **Permit2 contract** for the specified token and amount. This ensures the router has the necessary permissions to execute trades on your behalf.
 
-When encoding a transaction, we provide functionality to build the `Permit` struct. However, you are responsible for signing the permit.
+Permit2 handling is **not** part of the encoding step. You are responsible for creating and signing the permit yourself. The `Permit2` utility struct is publicly exported from the encoding crate, so you can use it to build the `PermitSingle` and obtain the data needed for signing.
 
 For more details on Permit2 and how to use it, see the [**Permit2 official documentation**](https://docs.uniswap.org/contracts/permit2/overview).
 

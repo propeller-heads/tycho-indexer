@@ -2,7 +2,8 @@
 
 The first step to executing a trade on-chain is encoding.
 
-Our Rust [crate](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src) converts your trades into calldata
+Our Rust [crate](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src)
+converts your trades into calldata
 that the Tycho contracts can execute.
 
 See this [Quickstart](../../../#id-4.-encode-a-swap) section for an example of how to encode your trade.
@@ -32,8 +33,8 @@ The `Swap` struct has the following attributes:
 | Attribute                 |              Type              |                                                        Description                                                        |
 |---------------------------|:------------------------------:|:-------------------------------------------------------------------------------------------------------------------------:|
 | **component**             |      `ProtocolComponent`       |                                            Protocol component from Tycho core                                             |
-| **token\_in**             |            `Bytes`             |                                          Address of the token you provide to the pool                                          |
-| **token\_out**            |            `Bytes`             |                                         Address of the token you expect from the pool                                          |
+| **token\_in**             |            `Bytes`             |                                       Address of the token you provide to the pool                                        |
+| **token\_out**            |            `Bytes`             |                                       Address of the token you expect from the pool                                       |
 | **split**                 |             `f64`              |                 Percentage of the amount in to be swapped in this operation (for example, 0.5 means 50%)                  |
 | **user\_data**            |        `Option<Bytes>`         |                                        Optional user data to be passed to encoding                                        |
 | **protocol\_state**       | `Option<Arc<dyn ProtocolSim>>` |                                     Optional protocol state used to perform the swap                                      |
@@ -133,14 +134,13 @@ A solution contains multiple swap groups when it uses different protocols.
 {% tab title="Encoded Solution" %}
 Encoding produces an `EncodedSolution` with these attributes:
 
-| Attribute             |          Type          |                                     Description                                      |
-|-----------------------|:----------------------:|:------------------------------------------------------------------------------------:|
-| **swaps**             |       `Vec<u8>`        |                         The encoded calldata for the swaps.                          |
-| **interacting\_with** |        `Bytes`         | The address of the contract to be called (it can be the Tycho Router or an Executor) |
-| **selector**          |        `String`        |                      The selector of the function to be called.                      |
-| **n\_tokens**         |        `usize`         |          The number of tokens in the trade (relevant for split swaps only).          |
-| **permit**            | `Option<PermitSingle>` |            Optional permit object for the trade (if permit2 is enabled).             |
-|                       |                        |                                                                                      |
+| Attribute             |   Type    |                                     Description                                      |
+|-----------------------|:---------:|:------------------------------------------------------------------------------------:|
+| **swaps**             | `Vec<u8>` |                         The encoded calldata for the swaps.                          |
+| **interacting\_with** |  `Bytes`  | The address of the contract to be called (it can be the Tycho Router or an Executor) |
+| **selector**          | `String`  |                      The selector of the function to be called.                      |
+| **n\_tokens**         |  `usize`  |          The number of tokens in the trade (relevant for split swaps only).          |
+|                       |           |                                                                                      |
 
 {% endtab %}
 {% endtabs %}
@@ -196,8 +196,8 @@ let encoded_solutions = encoder.encode_solutions(solutions);
 ```
 
 This returns a `Vec<`[`EncodedSolution`](./#encoded-solution-struct)`>` containing only the encoded swaps. It does **not
-** build the full calldata. You must encode the full method call yourself. If you use Permit2, you also need to sign the
-permit object.
+** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
+creation and signing yourself using the public `Permit2` utility (see [Token transfers](../#permit2)).
 
 The full method call includes the following parameters, which act as **execution guardrails:**
 
