@@ -42,10 +42,16 @@ Endpoints enforce data filtering restrictions on API queries. When a restriction
 
 #### Tycho Fynd
 
-<table><thead><tr><th width="280">Restriction</th><th>Value</th></tr></thead><tbody><tr><td>Max version age</td><td>10 minutes</td></tr><tr><td>Protocol systems</td><td>Subset (varies by chain)</td></tr><tr><td><code>tvl_gt</code></td><td>10.0</td></tr><tr><td><code>min_quality</code></td><td>100</td></tr><tr><td><code>traded_n_days_ago</code></td><td>3</td></tr></tbody></table>
+All Fynd endpoints share the same filtering restrictions:
+
+<table><thead><tr><th width="280">Restriction</th><th>Value</th></tr></thead><tbody><tr><td>Max version age</td><td>10 minutes</td></tr><tr><td><code>tvl_gt</code></td><td>10.0</td></tr><tr><td><code>min_quality</code></td><td>100</td></tr><tr><td><code>traded_n_days_ago</code></td><td>3</td></tr></tbody></table>
+
+The available protocol systems vary by chain:
+
+<table><thead><tr><th width="244">Chain</th><th>Protocol Systems</th></tr></thead><tbody><tr><td>Ethereum (Mainnet)</td><td><code>uniswap_v2</code>, <code>uniswap_v3</code>, <code>uniswap_v4</code>, <code>sushiswap_v2</code>, <code>pancakeswap_v2</code>, <code>pancakeswap_v3</code>, <code>ekubo_v2</code>, <code>ekubo_v3</code>, <code>fluid_v1</code></td></tr><tr><td>Base Mainnet</td><td><code>uniswap_v2</code>, <code>uniswap_v3</code>, <code>uniswap_v4</code>, <code>pancakeswap_v3</code>, <code>aerodrome_slipstreams</code></td></tr><tr><td>Unichain Mainnet</td><td><code>uniswap_v2</code>, <code>uniswap_v3</code>, <code>uniswap_v4</code>, <code>velodrome_slipstreams</code></td></tr></tbody></table>
 
 {% hint style="info" %}
-The available protocol systems vary by chain and may change over time. To see the current list for a specific endpoint, use the [Retrieve protocol systems](indexer/tycho-rpc.md#v1-protocol_systems) endpoint.
+These lists may change over time. To see the current protocol systems for a specific endpoint, use the [Retrieve protocol systems](indexer/tycho-rpc.md#v1-protocol_systems) endpoint.
 {% endhint %}
 
 ## Metrics
