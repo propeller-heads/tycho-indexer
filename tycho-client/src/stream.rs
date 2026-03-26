@@ -56,7 +56,7 @@ pub struct TychoStreamBuilder {
     tycho_url: String,
     chain: Chain,
     exchanges: HashMap<String, ComponentFilter>,
-    global_blocklisted_ids: HashSet<String>,
+    blocklisted_ids: HashSet<String>,
     block_time: u64,
     timeout: u64,
     startup_timeout: Duration,
@@ -80,7 +80,7 @@ impl TychoStreamBuilder {
             tycho_url: tycho_url.to_string(),
             chain,
             exchanges: HashMap::new(),
-            global_blocklisted_ids: HashSet::new(),
+            blocklisted_ids: HashSet::new(),
             block_time,
             timeout,
             startup_timeout: Duration::from_secs(block_time * max_missed_blocks),
@@ -217,7 +217,7 @@ impl TychoStreamBuilder {
     /// Blocklisted components are never tracked, regardless of TVL or other
     /// filter criteria.
     pub fn blocklist_components(mut self, ids: impl IntoIterator<Item = String>) -> Self {
-        self.global_blocklisted_ids.extend(ids);
+        self.blocklisted_ids.extend(ids);
         self
     }
 
@@ -295,11 +295,11 @@ impl TychoStreamBuilder {
             .exchanges
             .into_iter()
             .map(|(name, filter)| {
-                let filter = if self.global_blocklisted_ids.is_empty() {
+                let filter = if self.blocklisted_ids.is_empty() {
                     filter
                 } else {
                     filter.blocklist(
-                        self.global_blocklisted_ids
+                        self.blocklisted_ids
                             .iter()
                             .cloned(),
                     )
