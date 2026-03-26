@@ -3,13 +3,11 @@ use std::{
     io::{self, Read},
 };
 
-use alloy::sol_types::SolValue;
 use clap::{Parser, Subcommand};
 use tycho_common::{hex_bytes::Bytes, models::Chain};
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::permit2::PermitSingle,
         encoder_builders::{TychoExecutorEncoderBuilder, TychoRouterEncoderBuilder},
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
     },
@@ -118,15 +116,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "interacting_with": format!("0x{}", hex::encode(encoded_solutions[0].interacting_with())),
         "function_signature": encoded_solutions[0].function_signature(),
         "n_tokens": encoded_solutions[0].n_tokens().to_string(),
-        "permit": match encoded_solutions[0].permit() {
-            Some(permit) => {
-                match PermitSingle::try_from(permit) {
-                    Ok(sol_permit) => format!("0x{}", hex::encode(sol_permit.abi_encode())),
-                    Err(_) => String::new(),
-                }
-            }
-            None => String::new(),
-        },
     });
     // Output the encoded result as JSON to stdout
     println!(

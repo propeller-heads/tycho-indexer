@@ -10,11 +10,11 @@ use tycho_common::Bytes;
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::permit2::PermitSingle,
+        approvals::permit2::{Permit2, PermitSingle},
         utils::{biguint_to_u256, bytes_to_address},
     },
     models,
-    models::{EncodedSolution, Solution},
+    models::{EncodedSolution, Solution, UserTransferType},
 };
 
 /// Represents a transaction to be executed.
@@ -132,15 +132,23 @@ pub fn encode_tycho_router_call(
     // ABI tuple matching ClientFeeParams: (uint16, address, uint256, uint256, bytes)
     let client_fee_params =
         (client_fee_bps, client_fee_receiver, max_client_contribution, deadline, client_signature);
-    let permit_single = encoded_solution.permit().cloned();
-    let (permit, signature) = if let Some(ref p) = permit_single {
+    let (permit, signature) = if *solution.user_transfer_type() ==
+        UserTransferType::TransferFromPermit2
+    {
+        let permit2 = Permit2::new()?;
+        let permit_single = permit2.get_permit(
+            encoded_solution.interacting_with(),
+            solution.sender(),
+            solution.token_in(),
+            solution.amount_in(),
+        )?;
         let permit = Some(
-            PermitSingle::try_from(p)
+            PermitSingle::try_from(&permit_single)
                 .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?,
         );
         let signer = signer
             .ok_or(EncodingError::FatalError("Signer must be set to use permit2".to_string()))?;
-        let signature = sign_permit(chain_id, p, signer)?;
+        let signature = sign_permit(chain_id, &permit_single, signer)?;
         (permit, signature.as_bytes().to_vec())
     } else {
         (None, vec![])
@@ -149,50 +157,51 @@ pub fn encode_tycho_router_call(
     let function_signature = encoded_solution.function_signature();
     let swaps = encoded_solution.swaps().to_vec();
 
-    let method_calldata = if function_signature.contains("singleSwapPermit2") {
+    let method_calldata = if function_signature.contains("Permit2") {
+        let permit = permit.ok_or(EncodingError::FatalError(
+            "permit2 object must be set to use permit2".to_string(),
+        ))?;
+        if function_signature.contains("splitSwap") {
+            (
+                given_amount,
+                given_token,
+                checked_token,
+                min_amount_out,
+                n_tokens,
+                receiver,
+                client_fee_params,
+                permit,
+                signature,
+                swaps,
+            )
+                .abi_encode()
+        } else {
+            (
+                given_amount,
+                given_token,
+                checked_token,
+                min_amount_out,
+                receiver,
+                client_fee_params,
+                permit,
+                signature,
+                swaps,
+            )
+                .abi_encode()
+        }
+    } else if function_signature.contains("splitSwap") {
         (
             given_amount,
             given_token,
             checked_token,
             min_amount_out,
-            receiver,
-            client_fee_params,
-            permit.ok_or(EncodingError::FatalError(
-                "permit2 object must be set to use permit2".to_string(),
-            ))?,
-            signature,
-            swaps,
-        )
-            .abi_encode()
-    } else if function_signature.contains("singleSwapUsingVault") ||
-        function_signature.contains("singleSwap")
-    {
-        (
-            given_amount,
-            given_token,
-            checked_token,
-            min_amount_out,
+            n_tokens,
             receiver,
             client_fee_params,
             swaps,
         )
             .abi_encode()
-    } else if function_signature.contains("sequentialSwapPermit2") {
-        (
-            given_amount,
-            given_token,
-            checked_token,
-            min_amount_out,
-            receiver,
-            client_fee_params,
-            permit.ok_or(EncodingError::FatalError(
-                "permit2 object must be set to use permit2".to_string(),
-            ))?,
-            signature,
-            swaps,
-        )
-            .abi_encode()
-    } else if function_signature.contains("sequentialSwapUsingVault") ||
+    } else if function_signature.contains("singleSwap") ||
         function_signature.contains("sequentialSwap")
     {
         (
@@ -205,38 +214,10 @@ pub fn encode_tycho_router_call(
             swaps,
         )
             .abi_encode()
-    } else if function_signature.contains("splitSwapPermit2") {
-        (
-            given_amount,
-            given_token,
-            checked_token,
-            min_amount_out,
-            n_tokens,
-            receiver,
-            client_fee_params,
-            permit.ok_or(EncodingError::FatalError(
-                "permit2 object must be set to use permit2".to_string(),
-            ))?,
-            signature,
-            swaps,
-        )
-            .abi_encode()
-    } else if function_signature.contains("splitSwapUsingVault") ||
-        function_signature.contains("splitSwap")
-    {
-        (
-            given_amount,
-            given_token,
-            checked_token,
-            min_amount_out,
-            n_tokens,
-            receiver,
-            client_fee_params,
-            swaps,
-        )
-            .abi_encode()
     } else {
-        Err(EncodingError::FatalError("Invalid function signature for Tycho router".to_string()))?
+        return Err(EncodingError::FatalError(
+            "Invalid function signature for Tycho router".to_string(),
+        ));
     };
 
     let contract_interaction = encode_input(function_signature, method_calldata);

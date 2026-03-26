@@ -27,7 +27,7 @@ use crate::encoding::{
 /// Struct for managing Permit2 operations, including encoding approvals and fetching allowance
 /// data.
 #[derive(Clone)]
-pub(crate) struct Permit2 {
+pub struct Permit2 {
     address: Address,
     client: EVMProvider,
     runtime_handle: Handle,

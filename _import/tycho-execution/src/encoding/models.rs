@@ -259,7 +259,6 @@ impl PartialEq for Swap {
 /// * `interacting_with`: Address of the contract to be called.
 /// * `function_signature`: The signature of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
-/// * `permit`: Optional permit for the swap (if permit2 is enabled).
 #[derive(Clone, Debug)]
 pub struct EncodedSolution {
     /// Encoded swaps to be executed.
@@ -270,8 +269,6 @@ pub struct EncodedSolution {
     function_signature: String,
     /// Number of tokens in the swap.
     n_tokens: usize,
-    /// Optional permit for the swap (if permit2 is enabled).
-    permit: Option<PermitSingle>,
 }
 
 impl EncodedSolution {
@@ -281,12 +278,7 @@ impl EncodedSolution {
         function_signature: String,
         n_tokens: usize,
     ) -> Self {
-        Self { swaps, interacting_with, function_signature, n_tokens, permit: None }
-    }
-
-    pub(crate) fn with_permit(mut self, permit: PermitSingle) -> Self {
-        self.permit = Some(permit);
-        self
+        Self { swaps, interacting_with, function_signature, n_tokens }
     }
 
     pub fn swaps(&self) -> &[u8] {
@@ -303,10 +295,6 @@ impl EncodedSolution {
 
     pub fn n_tokens(&self) -> usize {
         self.n_tokens
-    }
-
-    pub fn permit(&self) -> Option<&PermitSingle> {
-        self.permit.as_ref()
     }
 }
 

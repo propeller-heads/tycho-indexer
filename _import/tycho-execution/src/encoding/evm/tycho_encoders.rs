@@ -8,7 +8,6 @@ use tycho_common::{
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::permit2::Permit2,
         constants::GROUPABLE_PROTOCOLS,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
@@ -17,7 +16,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::ple_encode,
     },
-    models::{EncodedSolution, EncodingContext, Solution, Swap, UserTransferType},
+    models::{EncodedSolution, EncodingContext, Solution, Swap},
     strategy_encoder::StrategyEncoder,
     tycho_encoder::TychoEncoder,
 };
@@ -36,7 +35,6 @@ pub(crate) struct TychoRouterEncoder {
     single_swap_strategy: SingleSwapStrategyEncoder,
     sequential_swap_strategy: SequentialSwapStrategyEncoder,
     split_swap_strategy: SplitSwapStrategyEncoder,
-    router_address: Bytes,
 }
 
 impl TychoRouterEncoder {
@@ -58,7 +56,6 @@ impl TychoRouterEncoder {
                 swap_encoder_registry,
                 router_address.clone(),
             )?,
-            router_address,
             chain,
         })
     }
@@ -73,7 +70,7 @@ impl TychoRouterEncoder {
             .map(|swap| swap.component().protocol_system.clone())
             .collect();
 
-        let mut encoded_solution = if (solution.swaps().len() == 1) ||
+        let encoded_solution = if (solution.swaps().len() == 1) ||
             ((protocols.len() == 1 &&
                 protocols
                     .iter()
@@ -97,16 +94,6 @@ impl TychoRouterEncoder {
                 .encode_strategy(&solution)?
         };
 
-        if *solution.user_transfer_type() == UserTransferType::TransferFromPermit2 {
-            let permit2 = Permit2::new()?;
-            let permit = permit2.get_permit(
-                &self.router_address,
-                solution.sender(),
-                solution.token_in(),
-                solution.amount_in(),
-            )?;
-            encoded_solution = encoded_solution.with_permit(permit);
-        };
         Ok(encoded_solution)
     }
 
