@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr, time::Duration};
+use std::{collections::HashSet, path::Path, str::FromStr, time::Duration};
 
 use clap::Parser;
 use tracing::{debug, error, info, warn};
@@ -124,9 +124,9 @@ struct CliArgs {
     #[clap(long, default_value = "32")]
     max_retries: u64,
 
-    /// Component IDs to exclude from tracking. Can be specified multiple times.
-    #[clap(long, number_of_values = 1)]
-    blocklist: Vec<String>,
+    /// Path to a TOML file containing component IDs to exclude from tracking.
+    #[clap(long)]
+    blocklist_config: Option<std::path::PathBuf>,
 }
 
 impl CliArgs {
@@ -146,6 +146,19 @@ impl CliArgs {
 
         Ok(())
     }
+}
+
+#[derive(serde::Deserialize)]
+struct BlocklistFile {
+    ids: Vec<String>,
+}
+
+fn load_blocklist(path: &Path) -> Result<Vec<String>, String> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read blocklist file {}: {e}", path.display()))?;
+    let file: BlocklistFile = toml::from_str(&content)
+        .map_err(|e| format!("Failed to parse blocklist file {}: {e}", path.display()))?;
+    Ok(file.ids)
 }
 
 pub async fn run_cli() -> Result<(), String> {
@@ -213,6 +226,11 @@ pub async fn run_cli() -> Result<(), String> {
 }
 
 async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<(), String> {
+    let blocklist = match &args.blocklist_config {
+        Some(path) => load_blocklist(path)?,
+        None => Vec::new(),
+    };
+
     info!("Running with version: {}", option_env!("CARGO_PKG_VERSION").unwrap_or("unknown"));
     //TODO: remove "or args.auth_key.is_none()" when our internal client use the no_tls flag
     let (tycho_ws_url, tycho_rpc_url) = if args.no_tls || args.auth_key.is_none() {
@@ -274,7 +292,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         } else {
             ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
         }
-        .blocklist(args.blocklist.clone());
+        .blocklist(blocklist.clone());
         let uses_dci = dci_protocols.contains(&name);
         let sync = ProtocolStateSynchronizer::new(
             id.clone(),
@@ -372,6 +390,8 @@ mod cli_tests {
             "--example",
             "--max-messages",
             "1",
+            "--blocklist-config",
+            "blocklist.toml",
         ]);
         let exchanges: Vec<String> = vec!["uniswap_v2".to_string()];
         assert_eq!(args.tycho_url, "localhost:5000");
@@ -384,20 +404,6 @@ mod cli_tests {
         assert!(args.example);
         assert_eq!(args.disable_compression, false);
         assert_eq!(args.partial_blocks, false);
-        assert!(args.blocklist.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_cli_args_with_blocklist() {
-        let args = CliArgs::parse_from([
-            "tycho-client",
-            "--exchange",
-            "uniswap_v2",
-            "--blocklist",
-            "0xabc",
-            "--blocklist",
-            "0xdef",
-        ]);
-        assert_eq!(args.blocklist, vec!["0xabc".to_string(), "0xdef".to_string()]);
+        assert_eq!(args.blocklist_config, Some(std::path::PathBuf::from("blocklist.toml")));
     }
 }

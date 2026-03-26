@@ -28,6 +28,7 @@ tokio-tungstenite.workspace = true
 uuid.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 chrono.workspace = true
 hex.workspace = true
 tracing-appender.workspace = true

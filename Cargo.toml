@@ -50,6 +50,7 @@ tycho-storage = { path = "./tycho-storage", version = "0.152.4" }
 tycho-ethereum = { path = "./tycho-ethereum", version = "0.152.4" }
 tycho-client = { path = "./tycho-client", version = "0.152.4" }
 futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
+toml = "0.8"
 thiserror = "1"
 tracing = "0.1.37"
 deepsize = "0.2.0"
