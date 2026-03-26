@@ -14,18 +14,22 @@ use crate::{
 #[derive(Clone, Debug)]
 pub(crate) enum ComponentFilterVariant {
     Ids(Vec<ComponentId>),
-    /// MinimumTVLRange is a tuple of (remove_tvl_threshold, add_tvl_threshold). Components that
-    /// drop below the remove threshold will be removed from tracking, components that exceed the
-    /// add threshold will be added. This helps buffer against components that fluctuate on the
-    /// tvl threshold boundary. The thresholds are denominated in native token of the chain, for
-    /// example 1 means 1 ETH on ethereum.
-    MinimumTVLRange((f64, f64)),
+    /// MinimumTVLRange filters components by TVL thresholds:
+    /// - `range.0` (remove threshold): components below this are removed from tracking
+    /// - `range.1` (add threshold): components above this are added to tracking
+    ///
+    /// This helps buffer against components that fluctuate on the threshold boundary.
+    /// Thresholds are denominated in native token of the chain, for example 1 means 1 ETH on
+    /// ethereum.
+    MinimumTVLRange {
+        range: (f64, f64),
+        blocklisted_ids: HashSet<ComponentId>,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub struct ComponentFilter {
     variant: ComponentFilterVariant,
-    blocklisted_ids: HashSet<ComponentId>,
 }
 
 impl ComponentFilter {
@@ -40,8 +44,10 @@ impl ComponentFilter {
     #[deprecated(since = "0.9.2", note = "Please use with_tvl_range instead")]
     pub fn MinimumTVL(min_tvl: f64) -> ComponentFilter {
         ComponentFilter {
-            variant: ComponentFilterVariant::MinimumTVLRange((min_tvl, min_tvl)),
-            blocklisted_ids: HashSet::new(),
+            variant: ComponentFilterVariant::MinimumTVLRange {
+                range: (min_tvl, min_tvl),
+                blocklisted_ids: HashSet::new(),
+            },
         }
     }
 
@@ -61,11 +67,10 @@ impl ComponentFilter {
     /// Note: thresholds are denominated in native token of the chain.
     pub fn with_tvl_range(remove_tvl_threshold: f64, add_tvl_threshold: f64) -> ComponentFilter {
         ComponentFilter {
-            variant: ComponentFilterVariant::MinimumTVLRange((
-                remove_tvl_threshold,
-                add_tvl_threshold,
-            )),
-            blocklisted_ids: HashSet::new(),
+            variant: ComponentFilterVariant::MinimumTVLRange {
+                range: (remove_tvl_threshold, add_tvl_threshold),
+                blocklisted_ids: HashSet::new(),
+            },
         }
     }
 
@@ -84,7 +89,6 @@ impl ComponentFilter {
                     .map(|id| id.to_lowercase())
                     .collect(),
             ),
-            blocklisted_ids: HashSet::new(),
         }
     }
 
@@ -94,24 +98,31 @@ impl ComponentFilter {
     /// Has no effect when the filter variant is `Ids`, since the
     /// inclusion list already defines exactly which components to track.
     pub fn blocklist(mut self, ids: impl IntoIterator<Item = ComponentId>) -> Self {
-        if matches!(self.variant, ComponentFilterVariant::Ids(_)) {
-            warn!(
-                "blocklist() has no effect on ComponentFilter::Ids; \
-                 remove the component from the ID list instead"
-            );
-            return self;
+        match &mut self.variant {
+            ComponentFilterVariant::Ids(_) => {
+                warn!(
+                    "blocklist() has no effect on ComponentFilter::Ids; \
+                     remove the component from the ID list instead"
+                );
+            }
+            ComponentFilterVariant::MinimumTVLRange { blocklisted_ids, .. } => {
+                blocklisted_ids.extend(
+                    ids.into_iter()
+                        .map(|id| id.to_lowercase()),
+                );
+            }
         }
-        self.blocklisted_ids.extend(
-            ids.into_iter()
-                .map(|id| id.to_lowercase()),
-        );
         self
     }
 
     /// Returns true if the given component ID is blocklisted.
     pub fn is_blocklisted(&self, id: &str) -> bool {
-        self.blocklisted_ids
-            .contains(&id.to_lowercase())
+        match &self.variant {
+            ComponentFilterVariant::Ids(_) => false,
+            ComponentFilterVariant::MinimumTVLRange { blocklisted_ids, .. } => {
+                blocklisted_ids.contains(&id.to_lowercase())
+            }
+        }
     }
 }
 
@@ -167,7 +178,7 @@ where
                 ids.clone(),
                 self.chain,
             ),
-            ComponentFilterVariant::MinimumTVLRange((_, upper_tvl_threshold)) => {
+            ComponentFilterVariant::MinimumTVLRange { range: (_, upper_tvl_threshold), .. } => {
                 ProtocolComponentsRequestBody::system_filtered(
                     &self.protocol_system,
                     Some(*upper_tvl_threshold),
@@ -399,7 +410,7 @@ where
     ) -> (Vec<ComponentId>, Vec<ComponentId>) {
         match &self.filter.variant {
             ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
-            ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => {
+            ComponentFilterVariant::MinimumTVLRange { range: (remove_tvl, add_tvl), .. } => {
                 let (mut to_add, mut to_remove): (Vec<_>, Vec<_>) = deltas
                     .component_tvl
                     .iter()
@@ -628,16 +639,5 @@ mod test {
             "Non-blocklisted component should be in to_add"
         );
         assert!(to_remove.is_empty());
-    }
-
-    #[test]
-    fn test_blocklist_not_applied_on_ids_filter() {
-        let filter =
-            ComponentFilter::Ids(vec!["pool_a".to_string()]).blocklist(vec!["pool_a".to_string()]);
-
-        assert!(
-            filter.blocklisted_ids.is_empty(),
-            "blocklist() should have no effect on Ids variant"
-        );
     }
 }
