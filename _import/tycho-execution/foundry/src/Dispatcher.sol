@@ -53,8 +53,7 @@ contract Dispatcher is TransferManager {
     constructor(address permit2_) TransferManager(permit2_) {}
 
     /**
-     * @dev Adds or replaces an approved executor contract address if it is a
-     *  contract.
+     * @dev Adds an approved executor contract address if it is a contract.
      * @param target address of the executor contract
      */
     function _setExecutor(address target) internal {
