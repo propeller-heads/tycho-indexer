@@ -1,3 +1,15 @@
+## [0.171.0](https://github.com/propeller-heads/tycho-execution/compare/0.170.0...0.171.0) (2026-03-26)
+
+
+### Features
+
+* Update fluid v1 executor address ([27d74d0](https://github.com/propeller-heads/tycho-execution/commit/27d74d061056035f4152e9fff8815e97015d7ca3))
+
+
+### Bug Fixes
+
+* Native swap handling in FluidV1 ([e478623](https://github.com/propeller-heads/tycho-execution/commit/e478623264c59d7401cf9ff4a488f3dfc80b0505))
+
 ## [0.170.0](https://github.com/propeller-heads/tycho-execution/compare/0.169.0...0.170.0) (2026-03-26)
 
 
