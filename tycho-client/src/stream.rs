@@ -298,11 +298,7 @@ impl TychoStreamBuilder {
                 let filter = if self.blocklisted_ids.is_empty() {
                     filter
                 } else {
-                    filter.blocklist(
-                        self.blocklisted_ids
-                            .iter()
-                            .cloned(),
-                    )
+                    filter.blocklist(self.blocklisted_ids.iter().cloned())
                 };
                 (name, filter)
             })
