@@ -1,3 +1,10 @@
+## [0.252.0](https://github.com/propeller-heads/tycho-simulation/compare/0.251.1...0.252.0) (2026-03-26)
+
+
+### Features
+
+* Rollback tycho-execution Router v3 usage in simulation ([9eb709b](https://github.com/propeller-heads/tycho-simulation/commit/9eb709b8f3bfe1a274e30c310889663f00ba1919))
+
 ## [0.251.1](https://github.com/propeller-heads/tycho-simulation/compare/0.251.0...0.251.1) (2026-03-25)
 
 
