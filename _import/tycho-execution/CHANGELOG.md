@@ -1,3 +1,10 @@
+## [0.170.0](https://github.com/propeller-heads/tycho-execution/compare/0.169.0...0.170.0) (2026-03-26)
+
+
+### Features
+
+* Remove permit2 dependency from encoding ([#97](https://github.com/propeller-heads/tycho-execution/issues/97)) ([01eff5b](https://github.com/propeller-heads/tycho-execution/commit/01eff5ba27e7d943af0d6126643dcf9f8a867048))
+
 ## [0.169.0](https://github.com/propeller-heads/tycho-execution/compare/0.168.1...0.169.0) (2026-03-25)
 
 
