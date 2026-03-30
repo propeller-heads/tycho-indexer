@@ -1,3 +1,10 @@
+## [0.171.2](https://github.com/propeller-heads/tycho-execution/compare/0.171.1...0.171.2) (2026-03-30)
+
+
+### Bug Fixes
+
+* race condition in SafeRuntime drop causing panic in async context ([#100](https://github.com/propeller-heads/tycho-execution/issues/100)) ([a25d9ae](https://github.com/propeller-heads/tycho-execution/commit/a25d9ae61a8d3cfd1250aff8504a57141cdfb270))
+
 ## [0.171.1](https://github.com/propeller-heads/tycho-execution/compare/0.171.0...0.171.1) (2026-03-30)
 
 
