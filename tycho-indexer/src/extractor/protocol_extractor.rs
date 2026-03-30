@@ -156,11 +156,11 @@ where
                         panic!("Unexpected error when fetching latest block {err}");
                     });
 
-                let cursor_hex = hex::encode(&cursor);
+                let cursor_str = String::from_utf8_lossy(&cursor);
                 info!(
                     ?name,
                     ?chain,
-                    cursor = &cursor_hex,
+                    cursor = %cursor_str,
                     block_number = last_processed_block.number,
                     "Found existing cursor! Resuming extractor.."
                 );
