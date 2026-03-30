@@ -843,13 +843,45 @@ impl ExtractorBuilder {
                 .map_err(|err| ExtractionError::SubstreamsError(err.to_string()))?,
         );
 
-        let cursor = extractor.get_cursor().await;
+        // Determine the start block for the Substreams stream.
+        //
+        // We never pass a cursor on fresh start (process restart). Instead, we
+        // resume from the block after the last one committed to DB. This is safe
+        // because only finalized blocks reach the DB, so they can't be reorged.
+        //
+        // Hot reconnections (stream drops within a running process) still use
+        // the cursor — it is maintained internally by `stream_blocks` and
+        // updated after every received block/undo signal.
+        let last_block = extractor
+            .get_last_processed_block()
+            .await;
+        let start_block = last_block
+            .as_ref()
+            .map(|b| {
+                i64::try_from(
+                    b.number
+                        .checked_add(1)
+                        .expect("block number overflow"),
+                )
+                .expect("block number exceeds i64")
+            })
+            .unwrap_or(self.config.start_block);
+
+        if let Some(block) = &last_block {
+            info!(
+                start_block,
+                last_committed_block = block.number,
+                config_start_block = self.config.start_block,
+                "Fresh start: resuming from block after last committed"
+            );
+        }
+
         let stream = SubstreamsStream::new(
             endpoint,
-            Some(cursor),
+            None, // No cursor on fresh start; stream tracks cursor for hot reconnections
             Some(spkg),
             self.config.module_name,
-            self.config.start_block,
+            start_block,
             self.config.stop_block.unwrap_or(0) as u64,
             self.final_block_only,
             extractor_id.to_string(),
