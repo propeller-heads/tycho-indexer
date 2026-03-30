@@ -7403,7 +7403,7 @@ dependencies = [
 [[package]]
 name = "tycho-client"
 version = "0.152.3"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=c613596572e15ac1e38085c767cc8e82f6697906#c613596572e15ac1e38085c767cc8e82f6697906"
 dependencies = [
  "async-trait",
  "backoff",
@@ -7420,6 +7420,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-tungstenite 0.20.1",
+ "toml",
  "tracing",
  "tracing-appender",
  "tracing-subscriber 0.3.20",
@@ -7431,7 +7432,7 @@ dependencies = [
 [[package]]
 name = "tycho-common"
 version = "0.152.3"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=c613596572e15ac1e38085c767cc8e82f6697906#c613596572e15ac1e38085c767cc8e82f6697906"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7457,7 +7458,7 @@ dependencies = [
 [[package]]
 name = "tycho-ethereum"
 version = "0.152.3"
-source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=ecc477d860e0371b4932c3c12747fa3256185faf#ecc477d860e0371b4932c3c12747fa3256185faf"
+source = "git+https://github.com/propeller-heads/tycho-indexer.git?rev=c613596572e15ac1e38085c767cc8e82f6697906#c613596572e15ac1e38085c767cc8e82f6697906"
 dependencies = [
  "alloy",
  "async-trait",
@@ -7477,8 +7478,8 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.167.0"
-source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=3e768a0e1b1075a487ba5cfebaea17627006255e#3e768a0e1b1075a487ba5cfebaea17627006255e"
+version = "0.171.0"
+source = "git+https://github.com/propeller-heads/tycho-execution.git?rev=18e893ec75de6f108c806dc075a0e32f12c04c36#18e893ec75de6f108c806dc075a0e32f12c04c36"
 dependencies = [
  "alloy",
  "chrono",
@@ -7578,7 +7579,7 @@ dependencies = [
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
- "tycho-execution 0.165.1",
+ "tycho-execution",
  "tycho-test",
  "typetag",
  "unicode-width 0.1.14",
@@ -7613,7 +7614,7 @@ dependencies = [
  "tycho-client",
  "tycho-common",
  "tycho-ethereum",
- "tycho-execution 0.169.0",
+ "tycho-execution",
  "tycho-simulation",
  "urlencoding",
 ]

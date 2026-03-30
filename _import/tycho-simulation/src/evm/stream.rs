@@ -372,9 +372,7 @@ impl ProtocolStreamBuilder {
         let ids = crate::utils::load_blocklist(path.as_ref());
         if !ids.is_empty() {
             tracing::info!("Blocklisting {} components", ids.len());
-            self.stream_builder = self
-                .stream_builder
-                .blocklist_components(ids);
+            self.stream_builder = self.stream_builder.blocklisted_ids(ids);
         }
         self
     }
