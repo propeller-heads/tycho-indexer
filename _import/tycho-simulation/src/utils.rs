@@ -1,6 +1,10 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
-use tracing::info;
+use tracing::{info, warn};
 use tycho_client::{
     rpc::{HttpRPCClientOptions, RPCClient, RPC_CLIENT_CONCURRENCY},
     HttpRPCClient, RPCError,
@@ -121,6 +125,40 @@ pub fn get_default_url(chain: &Chain) -> Option<String> {
         Chain::Base => Some("tycho-base-beta.propellerheads.xyz".to_string()),
         Chain::Unichain => Some("tycho-unichain-beta.propellerheads.xyz".to_string()),
         _ => None,
+    }
+}
+
+/// Loads blocklisted component IDs from a TOML file.
+///
+/// Returns an empty set if the file doesn't exist. The file format is:
+/// ```toml
+/// [blocklist]
+/// components = ["0x86d257cdb7bc9c0df10e84c8709697f92770b335"]
+/// ```
+pub fn load_blocklist(path: &Path) -> HashSet<String> {
+    let contents = match fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return HashSet::new(),
+    };
+
+    #[derive(Default, serde::Deserialize)]
+    struct Blocklist {
+        #[serde(default)]
+        components: HashSet<String>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct BlocklistConfig {
+        #[serde(default)]
+        blocklist: Blocklist,
+    }
+
+    match toml::from_str::<BlocklistConfig>(&contents) {
+        Ok(config) => config.blocklist.components,
+        Err(e) => {
+            warn!("Failed to parse {}: {e}", path.display());
+            HashSet::new()
+        }
     }
 }
 

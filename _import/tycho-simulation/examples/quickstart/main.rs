@@ -56,7 +56,7 @@ use tycho_simulation::{
     protocol::models::{ProtocolComponent, Update},
     tycho_client::feed::component_tracker::ComponentFilter,
     tycho_common::models::Chain,
-    utils::{get_default_url, load_all_tokens},
+    utils::{get_default_url, load_all_tokens, load_blocklist},
 };
 
 #[derive(Parser)]
@@ -72,6 +72,9 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
+    /// Path to blocklist TOML config file
+    #[arg(long, default_value = "blocklist.toml")]
+    blocklist_file: std::path::PathBuf,
 }
 
 impl Cli {
@@ -108,6 +111,8 @@ async fn main() {
         .init();
 
     let cli = Cli::parse().with_defaults();
+
+    let blocklist = load_blocklist(&cli.blocklist_file);
 
     let chain = cli.chain;
 
@@ -211,6 +216,11 @@ async fn main() {
                 .exchange::<UniswapV4State>("uniswap_v4", tvl_filter.clone(), None)
         }
         _ => {}
+    }
+
+    if !blocklist.is_empty() {
+        println!("Blocklisting {} components", blocklist.len());
+        protocol_stream = protocol_stream.blocklist_components(blocklist);
     }
 
     let mut protocol_stream = protocol_stream
