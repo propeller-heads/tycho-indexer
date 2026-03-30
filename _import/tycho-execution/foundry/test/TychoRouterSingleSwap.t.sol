@@ -24,6 +24,27 @@ contract LyingSwapOutputPool {
     function swap(uint256, uint256, address, bytes calldata) external {}
 }
 
+contract FalseTokenCallbackPool is TychoRouterTestSetup {
+    // When swap() is called, calls back into TychoRouter with crafted data
+    // instructing the router to transfer USDC to this contract.
+
+    function swap(address, bool, int256, uint160, bytes calldata)
+        external
+        returns (int256, int256)
+    {
+        bytes memory callbackData = abi.encodeWithSignature(
+            "slipstreamsCallback(int256,int256,bytes)",
+            int256(1_000_000e6), // amount to steal
+            int256(0),
+            abi.encodePacked(USDC_ADDR, bytes23(0)) // token to steal
+        );
+        (bool success,) = address(msg.sender).call(callbackData);
+        IERC20(DAI_ADDR).transfer(address(msg.sender), 1000e6);
+        require(success, "Callback failed");
+        return (0, 0);
+    }
+}
+
 contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
     function testSingleSwapPermit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2 using Permit2
@@ -130,6 +151,43 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         tychoRouter.singleSwap(
             0, WETH_ADDR, DAI_ADDR, 1, ALICE, noClientFee(), swap
         );
+    }
+
+    function testArbitraryCallbackToken() public {
+        // Attacker controls a Slipstream pool that abuses the callback
+        // to steal USDC from the router. The original swap had WETH as an input token
+        // and USDT as output.
+        //
+        // Without the fix:
+        // 1. singleSwapUsingVault(amountIn=0) with Slipstreams - fake pool
+        // 2. Callback manipulates data to transfer USDC to the fake pool
+        // 3. Creates negative USDC delta (nonZeroDeltaCount=1)
+        //
+        // Blocked by two independent checks:
+        //   a) amountIn == 0 reverts (TychoRouter__ZeroInput)
+        //   b) inputDelta == 0 would otherwise revert when nonZeroDeltaCount == 1
+
+        uint256 stolenAmount = 1_000_000e6;
+        deal(USDC_ADDR, tychoRouterAddr, stolenAmount);
+
+        FalseTokenCallbackPool maliciousPool = new FalseTokenCallbackPool();
+        // The pool will transfer back DAI while taking an obscene amount of USDC
+        deal(DAI_ADDR, address(maliciousPool), 1000e6);
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR, DAI_ADDR, bytes3(0), address(maliciousPool), uint8(1)
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(slipstreamsExecutor), protocolData);
+
+        vm.expectRevert(TychoRouter__ZeroInput.selector);
+        tychoRouter.singleSwapUsingVault(
+            0, WETH_ADDR, DAI_ADDR, 1, tychoRouterAddr, noClientFee(), swap
+        );
+
+        // No USDC was stolen
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), stolenAmount);
+        assertEq(IERC20(USDC_ADDR).balanceOf(address(maliciousPool)), 0);
     }
 
     function testSingleSwapInsufficientApproval() public {
