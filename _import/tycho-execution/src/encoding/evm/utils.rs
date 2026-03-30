@@ -100,13 +100,14 @@ pub(crate) fn get_static_attribute(
 /// the actual runtime shutdown happens on a background OS thread, avoiding the
 /// "cannot drop a runtime in a context where blocking is not allowed" panic.
 #[derive(Clone)]
-pub(crate) struct SafeRuntime(Arc<Runtime>);
+pub(crate) struct SafeRuntime(Option<Arc<Runtime>>);
 
 impl Drop for SafeRuntime {
     fn drop(&mut self) {
-        if tokio::runtime::Handle::try_current().is_ok() {
-            let rt = self.0.clone();
-            std::thread::spawn(move || drop(rt));
+        if let Some(rt) = self.0.take() {
+            if tokio::runtime::Handle::try_current().is_ok() {
+                std::thread::spawn(move || drop(rt));
+            }
         }
     }
 }
@@ -130,7 +131,7 @@ pub(crate) fn create_encoding_runtime() -> Result<(Handle, SafeRuntime), Encodin
             })?,
     );
     let handle = rt.handle().clone();
-    Ok((handle, SafeRuntime(rt)))
+    Ok((handle, SafeRuntime(Some(rt))))
 }
 
 /// Runs a closure on a fresh OS thread, blocking the caller until it completes.
