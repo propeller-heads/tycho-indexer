@@ -30,6 +30,13 @@ matching what CI does. See `.claude/skills/run-ci/SKILL.md` for the canonical co
 Code should be self-documenting. No commented-out code — delete it. If you need a comment to explain WHAT the code does,
 refactor the code instead. Comments explain WHY, not WHAT. Wrap comment lines at 100 characters.
 
+### Docstrings
+
+- Describe **what** the function does and **what the caller can expect** (return values, edge cases, guarantees).
+- Do **not** describe where or how the function is called.
+- On traits: keep docstrings generic and implementation-agnostic. Document implementation details on the `impl`, not the
+  trait method.
+
 ### Error handling
 
 - Fail fast with clear, actionable messages.
