@@ -56,7 +56,7 @@ use tycho_simulation::{
     protocol::models::{ProtocolComponent, Update},
     tycho_client::feed::component_tracker::ComponentFilter,
     tycho_common::models::Chain,
-    utils::{get_default_url, load_all_tokens, load_blocklist},
+    utils::{get_default_url, load_all_tokens},
 };
 
 #[derive(Parser)]
@@ -111,8 +111,6 @@ async fn main() {
         .init();
 
     let cli = Cli::parse().with_defaults();
-
-    let blocklist = load_blocklist(&cli.blocklist_file);
 
     let chain = cli.chain;
 
@@ -218,10 +216,7 @@ async fn main() {
         _ => {}
     }
 
-    if !blocklist.is_empty() {
-        println!("Blocklisting {} components", blocklist.len());
-        protocol_stream = protocol_stream.blocklist_components(blocklist);
-    }
+    protocol_stream = protocol_stream.blocklist_components(&cli.blocklist_file);
 
     let mut protocol_stream = protocol_stream
         .auth_key(Some(tycho_api_key.clone()))
