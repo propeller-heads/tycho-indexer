@@ -1,10 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use alloy::sol_types::SolValue;
-use tokio::{
-    runtime::{Handle, Runtime},
-    task::block_in_place,
-};
+use tokio::runtime::Handle;
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
     Bytes,
@@ -12,7 +9,9 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{biguint_to_u256, bytes_to_address, get_runtime},
+    evm::utils::{
+        biguint_to_u256, bytes_to_address, create_encoding_runtime, on_blocking_thread, SafeRuntime,
+    },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -29,7 +28,7 @@ pub struct BebopSwapEncoder {
     executor_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
-    runtime: Option<Arc<Runtime>>,
+    runtime: SafeRuntime,
 }
 
 impl SwapEncoder for BebopSwapEncoder {
@@ -38,7 +37,7 @@ impl SwapEncoder for BebopSwapEncoder {
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let (runtime_handle, runtime) = get_runtime()?;
+        let (runtime_handle, runtime) = create_encoding_runtime()?;
         Ok(Self { executor_address, runtime_handle, runtime })
     }
 
@@ -84,13 +83,13 @@ impl SwapEncoder for BebopSwapEncoder {
                 sender: router_address.clone(),
                 receiver: router_address,
             };
-            let signed_quote = block_in_place(|| {
+            let signed_quote = on_blocking_thread(|| {
                 self.runtime_handle.block_on(async {
                     indicatively_priced_state
                         .request_signed_quote(params)
                         .await
                 })
-            })?;
+            })??;
             let bebop_calldata = signed_quote
                 .quote_attributes
                 .get("calldata")
@@ -137,7 +136,7 @@ impl SwapEncoder for BebopSwapEncoder {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::hex::encode;
     use num_bigint::BigUint;

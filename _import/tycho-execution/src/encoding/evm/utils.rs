@@ -94,19 +94,60 @@ pub(crate) fn get_static_attribute(
         .to_vec())
 }
 
-/// Returns the current Tokio runtime handle, or creates a new one if it doesn't exist.
-/// It also returns the runtime to prevent it from being dropped before use.
-/// This is required since tycho-execution does not have a pre-existing runtime.
-pub(crate) fn get_runtime() -> Result<(Handle, Option<Arc<Runtime>>), EncodingError> {
-    match Handle::try_current() {
-        Ok(h) => Ok((h, None)),
-        Err(_) => {
-            let rt = Arc::new(Runtime::new().map_err(|_| {
-                EncodingError::FatalError("Failed to create a new tokio runtime".to_string())
-            })?);
-            Ok((rt.handle().clone(), Some(rt)))
+/// A tokio `Runtime` wrapped in `Arc` that safely drops from async contexts.
+///
+/// If dropped while a tokio runtime is active on the current thread, ensures
+/// the actual runtime shutdown happens on a background OS thread, avoiding the
+/// "cannot drop a runtime in a context where blocking is not allowed" panic.
+#[derive(Clone)]
+pub(crate) struct SafeRuntime(Arc<Runtime>);
+
+impl Drop for SafeRuntime {
+    fn drop(&mut self) {
+        if tokio::runtime::Handle::try_current().is_ok() {
+            let rt = self.0.clone();
+            std::thread::spawn(move || drop(rt));
         }
     }
+}
+
+/// Creates a dedicated multi-thread tokio runtime for encoding operations.
+///
+/// Always creates a new runtime rather than reusing the caller's, so that I/O
+/// futures are driven by dedicated worker threads regardless of the caller's
+/// runtime flavor (including current-thread runtimes like actix-web workers).
+///
+/// Returns the runtime handle and a [`SafeRuntime`] that can be dropped safely
+/// from any context.
+pub(crate) fn create_encoding_runtime() -> Result<(Handle, SafeRuntime), EncodingError> {
+    let rt = Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .map_err(|_| {
+                EncodingError::FatalError("Failed to create encoding runtime".to_string())
+            })?,
+    );
+    let handle = rt.handle().clone();
+    Ok((handle, SafeRuntime(rt)))
+}
+
+/// Runs a closure on a fresh OS thread, blocking the caller until it completes.
+///
+/// Unlike `tokio::task::block_in_place`, this works on any runtime flavor
+/// (including current-thread) because the spawned thread has no tokio context.
+/// Typical usage: `on_blocking_thread(|| handle.block_on(some_future))`.
+pub(crate) fn on_blocking_thread<F, T>(f: F) -> Result<T, EncodingError>
+where
+    F: FnOnce() -> T + Send,
+    T: Send,
+{
+    std::thread::scope(|s| {
+        s.spawn(f)
+            .join()
+            .map_err(|_| EncodingError::FatalError("blocking thread panicked".to_string()))
+    })
 }
 
 pub(crate) type EVMProvider = Arc<

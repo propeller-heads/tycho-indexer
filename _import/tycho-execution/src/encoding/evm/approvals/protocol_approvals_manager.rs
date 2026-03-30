@@ -1,21 +1,18 @@
-use std::sync::Arc;
-
 use alloy::{
     primitives::{Address, Bytes, TxKind, U256},
     providers::Provider,
     rpc::types::{TransactionInput, TransactionRequest},
     sol_types::SolValue,
 };
-use tokio::{
-    runtime::{Handle, Runtime},
-    task::block_in_place,
-};
+use tokio::runtime::Handle;
 
 use crate::encoding::{
     errors::EncodingError,
     evm::{
         encoding_utils::encode_input,
-        utils::{get_client, get_runtime, EVMProvider},
+        utils::{
+            create_encoding_runtime, get_client, on_blocking_thread, EVMProvider, SafeRuntime,
+        },
     },
 };
 
@@ -24,12 +21,12 @@ pub struct ProtocolApprovalsManager {
     client: EVMProvider,
     runtime_handle: Handle,
     #[allow(dead_code)]
-    runtime: Option<Arc<Runtime>>,
+    runtime: SafeRuntime,
 }
 impl ProtocolApprovalsManager {
     pub fn new() -> Result<Self, EncodingError> {
-        let (handle, runtime) = get_runtime()?;
-        let client = block_in_place(|| handle.block_on(get_client()))?;
+        let (handle, runtime) = create_encoding_runtime()?;
+        let client = on_blocking_thread(|| handle.block_on(get_client()))??;
         Ok(Self { client, runtime_handle: handle, runtime })
     }
 
@@ -49,10 +46,10 @@ impl ProtocolApprovalsManager {
             ..Default::default()
         };
 
-        let output = block_in_place(|| {
+        let output = on_blocking_thread(|| {
             self.runtime_handle
                 .block_on(async { self.client.call(tx).await })
-        });
+        })?;
         match output {
             Ok(response) => {
                 let allowance: U256 = U256::abi_decode(&response).map_err(|_| {

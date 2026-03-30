@@ -1,10 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use alloy::sol_types::SolValue;
-use tokio::{
-    runtime::{Handle, Runtime},
-    task::block_in_place,
-};
+use tokio::runtime::Handle;
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
     Bytes,
@@ -12,7 +9,7 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::get_runtime,
+    evm::utils::{create_encoding_runtime, on_blocking_thread, SafeRuntime},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -22,7 +19,7 @@ pub struct HashflowSwapEncoder {
     executor_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
-    runtime: Option<Arc<Runtime>>,
+    runtime: SafeRuntime,
 }
 
 impl SwapEncoder for HashflowSwapEncoder {
@@ -31,7 +28,7 @@ impl SwapEncoder for HashflowSwapEncoder {
         _chain: Chain,
         _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let (runtime_handle, runtime) = get_runtime()?;
+        let (runtime_handle, runtime) = create_encoding_runtime()?;
         Ok(Self { executor_address, runtime_handle, runtime })
     }
 
@@ -60,7 +57,7 @@ impl SwapEncoder for HashflowSwapEncoder {
             .ok_or(EncodingError::FatalError(
                 "The router address is needed to perform a Hashflow swap".to_string(),
             ))?;
-        let signed_quote = block_in_place(|| {
+        let signed_quote = on_blocking_thread(|| {
             self.runtime_handle.block_on(async {
                 protocol_state
                     .as_indicatively_priced()?
@@ -73,7 +70,7 @@ impl SwapEncoder for HashflowSwapEncoder {
                     })
                     .await
             })
-        })?;
+        })??;
 
         // Encode packed data for the executor
         // Format: approval_needed | hashflow_calldata[..]
@@ -115,7 +112,7 @@ impl SwapEncoder for HashflowSwapEncoder {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Arc};
 
     use alloy::hex::encode;
     use num_bigint::BigUint;
