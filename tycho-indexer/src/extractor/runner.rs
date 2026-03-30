@@ -1161,12 +1161,13 @@ dci_plugin:
     }
 
     #[tokio::test]
-    async fn test_extractor_runner_builder() {
-        // Mock the Extractor
+    async fn test_extractor_runner_builder_fresh_start_no_db_state() {
+        // No DB state: get_last_processed_block returns None, so the stream
+        // starts from the config start_block with no cursor.
         let mut mock_extractor = MockExtractor::new();
         mock_extractor
-            .expect_get_cursor()
-            .returning(|| "cursor@0".to_string());
+            .expect_get_last_processed_block()
+            .returning(|| None);
         mock_extractor
             .expect_get_id()
             .returning(ExtractorIdentity::default);
@@ -1205,5 +1206,109 @@ dci_plugin:
                 panic!("ExtractorRunnerBuilder failed");
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_start_block_no_db_state() {
+        use crate::substreams::mock::start_mock_substreams;
+
+        let (captured, addr) = start_mock_substreams().await;
+
+        let mut mock_extractor = MockExtractor::new();
+        mock_extractor
+            .expect_get_last_processed_block()
+            .returning(|| None);
+        mock_extractor
+            .expect_get_id()
+            .returning(ExtractorIdentity::default);
+
+        let extractor = Arc::new(mock_extractor);
+        let builder = ExtractorBuilder::new(
+            &ExtractorConfig {
+                name: "test_module".to_owned(),
+                implementation_type: ImplementationType::Vm,
+                protocol_types: vec![ProtocolTypeConfig {
+                    name: "test_module_pool".to_owned(),
+                    financial_type: FinancialType::Swap,
+                }],
+                spkg: "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
+                module_name: "test_module".to_owned(),
+                start_block: 42,
+                ..Default::default()
+            },
+            &format!("http://{addr}"),
+            None,
+            "test_token",
+        )
+        .token("test_token")
+        .set_extractor(extractor);
+
+        let (runner, _handle) = builder.into_runner().await.unwrap();
+        let handle = runner.run();
+        handle.await.unwrap().unwrap();
+
+        let requests = captured.lock().unwrap();
+        assert_eq!(requests.len(), 1, "expected exactly one gRPC request");
+        assert_eq!(requests[0].start_block_num, 42);
+        assert!(requests[0].start_cursor.is_empty(), "fresh start should have no cursor");
+    }
+
+    #[tokio::test]
+    async fn test_start_block_with_db_state() {
+        use chrono::NaiveDateTime;
+        use tycho_common::models::blockchain::Block;
+
+        use crate::substreams::mock::start_mock_substreams;
+
+        let (captured, addr) = start_mock_substreams().await;
+
+        let mut mock_extractor = MockExtractor::new();
+        mock_extractor
+            .expect_get_last_processed_block()
+            .returning(|| {
+                Some(Block::new(
+                    1000,
+                    Chain::Ethereum,
+                    vec![0x01].into(),
+                    vec![0x00].into(),
+                    NaiveDateTime::default(),
+                ))
+            });
+        mock_extractor
+            .expect_get_id()
+            .returning(ExtractorIdentity::default);
+
+        let extractor = Arc::new(mock_extractor);
+        let builder = ExtractorBuilder::new(
+            &ExtractorConfig {
+                name: "test_module".to_owned(),
+                implementation_type: ImplementationType::Vm,
+                protocol_types: vec![ProtocolTypeConfig {
+                    name: "test_module_pool".to_owned(),
+                    financial_type: FinancialType::Swap,
+                }],
+                spkg: "./test/spkg/substreams-ethereum-quickstart-v1.0.0.spkg".to_owned(),
+                module_name: "test_module".to_owned(),
+                start_block: 500,
+                ..Default::default()
+            },
+            &format!("http://{addr}"),
+            None,
+            "test_token",
+        )
+        .token("test_token")
+        .set_extractor(extractor);
+
+        let (runner, _handle) = builder.into_runner().await.unwrap();
+        let handle = runner.run();
+        handle.await.unwrap().unwrap();
+
+        let requests = captured.lock().unwrap();
+        assert_eq!(requests.len(), 1, "expected exactly one gRPC request");
+        assert_eq!(
+            requests[0].start_block_num, 1001,
+            "should use last_committed + 1, not config's start_block"
+        );
+        assert!(requests[0].start_cursor.is_empty(), "fresh start should have no cursor");
     }
 }
