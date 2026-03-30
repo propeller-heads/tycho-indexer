@@ -152,9 +152,9 @@ where
                 let last_processed_block = gateway
                     .get_block(block_hash)
                     .await
-                    .unwrap_or_else(|err| {
-                        panic!("Unexpected error when fetching latest block {err}");
-                    });
+                    .map_err(|err| {
+                        ExtractionError::Setup(format!("Failed to fetch latest block: {err}"))
+                    })?;
 
                 let cursor_str = String::from_utf8_lossy(&cursor);
                 info!(
