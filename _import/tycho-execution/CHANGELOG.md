@@ -1,3 +1,10 @@
+## [0.171.1](https://github.com/propeller-heads/tycho-execution/compare/0.171.0...0.171.1) (2026-03-30)
+
+
+### Bug Fixes
+
+* replace block_in_place with runtime-safe blocking pattern ([#99](https://github.com/propeller-heads/tycho-execution/issues/99)) ([519134e](https://github.com/propeller-heads/tycho-execution/commit/519134e4a5dcac2f0c13b4fd36470c32357a63c5))
+
 ## [0.171.0](https://github.com/propeller-heads/tycho-execution/compare/0.170.0...0.171.0) (2026-03-26)
 
 
