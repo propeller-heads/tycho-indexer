@@ -216,7 +216,7 @@ impl TychoStreamBuilder {
     ///
     /// Blocklisted components are never tracked, regardless of TVL or other
     /// filter criteria.
-    pub fn blocklist_components(mut self, ids: impl IntoIterator<Item = String>) -> Self {
+    pub fn blocklisted_ids(mut self, ids: impl IntoIterator<Item = String>) -> Self {
         self.blocklisted_ids.extend(ids);
         self
     }
