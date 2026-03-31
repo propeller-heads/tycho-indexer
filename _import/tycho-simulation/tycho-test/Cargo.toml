@@ -27,6 +27,6 @@ tracing = { workspace = true }
 tycho-client = { workspace = true }
 tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
-tycho-execution = { git = "https://github.com/propeller-heads/tycho-execution.git", rev = "18e893ec75de6f108c806dc075a0e32f12c04c36" }
+tycho-execution = ">=0.169.0"
 tycho-simulation = { path = "..", features = ["evm"] }
 urlencoding = "2.1.3"
