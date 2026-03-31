@@ -11,7 +11,10 @@ extern crate core;
 // Reexports
 pub use tycho_client;
 pub use tycho_common;
-pub use tycho_common as tycho_core; // Use `tycho_common` directly instead of `tycho_core`.
+#[deprecated(since = "0.252.0", note = "Use `tycho_common` directly instead of `tycho_core`.")]
+pub mod tycho_core {
+    pub use tycho_common::*;
+}
 pub use tycho_ethereum;
 
 #[cfg(feature = "evm")]
