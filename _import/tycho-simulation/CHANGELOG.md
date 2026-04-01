@@ -1,3 +1,11 @@
+## [0.253.0](https://github.com/propeller-heads/tycho-simulation/compare/0.252.0...0.253.0) (2026-04-01)
+
+
+### Features
+
+* add blocklisting components ([f574988](https://github.com/propeller-heads/tycho-simulation/commit/f5749889ac8e1e267872e745a301b10853502ccf))
+* add cli arg for blocklist-config ([3482023](https://github.com/propeller-heads/tycho-simulation/commit/34820232bba343092b4434b7069dad1cee36056a))
+
 ## [0.252.0](https://github.com/propeller-heads/tycho-simulation/compare/0.251.1...0.252.0) (2026-03-26)
 
 
