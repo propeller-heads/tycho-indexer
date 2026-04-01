@@ -1,0 +1,16 @@
+# Component blocklist configuration
+# Exclude specific pools from routing due to simulation issues
+
+[blocklist]
+# Component IDs to exclude (pool addresses)
+# AMPL pools - AMPL is a rebasing token that breaks simulation assumptions
+# UniswapV3 AMPL/WETH
+# UniswapV2 AMPL/WETH
+components = [
+    "0x86d257cdb7bc9c0df10e84c8709697f92770b335",
+    "0xc5be99a02c6857f9eac67bbce58df5572498f40c",
+    # Fluid Lite pools with broken simulation (ENG-5696)
+    # Off-chain sim claims 50-100x more output than on-chain reality
+    "0x32aa6f5c6f771b39d383c6e36d7ef0702a28e32ad64671c059f41547b82ef0ef",
+    "0x7f31b44f032f125bb465c161343fccfdc88fee8dc94c068f6430d2345d80f1d1",
+]

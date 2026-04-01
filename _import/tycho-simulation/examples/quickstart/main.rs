@@ -72,6 +72,9 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
+    /// Path to blocklist TOML config file
+    #[arg(long, default_value = "blocklist.toml")]
+    blocklist_file: std::path::PathBuf,
 }
 
 impl Cli {
@@ -212,6 +215,8 @@ async fn main() {
         }
         _ => {}
     }
+
+    protocol_stream = protocol_stream.blocklist_components(&cli.blocklist_file);
 
     let mut protocol_stream = protocol_stream
         .auth_key(Some(tycho_api_key.clone()))
