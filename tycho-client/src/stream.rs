@@ -56,6 +56,7 @@ pub struct TychoStreamBuilder {
     tycho_url: String,
     chain: Chain,
     exchanges: HashMap<String, ComponentFilter>,
+    blocklisted_ids: HashSet<String>,
     block_time: u64,
     timeout: u64,
     startup_timeout: Duration,
@@ -79,6 +80,7 @@ impl TychoStreamBuilder {
             tycho_url: tycho_url.to_string(),
             chain,
             exchanges: HashMap::new(),
+            blocklisted_ids: HashSet::new(),
             block_time,
             timeout,
             startup_timeout: Duration::from_secs(block_time * max_missed_blocks),
@@ -210,6 +212,15 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Blocklist specific component IDs across all registered exchanges.
+    ///
+    /// Blocklisted components are never tracked, regardless of TVL or other
+    /// filter criteria.
+    pub fn blocklisted_ids(mut self, ids: impl IntoIterator<Item = String>) -> Self {
+        self.blocklisted_ids.extend(ids);
+        self
+    }
+
     /// Builds and starts the Tycho client, connecting to the Tycho server and
     /// setting up the synchronization of exchange components.
     pub async fn build(
@@ -280,7 +291,18 @@ impl TychoStreamBuilder {
         let dci_protocols = info.dci_protocols;
 
         // Register each exchange with the BlockSynchronizer
-        for (name, filter) in self.exchanges {
+        for (name, filter) in self
+            .exchanges
+            .into_iter()
+            .map(|(name, filter)| {
+                let filter = if self.blocklisted_ids.is_empty() {
+                    filter
+                } else {
+                    filter.blocklist(self.blocklisted_ids.iter().cloned())
+                };
+                (name, filter)
+            })
+        {
             info!("Registering exchange: {}", name);
             let id = ExtractorIdentity { chain: self.chain, name: name.clone() };
             let uses_dci = dci_protocols.contains(&name);

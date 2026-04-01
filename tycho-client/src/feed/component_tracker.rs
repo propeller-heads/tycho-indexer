@@ -14,12 +14,17 @@ use crate::{
 #[derive(Clone, Debug)]
 pub(crate) enum ComponentFilterVariant {
     Ids(Vec<ComponentId>),
-    /// MinimumTVLRange is a tuple of (remove_tvl_threshold, add_tvl_threshold). Components that
-    /// drop below the remove threshold will be removed from tracking, components that exceed the
-    /// add threshold will be added. This helps buffer against components that fluctuate on the
-    /// tvl threshold boundary. The thresholds are denominated in native token of the chain, for
-    /// example 1 means 1 ETH on ethereum.
-    MinimumTVLRange((f64, f64)),
+    /// MinimumTVLRange filters components by TVL thresholds:
+    /// - `range.0` (remove threshold): components below this are removed from tracking
+    /// - `range.1` (add threshold): components above this are added to tracking
+    ///
+    /// This helps buffer against components that fluctuate on the threshold boundary.
+    /// Thresholds are denominated in native token of the chain, for example 1 means 1 ETH on
+    /// ethereum.
+    MinimumTVLRange {
+        range: (f64, f64),
+        blocklisted_ids: HashSet<ComponentId>,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -38,7 +43,12 @@ impl ComponentFilter {
     #[allow(non_snake_case)] // for backwards compatibility
     #[deprecated(since = "0.9.2", note = "Please use with_tvl_range instead")]
     pub fn MinimumTVL(min_tvl: f64) -> ComponentFilter {
-        ComponentFilter { variant: ComponentFilterVariant::MinimumTVLRange((min_tvl, min_tvl)) }
+        ComponentFilter {
+            variant: ComponentFilterVariant::MinimumTVLRange {
+                range: (min_tvl, min_tvl),
+                blocklisted_ids: HashSet::new(),
+            },
+        }
     }
 
     /// Creates a `ComponentFilter` with a specified TVL range for adding or removing components
@@ -57,10 +67,10 @@ impl ComponentFilter {
     /// Note: thresholds are denominated in native token of the chain.
     pub fn with_tvl_range(remove_tvl_threshold: f64, add_tvl_threshold: f64) -> ComponentFilter {
         ComponentFilter {
-            variant: ComponentFilterVariant::MinimumTVLRange((
-                remove_tvl_threshold,
-                add_tvl_threshold,
-            )),
+            variant: ComponentFilterVariant::MinimumTVLRange {
+                range: (remove_tvl_threshold, add_tvl_threshold),
+                blocklisted_ids: HashSet::new(),
+            },
         }
     }
 
@@ -79,6 +89,39 @@ impl ComponentFilter {
                     .map(|id| id.to_lowercase())
                     .collect(),
             ),
+        }
+    }
+
+    /// Blocklist specific component IDs from tracking regardless of other
+    /// filter criteria. IDs are normalized to lowercase.
+    ///
+    /// Has no effect when the filter variant is `Ids`, since the
+    /// inclusion list already defines exactly which components to track.
+    pub fn blocklist(mut self, ids: impl IntoIterator<Item = ComponentId>) -> Self {
+        match &mut self.variant {
+            ComponentFilterVariant::Ids(_) => {
+                warn!(
+                    "blocklist() has no effect on ComponentFilter::Ids; \
+                     remove the component from the ID list instead"
+                );
+            }
+            ComponentFilterVariant::MinimumTVLRange { blocklisted_ids, .. } => {
+                blocklisted_ids.extend(
+                    ids.into_iter()
+                        .map(|id| id.to_lowercase()),
+                );
+            }
+        }
+        self
+    }
+
+    /// Returns true if the given component ID is blocklisted.
+    pub fn is_blocklisted(&self, id: &str) -> bool {
+        match &self.variant {
+            ComponentFilterVariant::Ids(_) => false,
+            ComponentFilterVariant::MinimumTVLRange { blocklisted_ids, .. } => {
+                blocklisted_ids.contains(&id.to_lowercase())
+            }
         }
     }
 }
@@ -135,7 +178,7 @@ where
                 ids.clone(),
                 self.chain,
             ),
-            ComponentFilterVariant::MinimumTVLRange((_, upper_tvl_threshold)) => {
+            ComponentFilterVariant::MinimumTVLRange { range: (_, upper_tvl_threshold), .. } => {
                 ProtocolComponentsRequestBody::system_filtered(
                     &self.protocol_system,
                     Some(*upper_tvl_threshold),
@@ -150,6 +193,7 @@ where
             .protocol_components
             .into_iter()
             .map(|pc| (pc.id.clone(), pc))
+            .filter(|(id, _)| !self.filter.is_blocklisted(id))
             .collect::<HashMap<_, _>>();
 
         self.reinitialize_contracts();
@@ -215,6 +259,12 @@ where
         &mut self,
         new_components: &[&ComponentId],
     ) -> Result<(), RPCError> {
+        let new_components: Vec<_> = new_components
+            .iter()
+            .filter(|id| !self.filter.is_blocklisted(id))
+            .copied()
+            .collect();
+
         if new_components.is_empty() {
             return Ok(());
         }
@@ -360,12 +410,26 @@ where
     ) -> (Vec<ComponentId>, Vec<ComponentId>) {
         match &self.filter.variant {
             ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
-            ComponentFilterVariant::MinimumTVLRange((remove_tvl, add_tvl)) => deltas
-                .component_tvl
-                .iter()
-                .filter(|(_, &tvl)| tvl < *remove_tvl || tvl > *add_tvl)
-                .map(|(id, _)| id.clone())
-                .partition(|id| deltas.component_tvl[id] > *add_tvl),
+            ComponentFilterVariant::MinimumTVLRange { range: (remove_tvl, add_tvl), .. } => {
+                let (mut to_add, mut to_remove): (Vec<_>, Vec<_>) = deltas
+                    .component_tvl
+                    .iter()
+                    .filter(|(_, &tvl)| tvl < *remove_tvl || tvl > *add_tvl)
+                    .map(|(id, _)| id.clone())
+                    .partition(|id| deltas.component_tvl[id] > *add_tvl);
+
+                // Never add blocklisted components
+                to_add.retain(|id| !self.filter.is_blocklisted(id));
+
+                // Remove any currently tracked components that are now blocklisted
+                for id in self.components.keys() {
+                    if self.filter.is_blocklisted(id) && !to_remove.contains(id) {
+                        to_remove.push(id.clone());
+                    }
+                }
+
+                (to_add, to_remove)
+            }
         }
     }
 }
@@ -503,5 +567,77 @@ mod test {
         let res = tracker.get_tracked_component_ids();
 
         assert_eq!(res, exp);
+    }
+
+    fn with_mocked_rpc_and_blocklist(blocklisted: Vec<&str>) -> ComponentTracker<MockRPCClient> {
+        let rpc = MockRPCClient::new();
+        let filter = ComponentFilter::with_tvl_range(0.0, 0.0).blocklist(
+            blocklisted
+                .into_iter()
+                .map(String::from),
+        );
+        ComponentTracker::new(Chain::Ethereum, "uniswap-v2", filter, rpc)
+    }
+
+    #[tokio::test]
+    async fn test_initialise_skips_blocklisted_components() {
+        let mut tracker = with_mocked_rpc_and_blocklist(vec!["component1"]);
+        let (_, component) = components_response();
+        tracker
+            .rpc_client
+            .expect_get_protocol_components_paginated()
+            .returning(move |_, _, _| {
+                Ok(ProtocolComponentRequestResponse {
+                    protocol_components: vec![component.clone()],
+                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
+                })
+            });
+
+        tracker
+            .initialise_components()
+            .await
+            .expect("Retrieving components failed");
+
+        assert!(tracker.components.is_empty(), "Blocklisted component should not be in tracker");
+    }
+
+    #[tokio::test]
+    async fn test_start_tracking_skips_blocklisted() {
+        let mut tracker = with_mocked_rpc_and_blocklist(vec!["component1"]);
+        let component_id = "Component1".to_string();
+        let components_arg = [&component_id];
+
+        tracker
+            .start_tracking(&components_arg)
+            .await
+            .expect("start_tracking should succeed");
+
+        assert!(tracker.components.is_empty(), "Blocklisted component should not be tracked");
+    }
+
+    #[test]
+    fn test_filter_updated_blocks_blocklisted_add() {
+        let mut tracker = with_mocked_rpc_and_blocklist(vec!["blocklisted_pool"]);
+        tracker.filter = ComponentFilter::with_tvl_range(5.0, 10.0)
+            .blocklist(vec!["blocklisted_pool".to_string()]);
+
+        let deltas = BlockChanges {
+            component_tvl: HashMap::from([
+                ("blocklisted_pool".to_string(), 100.0),
+                ("allowed_pool".to_string(), 100.0),
+            ]),
+            ..Default::default()
+        };
+
+        let (to_add, to_remove) = tracker.filter_updated_components(&deltas);
+        assert!(
+            !to_add.contains(&"blocklisted_pool".to_string()),
+            "Blocklisted component should not be in to_add"
+        );
+        assert!(
+            to_add.contains(&"allowed_pool".to_string()),
+            "Non-blocklisted component should be in to_add"
+        );
+        assert!(to_remove.is_empty());
     }
 }
