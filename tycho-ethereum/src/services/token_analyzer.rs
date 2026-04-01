@@ -450,7 +450,7 @@ impl TraceCallDetector {
 }
 
 /// Converts a tycho BlockTag to an alloy BlockNumberOrTag.
-fn map_block_tag(block: BlockTag) -> BlockNumberOrTag {
+pub(crate) fn map_block_tag(block: BlockTag) -> BlockNumberOrTag {
     match block {
         BlockTag::Finalized => BlockNumberOrTag::Finalized,
         BlockTag::Safe => BlockNumberOrTag::Safe,
@@ -477,22 +477,22 @@ pub(crate) fn call_request(
     req
 }
 
-fn error_add(a: U256, b: U256) -> Result<U256, String> {
+pub(crate) fn error_add(a: U256, b: U256) -> Result<U256, String> {
     a.checked_add(b)
         .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_sub(a: U256, b: U256) -> Result<U256, String> {
+pub(crate) fn error_sub(a: U256, b: U256) -> Result<U256, String> {
     a.checked_sub(b)
         .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_div(a: U256, b: U256) -> Result<U256, String> {
+pub(crate) fn error_div(a: U256, b: U256) -> Result<U256, String> {
     a.checked_div(b)
         .ok_or_else(|| "overflow".to_string())
 }
 
-fn error_mul(a: U256, b: U256) -> Result<U256, String> {
+pub(crate) fn error_mul(a: U256, b: U256) -> Result<U256, String> {
     a.checked_mul(b)
         .ok_or_else(|| "overflow".to_string())
 }
