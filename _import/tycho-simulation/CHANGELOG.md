@@ -1,3 +1,10 @@
+## [0.254.0](https://github.com/propeller-heads/tycho-simulation/compare/0.253.0...0.254.0) (2026-04-01)
+
+
+### Features
+
+* make min_token_quality configurable on TychoStreamDecoder ([d5015ce](https://github.com/propeller-heads/tycho-simulation/commit/d5015ce6cee2d17164a33cfeeedc82fba7c92dbc))
+
 ## [0.253.0](https://github.com/propeller-heads/tycho-simulation/compare/0.252.0...0.253.0) (2026-04-01)
 
 
