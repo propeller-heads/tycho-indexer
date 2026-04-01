@@ -630,6 +630,30 @@ impl EthereumRpcClient {
             })
     }
 
+    /// Sends a raw JSON-RPC request with arbitrary params.
+    /// Useful for methods that need non-standard parameters (e.g. eth_call with state overrides).
+    #[instrument(level = "debug", skip(self, params))]
+    pub(crate) async fn raw_request<R: serde::de::DeserializeOwned + Send + Sync + Unpin + std::fmt::Debug + 'static>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<R, RPCError> {
+        let method = method.to_string();
+        self.retry_policy
+            .retry_request(|| {
+                let method = method.clone();
+                let params = params.clone();
+                async move { self.inner.request(method, params).await }
+            })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!("Failed to send raw request for method {method}"),
+                    e,
+                )
+            })
+    }
+
     /// Executes a new message call immediately without creating a transaction on the blockchain.
     /// See https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_call
     ///
