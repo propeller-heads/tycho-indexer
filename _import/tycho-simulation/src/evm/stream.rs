@@ -410,6 +410,15 @@ impl ProtocolStreamBuilder {
         self
     }
 
+    /// Sets the minimum token quality for tokens added via the stream.
+    ///
+    /// Tokens arriving in stream deltas below this threshold are ignored. Defaults to 100.
+    /// Set this to the same value used in [`load_all_tokens`] to apply consistent filtering.
+    pub fn min_token_quality(mut self, quality: u32) -> Self {
+        self.decoder.min_token_quality(quality);
+        self
+    }
+
     /// Configures the retry policy for websocket reconnects.
     pub fn websocket_retry_config(mut self, config: &RetryConfiguration) -> Self {
         self.stream_builder = self

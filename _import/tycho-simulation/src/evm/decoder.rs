@@ -111,7 +111,7 @@ where
         Self {
             state: Arc::new(RwLock::new(DecoderState::default())),
             skip_state_decode_failures: false,
-            min_token_quality: 51,
+            min_token_quality: 100,
             registry: HashMap::new(),
             inclusion_filters: HashMap::new(),
         }
@@ -128,6 +128,14 @@ where
 
     pub fn skip_state_decode_failures(&mut self, skip: bool) {
         self.skip_state_decode_failures = skip;
+    }
+
+    /// Sets the minimum token quality for decoding.
+    ///
+    /// Tokens arriving in stream deltas below this threshold are ignored. Defaults to 100.
+    /// Set this to the same value used in [`load_all_tokens`] to apply consistent filtering.
+    pub fn min_token_quality(&mut self, quality: u32) {
+        self.min_token_quality = quality;
     }
 
     /// Registers a decoder for a given exchange with a decoder context.
