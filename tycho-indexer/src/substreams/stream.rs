@@ -86,6 +86,12 @@ async fn wait_for_next_retry(
 }
 
 // Create the Stream implementation that streams blocks with auto-reconnection.
+//
+// On the first connection, `cursor` is empty (fresh start) and `start_block_num`
+// determines where Substreams begins (inclusive). After the first block arrives,
+// `latest_cursor` is populated from the response. On any subsequent reconnection
+// (hot reconnect within the same process), `latest_cursor` is sent as
+// `start_cursor` which takes precedence over `start_block_num`.
 #[allow(clippy::too_many_arguments)]
 fn stream_blocks(
     endpoint: Arc<SubstreamsEndpoint>,

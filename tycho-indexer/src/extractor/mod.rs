@@ -88,14 +88,24 @@ pub type ExtractorMsg = Arc<BlockAggregatedChanges>;
 #[automock]
 #[async_trait]
 pub trait Extractor: Send + Sync {
+    /// Returns the unique identity of this extractor.
     fn get_id(&self) -> ExtractorIdentity;
 
+    /// Ensures all protocol types this extractor needs are registered in
+    /// storage. Safe to call multiple times.
     async fn ensure_protocol_types(&self);
 
+    /// Returns the current stream cursor, or an empty string if no block has
+    /// been processed yet. At startup this reflects the last persisted cursor;
+    /// during runtime it advances with every incoming block.
     async fn get_cursor(&self) -> String;
 
+    /// Returns the last block processed by this extractor, or `None` if no
+    /// block has been processed yet. At startup this reflects the last
+    /// persisted block; during runtime it advances with every incoming block.
     async fn get_last_processed_block(&self) -> Option<Block>;
 
+    /// Processes a single block-scoped data message from the source stream.
     async fn handle_tick_scoped_data(
         &self,
         inp: BlockScopedData,
@@ -110,11 +120,13 @@ pub trait Extractor: Send + Sync {
         clock: Option<Clock>,
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
+    /// Processes a chain reorg signal.
     async fn handle_revert(
         &self,
         inp: BlockUndoSignal,
     ) -> Result<Option<ExtractorMsg>, ExtractionError>;
 
+    /// Processes a progress report from the source stream.
     async fn handle_progress(&self, inp: ModulesProgress) -> Result<(), ExtractionError>;
 }
 
