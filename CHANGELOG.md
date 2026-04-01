@@ -1,3 +1,18 @@
+## [0.153.0](https://github.com/propeller-heads/tycho-indexer/compare/0.152.4...0.153.0) (2026-04-01)
+
+
+### Features
+
+* add blocklist filter ([7e01876](https://github.com/propeller-heads/tycho-indexer/commit/7e01876af915946080a99e21d568ac943ebbcd65))
+* add blocklist filter ([#886](https://github.com/propeller-heads/tycho-indexer/issues/886)) ([93913cb](https://github.com/propeller-heads/tycho-indexer/commit/93913cb2a0e064e22b509abb8415e5ae770b3d41))
+* add cli blocklist option ([186daf1](https://github.com/propeller-heads/tycho-indexer/commit/186daf1e1adfce7adb77f339ac9dfacaab1c74c2))
+* **tycho-client:** use TOML as input for the blocklist-config CLI flag ([706a0ed](https://github.com/propeller-heads/tycho-indexer/commit/706a0ed9ea89ef395b813bd1348c3c90abed14c1))
+
+
+### Bug Fixes
+
+* do not update ComponentFilter with set Ids ([93ba9c1](https://github.com/propeller-heads/tycho-indexer/commit/93ba9c18af645a4e28a4844d22cacd72ebe2904f))
+
 ## [0.152.4](https://github.com/propeller-heads/tycho-indexer/compare/0.152.3...0.152.4) (2026-03-25)
 
 ## [0.152.3](https://github.com/propeller-heads/tycho-indexer/compare/0.152.2...0.152.3) (2026-03-23)
