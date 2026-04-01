@@ -847,24 +847,24 @@ impl ExtractorBuilder {
         //
         // We never pass a cursor on fresh start (process restart). Instead, we
         // resume from the block after the last one committed to DB. This is safe
-        // because only finalized blocks reach the DB, so they can't be reorged.
-        //
-        // Hot reconnections (stream drops within a running process) still use
-        // the cursor — it is maintained internally by `stream_blocks` and
-        // updated after every received block/undo signal.
+        // because we only commit finalized block -1 to the DB. So we know last committed block + 1
+        // is finalized.
         let last_block = extractor
             .get_last_processed_block()
             .await;
+        // `None` means no blocks have been committed for this protocol yet (fresh
+        // indexing), so fall back to the configured start block.
         let start_block = last_block
             .as_ref()
             .map(|b| {
-                i64::try_from(
-                    b.number
-                        .checked_add(1)
-                        .expect("block number overflow"),
-                )
-                .expect("block number exceeds i64")
+                let next = b
+                    .number
+                    .checked_add(1)
+                    .ok_or_else(|| ExtractionError::Setup("block number overflow".to_string()))?;
+                i64::try_from(next)
+                    .map_err(|_| ExtractionError::Setup("block number exceeds i64".to_string()))
             })
+            .transpose()?
             .unwrap_or(self.config.start_block);
 
         if let Some(block) = &last_block {
