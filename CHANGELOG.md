@@ -1,3 +1,12 @@
+## [0.153.1](https://github.com/propeller-heads/tycho-indexer/compare/0.153.0...0.153.1) (2026-04-01)
+
+
+### Bug Fixes
+
+* resume from block number instead of cursor on cold restart ([7a4ce03](https://github.com/propeller-heads/tycho-indexer/commit/7a4ce0376e9df91bd16674fc7216275a19a356a0))
+* resume from block number instead of cursor on cold restart ([#893](https://github.com/propeller-heads/tycho-indexer/issues/893)) ([2aca9f2](https://github.com/propeller-heads/tycho-indexer/commit/2aca9f25a088a7af7bc34baebb5505229f16eb96))
+* return error instead of panicking on block fetch failure ([4754b1a](https://github.com/propeller-heads/tycho-indexer/commit/4754b1a5ad4ef735de8072b948bcb3d8ff09868f))
+
 ## [0.153.0](https://github.com/propeller-heads/tycho-indexer/compare/0.152.4...0.153.0) (2026-04-01)
 
 
