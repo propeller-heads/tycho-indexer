@@ -162,6 +162,10 @@ pub fn load_blocklist(path: &Path) -> HashSet<String> {
     }
 }
 
+pub fn default_blocklist() -> HashSet<String> {
+    load_blocklist(Path::new("blocklist.toml"))
+}
+
 fn map_rpc_error(err: RPCError, context: &str) -> SimulationError {
     let message = format!("{context}: {err}", err = err,);
     match err {
