@@ -34,4 +34,4 @@ tests:
         static_attributes: {}
         creation_tx: "0xf829f55cc90104362822d8f946e171db7f555da163b598c01e5ce5e9754e2ebc"
         skip_simulation: false
-        skip_execution: false
+        skip_execution: true # TODO revert to false once tycho-execution is ready

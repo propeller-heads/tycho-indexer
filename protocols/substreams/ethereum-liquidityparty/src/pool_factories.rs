@@ -28,7 +28,7 @@ pub fn maybe_create_component(
             return Some(
                 ProtocolComponent::new(&encode_addr(&event.pool))
                     .with_tokens(&event.tokens.clone())
-                    .with_contracts(&vec![
+                    .with_contracts(&[
                         event.pool.clone(),
                         params.mint_impl.clone(),
                         params.swap_impl.clone(),

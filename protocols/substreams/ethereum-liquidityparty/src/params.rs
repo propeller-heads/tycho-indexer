@@ -24,8 +24,7 @@ pub(crate) struct Params {
 }
 
 pub fn encode_addr(bytes: &[u8]) -> String {
-    format!("0x{}", hex::encode(&bytes))
-    // hex::encode(&bytes)
+    format!("0x{}", hex::encode(bytes))
 }
 
 pub fn decode_addr(s: &str) -> anyhow::Result<Vec<u8>> {
@@ -41,14 +40,11 @@ pub fn decode_addr(s: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 pub fn encode_addrs(bytes: &[Vec<u8>]) -> String {
-    format!(
-        "{}",
-        bytes
-            .iter()
-            .map(|b| encode_addr(b))
-            .collect::<Vec<_>>()
-            .join(",")
-    )
+    bytes
+        .iter()
+        .map(|b| encode_addr(b))
+        .collect::<Vec<_>>()
+        .join(",")
 }
 
 pub fn decode_addrs(s: &str) -> anyhow::Result<Vec<Vec<u8>>> {
