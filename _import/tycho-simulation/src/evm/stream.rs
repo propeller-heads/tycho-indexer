@@ -58,6 +58,7 @@
 //!
 //! ## Example
 //! ```no_run
+//! use std::path::Path;
 //! use tycho_common::models::Chain;
 //! use tycho_simulation::evm::stream::ProtocolStreamBuilder;
 //! use tycho_simulation::utils::load_all_tokens;
@@ -86,7 +87,8 @@
 //!             .exchange::<UniswapV2State>(
 //!                 "uniswap_v2", ComponentFilter::with_tvl_range(5.0, 10.0), None
 //!             )
-//!             .blocklist_components("blocklist.toml")
+//!             .blocklist_components(Some(Path::new("blocklist.toml")))
+//!             .expect("Failed loading blocklist")
 //!             .set_tokens(all_tokens)
 //!             .await
 //!             .build()
@@ -113,7 +115,7 @@ use tycho_client::{
 };
 use tycho_common::{
     models::{token::Token, Chain},
-    simulation::protocol_sim::ProtocolSim,
+    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
     Bytes,
 };
 
@@ -365,16 +367,16 @@ impl ProtocolStreamBuilder {
 
     /// Exclude specific component IDs from all registered exchanges.
     ///
-    /// Loads blocklisted component IDs from a TOML file at `path`.
-    /// If the file doesn't exist or can't be parsed, no components are
-    /// excluded and a warning is logged.
-    pub fn blocklist_components(mut self, path: impl AsRef<Path>) -> Self {
-        let ids = crate::utils::load_blocklist(path.as_ref());
+    /// If `path` is `Some`, loads the blocklist from that file and
+    /// returns an error if missing or invalid. If `None`, uses the
+    /// default blocklist embedded in the library.
+    pub fn blocklist_components(mut self, path: Option<&Path>) -> Result<Self, SimulationError> {
+        let ids = crate::utils::load_blocklist(path)?;
         if !ids.is_empty() {
             tracing::info!("Blocklisting {} components", ids.len());
             self.stream_builder = self.stream_builder.blocklisted_ids(ids);
         }
-        self
+        Ok(self)
     }
 
     /// Sets the stream end policy.

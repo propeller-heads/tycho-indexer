@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use tracing::{info, warn};
+use tracing::info;
 use tycho_client::{
     rpc::{HttpRPCClientOptions, RPCClient, RPC_CLIENT_CONCURRENCY},
     HttpRPCClient, RPCError,
@@ -130,17 +130,27 @@ pub fn get_default_url(chain: &Chain) -> Option<String> {
 
 /// Loads blocklisted component IDs from a TOML file.
 ///
-/// Returns an empty set if the file doesn't exist. The file format is:
-/// ```toml
-/// [blocklist]
-/// components = ["0x86d257cdb7bc9c0df10e84c8709697f92770b335"]
-/// ```
-pub fn load_blocklist(path: &Path) -> HashSet<String> {
-    let contents = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return HashSet::new(),
+/// If `path` is `Some`, reads from that file and returns an error if
+/// the file is missing or invalid. If `None`, returns the default
+/// blocklist embedded in the library.
+pub fn load_blocklist(path: Option<&Path>) -> Result<HashSet<String>, SimulationError> {
+    let Some(path) = path else {
+        return Ok(default_blocklist());
     };
+    let contents = fs::read_to_string(path).map_err(|e| {
+        SimulationError::FatalError(format!("Failed to read blocklist {:?}: {e}", path))
+    })?;
+    parse_blocklist(&contents).map_err(|e| {
+        SimulationError::FatalError(format!("Failed to parse blocklist {:?}: {e}", path))
+    })
+}
 
+pub fn default_blocklist() -> HashSet<String> {
+    parse_blocklist(include_str!("../blocklist.toml"))
+        .expect("embedded blocklist.toml is valid TOML")
+}
+
+fn parse_blocklist(contents: &str) -> Result<HashSet<String>, toml::de::Error> {
     #[derive(Default, serde::Deserialize)]
     struct Blocklist {
         #[serde(default)]
@@ -153,17 +163,8 @@ pub fn load_blocklist(path: &Path) -> HashSet<String> {
         blocklist: Blocklist,
     }
 
-    match toml::from_str::<BlocklistConfig>(&contents) {
-        Ok(config) => config.blocklist.components,
-        Err(e) => {
-            warn!("Failed to parse {}: {e}", path.display());
-            HashSet::new()
-        }
-    }
-}
-
-pub fn default_blocklist() -> HashSet<String> {
-    load_blocklist(Path::new("blocklist.toml"))
+    let config: BlocklistConfig = toml::from_str(contents)?;
+    Ok(config.blocklist.components)
 }
 
 fn map_rpc_error(err: RPCError, context: &str) -> SimulationError {

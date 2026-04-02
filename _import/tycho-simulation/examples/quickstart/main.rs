@@ -73,8 +73,8 @@ struct Cli {
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
     /// Path to blocklist TOML config file
-    #[arg(long, default_value = "blocklist.toml")]
-    blocklist_file: std::path::PathBuf,
+    #[arg(long)]
+    blocklist_file: Option<std::path::PathBuf>,
 }
 
 impl Cli {
@@ -216,7 +216,9 @@ async fn main() {
         _ => {}
     }
 
-    protocol_stream = protocol_stream.blocklist_components(&cli.blocklist_file);
+    protocol_stream = protocol_stream
+        .blocklist_components(cli.blocklist_file.as_deref())
+        .expect("Failed to load blocklist");
 
     let mut protocol_stream = protocol_stream
         .auth_key(Some(tycho_api_key.clone()))
