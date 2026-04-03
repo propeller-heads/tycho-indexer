@@ -1,3 +1,12 @@
+## [0.255.0](https://github.com/propeller-heads/tycho-simulation/compare/0.254.0...0.255.0) (2026-04-03)
+
+
+### Features
+
+* add missing components to the blocklist ([5734749](https://github.com/propeller-heads/tycho-simulation/commit/5734749a1900f7ba538693a5e12b09f0db11a03a))
+* embed default blocklist and make custom path optional ([97ec04b](https://github.com/propeller-heads/tycho-simulation/commit/97ec04b30698e74189c481b26a289589798f06c9))
+* expose default blocklist for fynd fallback ([75b61ce](https://github.com/propeller-heads/tycho-simulation/commit/75b61ce67eeac857289977a7d53b428bad99d352))
+
 ## [0.254.0](https://github.com/propeller-heads/tycho-simulation/compare/0.253.0...0.254.0) (2026-04-01)
 
 
