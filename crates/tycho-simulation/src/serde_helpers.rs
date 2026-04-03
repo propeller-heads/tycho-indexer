@@ -68,6 +68,49 @@ pub mod hex_bytes_option {
     }
 }
 
+/// Serde helpers for `HashMap<String, Box<dyn ProtocolSim>>`.
+///
+/// Some `ProtocolSim` implementations (VM-backed states) return errors from
+/// their `Serialize` impl. This module provides a custom serializer that
+/// gracefully skips those entries instead of failing the entire map.
+pub mod protocol_states {
+    use std::collections::HashMap;
+
+    use serde::{ser::SerializeMap, Deserialize, Deserializer, Serializer};
+    use tycho_common::simulation::protocol_sim::ProtocolSim;
+
+    /// Serializes a map of `ProtocolSim` trait objects, skipping entries
+    /// whose `Serialize` impl returns an error (e.g., VM-backed states).
+    pub fn serialize<S>(
+        states: &HashMap<String, Box<dyn ProtocolSim>>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(None)?;
+        for (key, value) in states {
+            // Trial-serialize: if the state can't be serialized (VM-backed),
+            // skip it rather than failing the whole map.
+            if let Ok(json_val) = serde_json::to_value(value.as_ref()) {
+                map.serialize_entry(key, &json_val)?;
+            }
+        }
+        map.end()
+    }
+
+    /// Deserializes back into the map. Non-serializable states are simply
+    /// absent from the data, so default deserialization works.
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<HashMap<String, Box<dyn ProtocolSim>>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        HashMap::<String, Box<dyn ProtocolSim>>::deserialize(deserializer)
+    }
+}
+
 /// Macro to implement error-returning Serialize/Deserialize for protocols
 /// that cannot be serialized (e.g., due to VM state or external SDK dependencies).
 ///
@@ -100,10 +143,14 @@ macro_rules! impl_non_serializable_protocol {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use serde::{Deserialize, Serialize};
     use serde_json;
+    use tycho_common::simulation::protocol_sim::ProtocolSim;
 
     use super::*;
+    use crate::protocol::models::Update;
 
     #[derive(Debug, Serialize, Deserialize)]
     struct TestStruct {
@@ -143,5 +190,75 @@ mod tests {
         let deserialized: TestStruct = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized.bytes, vec![0u8; 10]);
         assert_eq!(deserialized.bytes_option, None);
+    }
+
+    #[cfg(feature = "evm")]
+    #[test]
+    fn update_roundtrip_with_serializable_state() {
+        use alloy::primitives::U256;
+
+        use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
+
+        let mut states: HashMap<String, Box<dyn ProtocolSim>> = HashMap::new();
+        states.insert(
+            "pool_a".to_string(),
+            Box::new(UniswapV2State::new(U256::from(1000), U256::from(2000))),
+        );
+
+        let update = Update::new(12345, states, HashMap::new());
+        let json = serde_json::to_string(&update).unwrap();
+
+        assert!(json.contains("pool_a"));
+
+        let roundtripped: Update = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.block_number_or_timestamp, 12345);
+        assert_eq!(roundtripped.states.len(), 1);
+        assert!(roundtripped
+            .states
+            .contains_key("pool_a"));
+    }
+
+    /// Verify that protocol_states::serialize produces valid JSON for a
+    /// map containing serializable states. Non-serializable states are tested
+    /// end-to-end in the integration tests (require full VM protocol setup).
+    #[cfg(feature = "evm")]
+    #[test]
+    fn protocol_states_serialize_produces_valid_json() {
+        use alloy::primitives::U256;
+
+        use crate::evm::protocol::uniswap_v2::state::UniswapV2State;
+
+        let mut states: HashMap<String, Box<dyn ProtocolSim>> = HashMap::new();
+        states.insert(
+            "pool_x".to_string(),
+            Box::new(UniswapV2State::new(U256::from(100), U256::from(200))),
+        );
+        states.insert(
+            "pool_y".to_string(),
+            Box::new(UniswapV2State::new(U256::from(300), U256::from(400))),
+        );
+
+        #[derive(Serialize)]
+        struct Wrapper {
+            #[serde(with = "protocol_states")]
+            states: HashMap<String, Box<dyn ProtocolSim>>,
+        }
+
+        let wrapper = Wrapper { states };
+        let json = serde_json::to_value(&wrapper).unwrap();
+        let map = json["states"].as_object().unwrap();
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("pool_x"));
+        assert!(map.contains_key("pool_y"));
+    }
+
+    #[test]
+    fn update_roundtrip_empty() {
+        let update = Update::new(99999, HashMap::new(), HashMap::new());
+        let json = serde_json::to_string(&update).unwrap();
+        let roundtripped: Update = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtripped.block_number_or_timestamp, 99999);
+        assert!(roundtripped.states.is_empty());
+        assert!(roundtripped.new_pairs.is_empty());
     }
 }
