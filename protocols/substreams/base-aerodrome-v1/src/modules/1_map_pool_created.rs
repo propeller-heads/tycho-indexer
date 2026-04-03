@@ -13,7 +13,6 @@ use tycho_substreams::prelude::*;
 #[derive(Debug, Deserialize)]
 struct Params {
     factory_address: String,
-    protocol_type_name: String,
     stable_fee: u64,
     volatile_fee: u64,
 }
@@ -81,7 +80,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                 ],
                 change: i32::from(ChangeType::Creation),
                 protocol_type: Some(ProtocolType {
-                    name: params.protocol_type_name.to_string(),
+                    name: "aerodrome_v1_pool".to_string(),
                     financial_type: FinancialType::Swap.into(),
                     attribute_schema: vec![],
                     implementation_type: ImplementationType::Custom.into(),

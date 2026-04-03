@@ -35,7 +35,7 @@ modules:
     inputs:
       - map: map_pools_created
 
-  - name: map_pool_events
+  - name: map_protocol_changes
     kind: map
     initialBlock: 3200559
     inputs:
@@ -48,4 +48,4 @@ modules:
 
 params:
   map_pools_created: "factory_address=420DD381b31aEf6683db6B902084cB0FFECe40Da&protocol_type_name=aerodrome_v1_pool&stable_fee=5&volatile_fee=30"
-  map_pool_events: "factory_address=420DD381b31aEf6683db6B902084cB0FFECe40Da"
+  map_protocol_changes: "factory_address=420DD381b31aEf6683db6B902084cB0FFECe40Da"

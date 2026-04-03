@@ -60,7 +60,7 @@ impl PartialChanges {
 }
 
 #[substreams::handlers::map]
-pub fn map_pool_events(
+pub fn map_protocol_changes(
     params: String,
     block: eth::Block,
     block_entity_changes: BlockChanges,
