@@ -64,6 +64,7 @@
 //! use futures::StreamExt;
 //! use tycho_client::feed::component_tracker::ComponentFilter;
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
+//! use std::collections::HashSet;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -86,7 +87,7 @@
 //!             .exchange::<UniswapV2State>(
 //!                 "uniswap_v2", ComponentFilter::with_tvl_range(5.0, 10.0), None
 //!             )
-//!             .blocklist_components("blocklist.toml")
+//!             .blocklist_components(HashSet::new())
 //!             .set_tokens(all_tokens)
 //!             .await
 //!             .build()
@@ -99,7 +100,11 @@
 //!     }
 //! }
 //! ```
-use std::{collections::HashMap, path::Path, sync::Arc, time};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time,
+};
 
 use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
@@ -364,12 +369,7 @@ impl ProtocolStreamBuilder {
     }
 
     /// Exclude specific component IDs from all registered exchanges.
-    ///
-    /// Loads blocklisted component IDs from a TOML file at `path`.
-    /// If the file doesn't exist or can't be parsed, no components are
-    /// excluded and a warning is logged.
-    pub fn blocklist_components(mut self, path: impl AsRef<Path>) -> Self {
-        let ids = crate::utils::load_blocklist(path.as_ref());
+    pub fn blocklist_components(mut self, ids: HashSet<String>) -> Self {
         if !ids.is_empty() {
             tracing::info!("Blocklisting {} components", ids.len());
             self.stream_builder = self.stream_builder.blocklisted_ids(ids);
