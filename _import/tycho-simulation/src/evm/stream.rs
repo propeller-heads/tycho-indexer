@@ -58,13 +58,13 @@
 //!
 //! ## Example
 //! ```no_run
-//! use std::path::Path;
 //! use tycho_common::models::Chain;
 //! use tycho_simulation::evm::stream::ProtocolStreamBuilder;
 //! use tycho_simulation::utils::load_all_tokens;
 //! use futures::StreamExt;
 //! use tycho_client::feed::component_tracker::ComponentFilter;
 //! use tycho_simulation::evm::protocol::uniswap_v2::state::UniswapV2State;
+//! use std::collections::HashSet;
 //!
 //! #[tokio::main]
 //! async fn main() {
@@ -87,8 +87,7 @@
 //!             .exchange::<UniswapV2State>(
 //!                 "uniswap_v2", ComponentFilter::with_tvl_range(5.0, 10.0), None
 //!             )
-//!             .blocklist_components(Some(Path::new("blocklist.toml")))
-//!             .expect("Failed loading blocklist")
+//!             .blocklist_components(HashSet::new())
 //!             .set_tokens(all_tokens)
 //!             .await
 //!             .build()
@@ -101,7 +100,11 @@
 //!     }
 //! }
 //! ```
-use std::{collections::HashMap, path::Path, sync::Arc, time};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time,
+};
 
 use futures::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
@@ -115,7 +118,7 @@ use tycho_client::{
 };
 use tycho_common::{
     models::{token::Token, Chain},
-    simulation::{errors::SimulationError, protocol_sim::ProtocolSim},
+    simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
 
@@ -366,17 +369,12 @@ impl ProtocolStreamBuilder {
     }
 
     /// Exclude specific component IDs from all registered exchanges.
-    ///
-    /// If `path` is `Some`, loads the blocklist from that file and
-    /// returns an error if missing or invalid. If `None`, uses the
-    /// default blocklist embedded in the library.
-    pub fn blocklist_components(mut self, path: Option<&Path>) -> Result<Self, SimulationError> {
-        let ids = crate::utils::load_blocklist(path)?;
+    pub fn blocklist_components(mut self, ids: HashSet<String>) -> Self {
         if !ids.is_empty() {
             tracing::info!("Blocklisting {} components", ids.len());
             self.stream_builder = self.stream_builder.blocklisted_ids(ids);
         }
-        Ok(self)
+        self
     }
 
     /// Sets the stream end policy.
