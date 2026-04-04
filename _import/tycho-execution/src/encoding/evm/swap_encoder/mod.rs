@@ -8,6 +8,7 @@ mod erc_4626;
 mod etherfi;
 mod fluid_v1;
 mod hashflow;
+mod liquidity_party;
 mod maverick_v2;
 mod rocketpool;
 mod slipstreams;
