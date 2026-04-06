@@ -739,6 +739,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (minAmountOut == 0) {
             revert TychoRouter__UndefinedMinAmountOut();
         }
+        if (swaps.length == 0) {
+            revert TychoRouter__EmptySwaps();
+        }
 
         address client = clientFeeParams.clientFeeReceiver;
         // Get router fee once and pass it down to avoid duplicate external calls
