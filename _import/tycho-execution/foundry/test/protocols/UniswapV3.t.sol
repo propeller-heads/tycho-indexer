@@ -3,9 +3,6 @@ pragma solidity ^0.8.26;
 import "../TychoRouterTestSetup.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "@src/executors/UniswapV3Executor.sol";
-import {
-    TychoRouter__NegativeSlippage
-} from "@src/TychoRouter.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
@@ -213,32 +210,21 @@ contract FakeMaliciousUniV3Pool {
         uint160, /* sqrtPriceLimitX96 */
         bytes calldata data // protocolData: tokenIn|tokenOut|fee|target|zeroForOne
     ) external returns (int256, int256) {
-        uint256 amountOwed = amountSpecified > 0
-            ? uint256(amountSpecified)
-            : uint256(-amountSpecified);
-
         // Claim only half of amountIn so the old cyclic adjustment
-        // (balanceAfterSwap += amountIn) would produce amountOut = amountIn/2,
-        // bypassing a low minAmountOut guard.
-        // abi.encodeWithSelector layout for (selector, int256, int256, bytes):
-        //   [0:4]    selector
-        //   [4:36]   amount0Delta  → router transfers this amount of tokenIn
-        //   [36:68]  amount1Delta
-        //   [68:100] offset of bytes arg
-        //   [100:132] length of bytes arg
-        //   [132:...] bytes data   → tokenIn is the first 20 bytes here
         bytes memory callbackPayload = abi.encodeWithSelector(
-            bytes4(0xfa461e33),
-            int256(amountOwed / 2), // partial claim: X = amountIn/2
-            int256(0),
-            data
+            bytes4(0xfa461e33), // callback selector
+            // This must be amount / 2 in order for the exploit to work
+            // otherwise, we get an unexpected input delta
+            int256(uint256(amountSpecified) / 2), // amount0 delta
+            int256(0), // amount1 delta
+            data // protocol data
         );
 
         (bool success,) = tychoRouter.call(callbackPayload);
         require(success, "callback failed");
 
         // Pool keeps the WETH — no transfer back to recipient.
-        return (int256(amountOwed), 0);
+        return (amountSpecified, 0);
     }
 }
 
@@ -305,37 +291,38 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         assertEq(IERC20(BASE_cbBTC).balanceOf(BOB), 950567);
     }
 
-    // ─── Regression test: partial-callback drain via cyclic vault swap ────────
-    //
-    // Attack vector (fixed in Dispatcher._callSwapOnExecutor):
-    //
-    //   A malicious UniswapV3-compatible pool triggers uniswapV3SwapCallback
-    //   with amount0Delta = X < amountIn.  The router's callback handler
-    //   transfers X WETH to the pool and records delta = -X.  The pool keeps
-    //   the WETH and returns nothing.
-    //
-    //   Before the fix the cyclic adjustment added the *declared* amountIn
-    //   (not the actual debit X):
-    //     balanceAfterSwap = (B - X) + amountIn
-    //     amountOut        = amountIn - X  > 0 when X < amountIn
-    //   With X = amountIn/2 the delta zeroed out (-X + amountOut = 0), so
-    //   _finalizeBalances never burned the caller's vault balance, and the
-    //   tx succeeded — draining X WETH from the router at no cost.
-    //
-    //   Fix: the cyclic adjustment now uses the actual debit from delta
-    //   accounting instead of the declared amount:
-    //     actualDebit      = _getDelta(tokenIn) = -X
-    //     balanceAfterSwap = (B - X) + X = B
-    //     amountOut        = 0
-    //   amountOut (0) < minAmountOut (1) → NegativeSlippage revert.
-    //   The EVM revert rolls back the callback transfer, so no funds leave.
     function testCyclicVaultSwapPartialCallbackDrainReverts() public {
+        // An exploit where the pool encodes exactly half of the input amount to take
+        // during the callback. Before our fix, the numbers fit together nicely,
+        // creating an expected delta amount, allowing the malicious pool to steal
+        // router funds unnoticed.
+        //
+        // The amount in is 1 ether.
+        // The pool uses 0.5 ether, and transfers nothing out.
+        // This results in delta(WETH) = - 0.5
+        // The router balance after the swap is 0.5 ether.
+        //
+        // Before the fix, our cyclic adjustment was:
+        // balanceAfterSwap = balanceAfterSwap + amountIn
+        //                  = 0.5 + 1
+        //                  = 1.5
+        //
+        // Which means:
+        // amountOut = balanceAfterSwap - balanceBeforeSwap;
+        //           = 1.5 - 1;
+        //           = 0.5
+        //
+        // Then, when transferring the output token (0.5) back to the user,
+        // this results in an input delta of 1 ether, which is allowed, since this is
+        // exactly the amount in.
+        //
+        // After our fix we use the input delta instead of amountIn, so this is no
+        // longer possible.
         uint256 amountIn = 1 ether;
 
         // Seed the router with WETH (simulates tokens from other users).
         deal(WETH_ADDR, tychoRouterAddr, amountIn);
-        uint256 routerWethBefore =
-            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+        uint256 routerWethBefore = IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
 
         vm.startPrank(ALICE);
 
@@ -345,11 +332,7 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         // protocolData layout: tokenIn (20) | tokenOut (20) | fee (3) | target
         // (20) | zeroForOne (1). tokenOut == tokenIn triggers cyclic detection.
         bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            WETH_ADDR,
-            uint24(3000),
-            address(fakePool),
-            false
+            WETH_ADDR, WETH_ADDR, uint24(3000), address(fakePool), false
         );
         bytes memory swapData =
             encodeSingleSwap(address(usv3Executor), protocolData);
