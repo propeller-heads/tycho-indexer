@@ -1,10 +1,11 @@
 /// EVM runtime bytecodes for the Analyzer and Forwarder contracts used by the
 /// eth_call-based token analyzer.
 ///
-/// Both contracts are injected at runtime via `eth_call` state overrides — no on-chain deployment
-/// is required. The Analyzer is injected at the token holder's address so that `msg.sender` for
-/// the inbound `transfer()` call is the actual holder (who has the balance). The Forwarder is
-/// injected at the settlement address so that outbound transfers can be proxied from there.
+/// Both contracts are injected at runtime via `eth_call` state overrides — no on-chain
+/// deployment is required. The Analyzer is injected at the token holder's address so that
+/// `msg.sender` for the inbound `transfer()` call is the actual holder (who has the balance).
+/// The Forwarder is injected at the settlement address so that outbound transfers can be
+/// proxied from there.
 ///
 /// # Recompiling
 ///
@@ -15,8 +16,8 @@
 /// solc --bin-runtime --via-ir --optimize --optimize-runs 200 Forwarder.sol
 /// ```
 ///
-/// Update the `hex!` constants below with the new output. The compiler version used is recorded
-/// in the `@dev` tag of each contract.
+/// Update the `hex!` constants below with the new output. The compiler version used is
+/// recorded in the `@dev` tag of each contract.
 use alloy::sol;
 
 /// Runtime bytecode for `contracts/Analyzer.sol`.
@@ -60,10 +61,18 @@ mod tests {
     fn bytecodes_are_valid_evm() {
         // EVM contracts compiled via --via-ir start with PUSH1 0x80 (0x60 0x80).
         assert!(ANALYZER_BYTECODE.len() > 10, "analyzer bytecode is suspiciously short");
-        assert_eq!(&ANALYZER_BYTECODE[..2], &[0x60, 0x80], "analyzer bytecode has wrong EVM header");
+        assert_eq!(
+            &ANALYZER_BYTECODE[..2],
+            &[0x60, 0x80],
+            "analyzer bytecode has wrong EVM header"
+        );
 
         assert!(FORWARDER_BYTECODE.len() > 10, "forwarder bytecode is suspiciously short");
-        assert_eq!(&FORWARDER_BYTECODE[..2], &[0x60, 0x80], "forwarder bytecode has wrong EVM header");
+        assert_eq!(
+            &FORWARDER_BYTECODE[..2],
+            &[0x60, 0x80],
+            "forwarder bytecode has wrong EVM header"
+        );
     }
 
     #[test]
