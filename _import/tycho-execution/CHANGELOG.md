@@ -1,3 +1,10 @@
+## [0.171.3](https://github.com/propeller-heads/tycho-execution/compare/0.171.2...0.171.3) (2026-04-06)
+
+
+### Bug Fixes
+
+* Don't allow for empty sequential swaps ([#105](https://github.com/propeller-heads/tycho-execution/issues/105)) ([03841ce](https://github.com/propeller-heads/tycho-execution/commit/03841ce31b4c0124e308eadd1e0bd2bde3e53a36))
+
 ## [0.171.2](https://github.com/propeller-heads/tycho-execution/compare/0.171.1...0.171.2) (2026-03-30)
 
 
