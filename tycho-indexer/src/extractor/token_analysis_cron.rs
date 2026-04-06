@@ -45,8 +45,15 @@ pub async fn analyze_tokens(
         let tasks = tokens
             .chunks(analyze_args.update_batch_size)
             .map(|chunk| {
-                analyze_batch(analyze_args.chain, rpc, chunk.to_vec(), sem.clone(), gw.clone())
-                    .boxed()
+                analyze_batch(
+                    analyze_args.chain,
+                    rpc,
+                    chunk.to_vec(),
+                    sem.clone(),
+                    gw.clone(),
+                    analyze_args.settlement_contract,
+                )
+                .boxed()
             })
             .collect::<Vec<_>>();
 
@@ -69,6 +76,7 @@ async fn analyze_batch(
     mut tokens: Vec<Token>,
     sem: Arc<Semaphore>,
     gw: Arc<dyn ProtocolGateway + Send + Sync>,
+    settlement_contract: alloy::primitives::Address,
 ) -> anyhow::Result<()> {
     let _guard = sem.acquire().await?;
     let addresses = tokens
@@ -128,8 +136,11 @@ async fn analyze_batch(
             }
         })
         .collect::<HashMap<_, _>>();
-    let analyzer =
-        TraceCallDetector::new(rpc, Arc::new(TokenOwnerStore::new(liquidity_token_owners)));
+    let analyzer = TraceCallDetector::new(
+        rpc,
+        Arc::new(TokenOwnerStore::new(liquidity_token_owners)),
+        settlement_contract,
+    );
     for t in tokens.iter_mut() {
         debug!(?t.address, "Analyzing token");
         let (token_quality, gas, tax) = match analyzer
@@ -191,6 +202,7 @@ mod test {
 
         let args = AnalyzeTokenArgs {
             chain: Chain::Ethereum,
+            settlement_contract: tycho_ethereum::services::token_analyzer::COWSWAP_SETTLEMENT,
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,

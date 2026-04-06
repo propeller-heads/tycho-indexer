@@ -43,7 +43,9 @@ use tycho_common::{
 use tycho_ethereum::{
     rpc::EthereumRpcClient,
     services::{
-        account_extractor::EVMAccountExtractor, token_pre_processor::EthereumTokenPreProcessor,
+        account_extractor::EVMAccountExtractor,
+        token_analyzer::COWSWAP_SETTLEMENT,
+        token_pre_processor::EthereumTokenPreProcessor,
     },
 };
 use tycho_indexer::{
@@ -394,6 +396,7 @@ async fn create_indexing_tasks(
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
+        COWSWAP_SETTLEMENT,
     );
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =

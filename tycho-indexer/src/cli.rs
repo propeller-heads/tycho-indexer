@@ -251,6 +251,10 @@ pub struct AnalyzeTokenArgs {
     /// Blockchain to execute analysis for.
     #[clap(long)]
     pub chain: Chain,
+    /// Settlement contract address used for transfer simulation.
+    /// Defaults to the CoW Swap settlement contract on Ethereum mainnet.
+    #[clap(long, default_value = "0xc9f2e6ea1637E499406986ac50ddC92401ce1f58")]
+    pub settlement_contract: alloy::primitives::Address,
     /// How many concurrent threads to use for token analysis.
     #[clap(long)]
     pub concurrency: usize,
