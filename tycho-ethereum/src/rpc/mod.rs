@@ -655,6 +655,36 @@ impl EthereumRpcClient {
             })
     }
 
+    /// Sends a raw JSON-RPC request with an arbitrary serialisable params array.
+    ///
+    /// Used for methods that need parameter shapes not covered by alloy's typed wrappers, such as
+    /// `eth_call` with state overrides (the third `stateOverride` parameter is a free-form JSON
+    /// object).
+    #[instrument(level = "debug", skip(self, params))]
+    pub(crate) async fn raw_request<R>(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<R, RPCError>
+    where
+        R: serde::de::DeserializeOwned + Send + Sync + Unpin + std::fmt::Debug + 'static,
+    {
+        let method = method.to_string();
+        self.retry_policy
+            .retry_request(|| {
+                let method = method.clone();
+                let params = params.clone();
+                async move { self.inner.request(method, params).await }
+            })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!("Failed to send raw JSON-RPC request for method {method}"),
+                    e,
+                )
+            })
+    }
+
     #[instrument(level = "debug", skip(self, access_list_params, trace_call_params))]
     pub(crate) async fn trace_and_access_list(
         &self,
