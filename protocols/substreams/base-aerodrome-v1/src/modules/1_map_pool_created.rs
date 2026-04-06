@@ -13,8 +13,6 @@ use tycho_substreams::prelude::*;
 #[derive(Debug, Deserialize)]
 struct Params {
     factory_address: String,
-    stable_fee: u64,
-    volatile_fee: u64,
 }
 
 #[substreams::handlers::map]
@@ -37,8 +35,6 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
     let mut on_pool_created = |event: PoolCreated, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         let tycho_tx: Transaction = _tx.into();
 
-        let default_fee = if event.stable { params.stable_fee } else { params.volatile_fee };
-
         new_pools.push(TransactionChanges {
             tx: Some(tycho_tx.clone()),
             contract_changes: vec![],
@@ -57,7 +53,8 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                     },
                     Attribute {
                         name: "fee".to_string(),
-                        value: BigInt::from(default_fee).to_signed_bytes_be(),
+                        // Pool creation starts without a custom fee override.
+                        value: BigInt::from(0).to_signed_bytes_be(),
                         change: ChangeType::Creation.into(),
                     },
                 ],

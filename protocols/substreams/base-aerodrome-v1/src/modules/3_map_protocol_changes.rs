@@ -2,10 +2,7 @@ use std::str::FromStr;
 
 use itertools::Itertools;
 use std::collections::HashMap;
-use substreams::{
-    prelude::BigInt,
-    store::{StoreGet, StoreGetProto},
-};
+use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::{self as eth};
 
 use ethabi::ethereum_types::Address;
@@ -18,10 +15,6 @@ use crate::{
     traits::PoolAddresser,
 };
 use tycho_substreams::prelude::*;
-
-/// ZERO_FEE_INDICATOR in the Aerodrome factory contract. When customFee is set
-/// to this value, the actual fee is 0.
-const ZERO_FEE_INDICATOR: u64 = 420;
 
 #[derive(Debug, Deserialize)]
 struct Params {
@@ -138,32 +131,28 @@ fn handle_set_custom_fee(
     tx_changes: &mut HashMap<Vec<u8>, PartialChanges>,
     params: &Params,
 ) {
-    let mut on_set_custom_fee = |event: SetCustomFee,
-                                 _tx: &eth::TransactionTrace,
-                                 _log: &eth::Log| {
-        let pool_address_hex = event.pool.to_hex();
+    let mut on_set_custom_fee =
+        |event: SetCustomFee, _tx: &eth::TransactionTrace, _log: &eth::Log| {
+            let pool_address_hex = event.pool.to_hex();
 
-        // Resolve the actual fee: ZERO_FEE_INDICATOR (420) means fee is 0
-        let actual_fee =
-            if event.fee == BigInt::from(ZERO_FEE_INDICATOR) { BigInt::from(0) } else { event.fee };
+            let tx_change = tx_changes
+                .entry(_tx.hash.clone())
+                .or_insert_with(|| PartialChanges {
+                    transaction: _tx.into(),
+                    entity_changes: HashMap::new(),
+                    balance_changes: HashMap::new(),
+                });
 
-        let tx_change = tx_changes
-            .entry(_tx.hash.clone())
-            .or_insert_with(|| PartialChanges {
-                transaction: _tx.into(),
-                entity_changes: HashMap::new(),
-                balance_changes: HashMap::new(),
-            });
-
-        tx_change.entity_changes.insert(
-            ComponentKey::new(pool_address_hex, "fee".to_string()),
-            Attribute {
-                name: "fee".to_string(),
-                value: actual_fee.to_signed_bytes_be(),
-                change: ChangeType::Update.into(),
-            },
-        );
-    };
+            tx_change.entity_changes.insert(
+                ComponentKey::new(pool_address_hex, "fee".to_string()),
+                Attribute {
+                    name: "fee".to_string(),
+                    // Preserve the raw custom fee value. Simulation resolves ZERO_FEE_INDICATOR.
+                    value: event.fee.to_signed_bytes_be(),
+                    change: ChangeType::Update.into(),
+                },
+            );
+        };
 
     let mut eh = EventHandler::new(block);
     eh.filter_by_address(vec![
