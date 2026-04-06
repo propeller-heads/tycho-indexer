@@ -14,14 +14,12 @@ use tycho_common::{
     Bytes,
 };
 
-use crate::{
-    rpc::EthereumRpcClient,
-    services::{
-        token_analyzer::{arbitrary_recipient, calculate_fee, map_block_tag},
-        token_analyzer_bytecode::{analyzeCall, ANALYZER_BYTECODE, FORWARDER_BYTECODE},
-    },
-    BytesCodec,
+use super::{
+    arbitrary_recipient,
+    bytecode::{analyzeCall, ANALYZER_BYTECODE, FORWARDER_BYTECODE},
+    calculate_fee, map_block_tag,
 };
+use crate::{rpc::EthereumRpcClient, BytesCodec};
 
 /// Gas limit passed to the simulated `eth_call`. Set to the Ethereum block gas limit, which is
 /// a safe upper bound for a single token analysis call.
@@ -346,7 +344,7 @@ mod tests {
     }
 
     impl TestFixture {
-        fn create_ethcall_detector(&self) -> EthCallDetector {
+        pub(crate) fn create_ethcall_detector(&self) -> EthCallDetector {
             let rpc = self.create_rpc_client(false);
             let finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
             EthCallDetector::new(
