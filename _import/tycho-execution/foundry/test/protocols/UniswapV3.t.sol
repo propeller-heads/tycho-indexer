@@ -3,6 +3,9 @@ pragma solidity ^0.8.26;
 import "../TychoRouterTestSetup.sol";
 import "@permit2/src/interfaces/IAllowanceTransfer.sol";
 import "@src/executors/UniswapV3Executor.sol";
+import {
+    TychoRouter__NegativeSlippage
+} from "@src/TychoRouter.sol";
 import {Constants} from "../Constants.sol";
 import {Permit2TestHelper} from "../Permit2TestHelper.sol";
 import {Test} from "../../lib/forge-std/src/Test.sol";
@@ -188,6 +191,57 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
     }
 }
 
+// Fake UniswapV3-compatible pool used as an exploit probe.
+//
+// Triggers uniswapV3SwapCallback with amount0Delta = amountIn/2 (intentionally
+// less than the declared amountIn), causing the router to transfer that partial
+// amount here.  The pool keeps the WETH and returns nothing to the recipient.
+// This tests the partial-callback drain vector patched in Dispatcher.sol.
+contract FakeMaliciousUniV3Pool {
+    using SafeERC20 for IERC20;
+
+    address public immutable tychoRouter;
+
+    constructor(address tychoRouter_) {
+        tychoRouter = tychoRouter_;
+    }
+
+    function swap(
+        address, /* recipient */
+        bool, /* zeroForOne */
+        int256 amountSpecified,
+        uint160, /* sqrtPriceLimitX96 */
+        bytes calldata data // protocolData: tokenIn|tokenOut|fee|target|zeroForOne
+    ) external returns (int256, int256) {
+        uint256 amountOwed = amountSpecified > 0
+            ? uint256(amountSpecified)
+            : uint256(-amountSpecified);
+
+        // Claim only half of amountIn so the old cyclic adjustment
+        // (balanceAfterSwap += amountIn) would produce amountOut = amountIn/2,
+        // bypassing a low minAmountOut guard.
+        // abi.encodeWithSelector layout for (selector, int256, int256, bytes):
+        //   [0:4]    selector
+        //   [4:36]   amount0Delta  → router transfers this amount of tokenIn
+        //   [36:68]  amount1Delta
+        //   [68:100] offset of bytes arg
+        //   [100:132] length of bytes arg
+        //   [132:...] bytes data   → tokenIn is the first 20 bytes here
+        bytes memory callbackPayload = abi.encodeWithSelector(
+            bytes4(0xfa461e33),
+            int256(amountOwed / 2), // partial claim: X = amountIn/2
+            int256(0),
+            data
+        );
+
+        (bool success,) = tychoRouter.call(callbackPayload);
+        require(success, "callback failed");
+
+        // Pool keeps the WETH — no transfer back to recipient.
+        return (int256(amountOwed), 0);
+    }
+}
+
 contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
     function testSingleSwapUSV3Permit2() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V3 using Permit2
@@ -249,5 +303,86 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
 
         // 1000 USDC ~= 0.0095 BTC -> 1 BTC ~= 105k USDC ✅
         assertEq(IERC20(BASE_cbBTC).balanceOf(BOB), 950567);
+    }
+
+    // ─── Regression test: partial-callback drain via cyclic vault swap ────────
+    //
+    // Attack vector (fixed in Dispatcher._callSwapOnExecutor):
+    //
+    //   A malicious UniswapV3-compatible pool triggers uniswapV3SwapCallback
+    //   with amount0Delta = X < amountIn.  The router's callback handler
+    //   transfers X WETH to the pool and records delta = -X.  The pool keeps
+    //   the WETH and returns nothing.
+    //
+    //   Before the fix the cyclic adjustment added the *declared* amountIn
+    //   (not the actual debit X):
+    //     balanceAfterSwap = (B - X) + amountIn
+    //     amountOut        = amountIn - X  > 0 when X < amountIn
+    //   With X = amountIn/2 the delta zeroed out (-X + amountOut = 0), so
+    //   _finalizeBalances never burned the caller's vault balance, and the
+    //   tx succeeded — draining X WETH from the router at no cost.
+    //
+    //   Fix: the cyclic adjustment now uses the actual debit from delta
+    //   accounting instead of the declared amount:
+    //     actualDebit      = _getDelta(tokenIn) = -X
+    //     balanceAfterSwap = (B - X) + X = B
+    //     amountOut        = 0
+    //   amountOut (0) < minAmountOut (1) → NegativeSlippage revert.
+    //   The EVM revert rolls back the callback transfer, so no funds leave.
+    function testCyclicVaultSwapPartialCallbackDrainReverts() public {
+        uint256 amountIn = 1 ether;
+
+        // Seed the router with WETH (simulates tokens from other users).
+        deal(WETH_ADDR, tychoRouterAddr, amountIn);
+        uint256 routerWethBefore =
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+
+        vm.startPrank(ALICE);
+
+        FakeMaliciousUniV3Pool fakePool =
+            new FakeMaliciousUniV3Pool(tychoRouterAddr);
+
+        // protocolData layout: tokenIn (20) | tokenOut (20) | fee (3) | target
+        // (20) | zeroForOne (1). tokenOut == tokenIn triggers cyclic detection.
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            uint24(3000),
+            address(fakePool),
+            false
+        );
+        bytes memory swapData =
+            encodeSingleSwap(address(usv3Executor), protocolData);
+
+        // fakePool triggers callback with amount0Delta = amountIn/2.
+        // After the fix amountOut = 0, which is below minAmountOut = 1.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, uint256(0), uint256(1)
+            )
+        );
+        tychoRouter.singleSwapUsingVault(
+            amountIn,
+            WETH_ADDR,
+            WETH_ADDR,
+            1,
+            tychoRouterAddr,
+            noClientFee(),
+            swapData
+        );
+
+        vm.stopPrank();
+
+        // EVM revert rolls back the callback transfer — no WETH was stolen.
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr),
+            routerWethBefore,
+            "router WETH must be unchanged after the reverted drain attempt"
+        );
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(address(fakePool)),
+            0,
+            "fake pool must hold nothing after the reverted drain attempt"
+        );
     }
 }

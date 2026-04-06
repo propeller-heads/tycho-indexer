@@ -189,7 +189,14 @@ contract Dispatcher is TransferManager {
                 inputTransferPerformed := tload(_INPUT_TRANSFER_PERFORMED_SLOT)
             }
             if (inputTransferPerformed) {
-                balanceAfterSwap += amount;
+                // Use the actual amount debited via delta accounting, not the declared
+                // `amount`. A callback pool can pass a smaller amount0Delta, draining
+                // that partial amount while the declared-amount adjustment inflates
+                // amountOut to make it pass minAmountOut.
+                int256 actualDebit = _getDelta(tokenIn);
+                if (actualDebit < 0) {
+                    balanceAfterSwap += uint256(-actualDebit);
+                }
             }
         }
         amountOut = balanceAfterSwap - balanceBeforeSwap;
