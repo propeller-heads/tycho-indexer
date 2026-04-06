@@ -123,14 +123,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         )
     {
-        (int256 amount0Delta, int256 amount1Delta) =
-            abi.decode(data[4:68], (int256, int256));
-        amount =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         tokenIn = address(bytes20(data[132:152]));
         transferType = TransferManager.TransferType.Transfer;
         receiver = msg.sender;

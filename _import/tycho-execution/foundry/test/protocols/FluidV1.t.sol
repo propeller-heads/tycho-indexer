@@ -28,10 +28,10 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         ) = this.getCallbackTransferData(msg.data);
         if (transferType == TransferManager.TransferType.Transfer) {
+            uint256 amount = abi.decode(msg.data[36:68], (uint256));
             IERC20(tokenIn).transfer(receiver, amount);
         }
         handleCallback(msg.data);
@@ -91,12 +91,11 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
-        (, address receiver, address tokenIn, uint256 amount) =
+        (, address receiver, address tokenIn) =
             executor.getCallbackTransferData(data);
 
         assertEq(receiver, FLUIDV1_LIQUIDITY);
         assertEq(tokenIn, DAI_ADDR);
-        assertEq(amount, amountOwed);
     }
 
     function testGetCallbackTransferDataETH() public {
@@ -106,12 +105,11 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
-        (, address receiver, address tokenIn, uint256 amount) =
+        (, address receiver, address tokenIn) =
             executor.getCallbackTransferData(data);
 
         assertEq(receiver, FLUIDV1_LIQUIDITY);
         assertEq(tokenIn, address(0));
-        assertEq(amount, amountOwed);
     }
 
     function testSwapParamsRoundtrip() public {

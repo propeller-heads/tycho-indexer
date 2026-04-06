@@ -19,14 +19,10 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
     }
 
     function uniswapV3SwapCallback(
-        int256,
-        /* amount0Delta */
-        int256,
-        /* amount1Delta */
+        int256 amount0Delta,
+        int256 amount1Delta,
         bytes calldata /* data */
-    )
-        external
-    {
+    ) external {
         // Use delegatecall to preserve msg.sender
         bytes memory callData =
             abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
@@ -34,9 +30,11 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn, uint256 amount) =
-            abi.decode(result, (uint8, address, address, uint256));
+        (, address receiver, address tokenIn) =
+            abi.decode(result, (uint8, address, address));
 
+        uint256 amount =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         IERC20(tokenIn).transfer(receiver, amount);
         handleCallback(msg.data);
     }
@@ -104,12 +102,11 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (, address receiver, address tokenIn, uint256 amount) =
+        (, address receiver, address tokenIn) =
             uniswapV3Exposed.getCallbackTransferData(callbackData);
 
         assertEq(receiver, address(this));
         assertEq(tokenIn, WETH_ADDR);
-        assertEq(amount, amountOwed);
     }
 
     function testSwapIntegration() public {
@@ -191,9 +188,8 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
 // Fake UniswapV3-compatible pool used as an exploit probe.
 //
 // Triggers uniswapV3SwapCallback with amount0Delta = amountIn/2 (intentionally
-// less than the declared amountIn), causing the router to transfer that partial
-// amount here.  The pool keeps the WETH and returns nothing to the recipient.
-// This tests the partial-callback drain vector patched in Dispatcher.sol.
+// less than the declared amountIn). The pool keeps the WETH and returns nothing to
+// the recipient.
 contract FakeMaliciousUniV3Pool {
     using SafeERC20 for IERC20;
 
@@ -316,8 +312,8 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         // this results in an input delta of 1 ether, which is allowed, since this is
         // exactly the amount in.
         //
-        // After our fix we use the input delta instead of amountIn, so this is no
-        // longer possible.
+        // After our fix we no longer rely on pool-encoded transfer amounts, so this
+        // is no longer possible.
         uint256 amountIn = 1 ether;
 
         // Seed the router with WETH (simulates tokens from other users).

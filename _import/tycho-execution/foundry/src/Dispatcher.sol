@@ -44,6 +44,9 @@ contract Dispatcher is TransferManager {
     // keccak256("Dispatcher#IS_FIRST_SWAP_SLOT")
     uint256 private constant _IS_FIRST_SWAP_SLOT =
         0x8c47a7e3f4c2e1b5a6d9f0e8c7b3a2d1e4f5c6b7a8d9e0f1c2b3a4d5e6f7c8d9;
+    // keccak256("Dispatcher#SWAP_INPUT_AMOUNT_SLOT")
+    uint256 private constant _SWAP_INPUT_AMOUNT_SLOT =
+        0xce9e2e8e50d57f2d688020ea7ab16e2039bcf4dc7175eba827e178586597bb39;
 
     uint256 public constant DELAY_EXECUTOR_ACTIVATION = 3 days;
 
@@ -100,6 +103,7 @@ contract Dispatcher is TransferManager {
             tstore(_IS_FIRST_SWAP_SLOT, isFirstSwap)
             tstore(_IS_SPLIT_SWAP_SLOT, isSplitSwap)
             tstore(_INPUT_TRANSFER_PERFORMED_SLOT, 0)
+            tstore(_SWAP_INPUT_AMOUNT_SLOT, amount)
         }
 
         // slither-disable-next-line calls-loop
@@ -159,6 +163,7 @@ contract Dispatcher is TransferManager {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, 0)
             tstore(_IS_FIRST_SWAP_SLOT, 0)
             tstore(_IS_SPLIT_SWAP_SLOT, 0)
+            tstore(_SWAP_INPUT_AMOUNT_SLOT, 0)
         }
 
         // Revoke any lingering allowance the protocol didn't consume.
@@ -189,14 +194,7 @@ contract Dispatcher is TransferManager {
                 inputTransferPerformed := tload(_INPUT_TRANSFER_PERFORMED_SLOT)
             }
             if (inputTransferPerformed) {
-                // Use the actual amount debited via delta accounting, not the declared
-                // `amount`. A callback pool can pass a smaller amount0Delta, draining
-                // that partial amount while the declared-amount adjustment inflates
-                // amountOut to make it pass minAmountOut.
-                int256 actualDebit = _getDelta(tokenIn);
-                if (actualDebit < 0) {
-                    balanceAfterSwap += uint256(-actualDebit);
-                }
+                balanceAfterSwap += amount;
             }
         }
         amountOut = balanceAfterSwap - balanceBeforeSwap;
@@ -221,10 +219,12 @@ contract Dispatcher is TransferManager {
         address executor;
         bool isFirstSwap;
         bool isSplitSwap;
+        uint256 amount;
         assembly {
             executor := tload(_CURRENTLY_SWAPPING_EXECUTOR_SLOT)
             isFirstSwap := tload(_IS_FIRST_SWAP_SLOT)
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
+            amount := tload(_SWAP_INPUT_AMOUNT_SLOT)
         }
 
         _validateExecutor(executor);
@@ -248,11 +248,9 @@ contract Dispatcher is TransferManager {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         ) = abi.decode(
-            transferData,
-            (TransferManager.TransferType, address, address, uint256)
+            transferData, (TransferManager.TransferType, address, address)
         );
 
         _transfer(

@@ -38,10 +38,19 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         ) = this.getCallbackTransferData(msg.data);
         if (transferType == TransferManager.TransferType.Transfer) {
+            bytes calldata stripped = msg.data[68:];
+            bytes4 sel = bytes4(stripped[:4]);
+            uint256 amount;
+            if (sel == this.swapExactInputSingle.selector) {
+                // amountIn occupies stripped[196:228]; value in last 16 bytes
+                amount = uint128(bytes16(stripped[212:228]));
+            } else {
+                // swapExactInput: amountIn at stripped[36:68]; value in last 16 bytes
+                amount = uint128(bytes16(stripped[52:68]));
+            }
             IERC20(tokenIn).safeTransfer(receiver, amount);
         }
         bytes calldata stripped = msg.data[68:];
