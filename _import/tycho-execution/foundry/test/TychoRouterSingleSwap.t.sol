@@ -240,9 +240,9 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
 
-        // Innermost revert is TransferManager__ZeroTransferAmount, though this isn't
-        // propagated upwards by our fake pool, so we catch "Callback failed".
-        vm.expectRevert("Callback failed");
+        vm.expectRevert(
+            abi.encodeWithSelector(TychoRouter__NegativeSlippage.selector, 0, 1)
+        );
         tychoRouter.singleSwapUsingVault(
             10_000 ether,
             WETH_ADDR,

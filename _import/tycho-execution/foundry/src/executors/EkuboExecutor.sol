@@ -278,15 +278,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         )
     {
         bytes4 selector = bytes4(data[:4]);
         bytes calldata payData = data[36:];
         if (selector == _PAY_CALLBACK_SELECTOR) {
             tokenIn = address(bytes20(payData[12:32]));
-            amount = uint256(uint128(bytes16(payData[32:48])));
             transferType = TransferManager.TransferType.Transfer;
             receiver = address(_core);
         } else {
@@ -298,12 +296,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
                 tokenIn = address(0);
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;
-                amount = uint256(uint128(bytes16(payData[0:16])));
             } else {
                 transferType = TransferManager.TransferType.None;
                 receiver = address(0);
                 tokenIn = address(0);
-                amount = 0;
             }
         }
     }

@@ -7,7 +7,6 @@ import {
     TychoRouter__NegativeSlippage
 } from "@src/TychoRouter.sol";
 import {Vault__UnexpectedNonZeroCount} from "@src/Vault.sol";
-import {TransferManager__ZeroTransferAmount} from "@src/TransferManager.sol";
 import "./TychoRouterTestSetup.sol";
 
 // Mock executor that returns ProtocolWillDebit. The protocol never actually debits,
@@ -628,10 +627,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
         tychoRouter.deposit(WETH_ADDR, amountIn);
 
-        // The fake pool produces 0 output, so the USV2 swap receives 0
-        // input and reverts with TransferManager__ZeroTransferAmount when attempting
-        // to perform the transfer into the pool.
-        vm.expectRevert(TransferManager__ZeroTransferAmount.selector);
+        // The fake pool produces 0 output, so the USV2 swap receives 0 input
+        vm.expectRevert("UniswapV2: INSUFFICIENT_OUTPUT_AMOUNT");
         tychoRouter.sequentialSwapUsingVault(
             amountIn,
             WETH_ADDR,
@@ -831,9 +828,11 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
 
-        // Innermost revert is TransferManager__ZeroTransferAmount, though this isn't
-        // propagated upwards by our fake pool, so we catch "Callback failed".
-        vm.expectRevert("Callback failed");
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, 0, 10_000 ether
+            )
+        );
         tychoRouter.sequentialSwapUsingVault(
             10_000 ether,
             WETH_ADDR,

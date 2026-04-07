@@ -19,12 +19,10 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     }
 
     function uniswapV3SwapCallback(
-        int256, /* amount0Delta */
-        int256, /* amount1Delta */
+        int256 amount0Delta,
+        int256 amount1Delta,
         bytes calldata /* data */
-    )
-        external
-    {
+    ) external {
         // Use delegatecall to preserve msg.sender
         bytes memory callData =
             abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
@@ -32,9 +30,11 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn, uint256 amount) =
-            abi.decode(result, (uint8, address, address, uint256));
+        (, address receiver, address tokenIn) =
+            abi.decode(result, (uint8, address, address));
 
+        uint256 amount =
+            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
         IERC20(tokenIn).transfer(receiver, amount);
         handleCallback(msg.data);
     }
@@ -100,12 +100,11 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (, address receiver, address tokenIn, uint256 amount) =
+        (, address receiver, address tokenIn) =
             slipstreamsExposed.getCallbackTransferData(callbackData);
 
         assertEq(receiver, address(this));
         assertEq(tokenIn, BASE_WETH);
-        assertEq(amount, amountOwed);
     }
 
     function testSwap() public {

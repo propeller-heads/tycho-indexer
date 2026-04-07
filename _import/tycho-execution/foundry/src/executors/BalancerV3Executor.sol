@@ -151,12 +151,10 @@ contract BalancerV3Executor is IExecutor, ICallback {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         )
     {
         receiver = address(_VAULT);
-        amount = uint256(bytes32(data[0:32]));
         tokenIn = address(bytes20(data[32:52]));
         transferType = TransferManager.TransferType.Transfer;
     }
