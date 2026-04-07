@@ -1,3 +1,10 @@
+## [0.172.0](https://github.com/propeller-heads/tycho-execution/compare/0.171.4...0.172.0) (2026-04-07)
+
+
+### Features
+
+* Deploy WETH executor ([#111](https://github.com/propeller-heads/tycho-execution/issues/111)) ([1f64fff](https://github.com/propeller-heads/tycho-execution/commit/1f64fffb0d71830737d4e172ce2fd5ac8d4e434c))
+
 ## [0.171.4](https://github.com/propeller-heads/tycho-execution/compare/0.171.3...0.171.4) (2026-04-07)
 
 
