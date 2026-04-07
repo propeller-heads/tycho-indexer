@@ -202,7 +202,9 @@ mod test {
 
         let args = AnalyzeTokenArgs {
             chain: Chain::Ethereum,
-            settlement_contract: tycho_ethereum::services::token_analyzer::COWSWAP_SETTLEMENT,
+            settlement_contract: "0xc9f2e6ea1637E499406986ac50ddC92401ce1f58"
+                .parse()
+                .unwrap(),
             concurrency: 10,
             update_batch_size: 100,
             fetch_batch_size: 100,

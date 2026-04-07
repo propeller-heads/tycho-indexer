@@ -43,9 +43,7 @@ use tycho_common::{
 use tycho_ethereum::{
     rpc::EthereumRpcClient,
     services::{
-        account_extractor::EVMAccountExtractor,
-        token_analyzer::COWSWAP_SETTLEMENT,
-        token_pre_processor::EthereumTokenPreProcessor,
+        account_extractor::EVMAccountExtractor, token_pre_processor::EthereumTokenPreProcessor,
     },
 };
 use tycho_indexer::{
@@ -230,6 +228,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
                 retention_horizon,
                 extractors_config,
                 Some(extraction_runtime.handle()),
+                index_args.settlement_contract,
             )
             .await?;
 
@@ -312,6 +311,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
         Utc::now().naive_utc(),
         config,
         None,
+        run_args.settlement_contract,
     )
     .await?;
 
@@ -362,6 +362,7 @@ async fn create_indexing_tasks(
     retention_horizon: NaiveDateTime,
     extractors_config: ExtractorConfigs,
     extraction_runtime: Option<&Handle>,
+    settlement_contract: alloy::primitives::Address,
 ) -> Result<(ExtractionTasks, ServerTasks), ExtractionError> {
     let rpc_client = global_args.rpc.build_client()?;
 
@@ -396,7 +397,7 @@ async fn create_indexing_tasks(
         *chains
             .first()
             .expect("No chain provided"), //TODO: handle multichain?
-        COWSWAP_SETTLEMENT,
+        settlement_contract,
     );
 
     let (runners, extractor_handles): (Vec<_>, Vec<_>) =

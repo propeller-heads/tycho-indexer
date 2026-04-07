@@ -65,15 +65,12 @@ enum TraceRequestType {
 }
 
 impl TraceCallDetector {
-    pub fn new(rpc: &EthereumRpcClient, finder: Arc<dyn TokenOwnerFinding>) -> Self {
-        Self {
-            rpc: rpc.clone(),
-            finder,
-            // middle contract used to check for fees, set to cowswap settlement
-            settlement_contract: "0xc9f2e6ea1637E499406986ac50ddC92401ce1f58"
-                .parse()
-                .unwrap(),
-        }
+    pub fn new(
+        rpc: &EthereumRpcClient,
+        finder: Arc<dyn TokenOwnerFinding>,
+        settlement_contract: Address,
+    ) -> Self {
+        Self { rpc: rpc.clone(), finder, settlement_contract }
     }
 
     pub async fn detect_impl(
@@ -412,11 +409,13 @@ fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256
 mod tests {
     use std::{str::FromStr, sync::Arc};
 
-    use alloy::primitives::Address;
+    use alloy::primitives::{address, Address};
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
     use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
+
+    const COWSWAP_SETTLEMENT: Address = address!("c9f2e6ea1637E499406986ac50ddC92401ce1f58");
 
     impl TestFixture {
         pub(crate) fn create_trace_call_detector(&self) -> TraceCallDetector {
@@ -426,7 +425,7 @@ mod tests {
             // Use shared token holders
             let token_finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
 
-            TraceCallDetector::new(&rpc, Arc::new(token_finder))
+            TraceCallDetector::new(&rpc, Arc::new(token_finder), COWSWAP_SETTLEMENT)
         }
     }
 
