@@ -657,9 +657,9 @@ impl EthereumRpcClient {
 
     /// Sends a raw JSON-RPC request with an arbitrary serialisable params array.
     ///
-    /// Used for methods that need parameter shapes not covered by alloy's typed wrappers, such as
-    /// `eth_call` with state overrides (the third `stateOverride` parameter is a free-form JSON
-    /// object).
+    /// Used for calls that require parameter shapes unavailable without the alloy `providers`
+    /// feature (e.g. `eth_call` with state overrides via `EthCall::overrides`). If `providers` is
+    /// ever added as a dependency, callers should migrate to the typed API.
     #[instrument(level = "debug", skip(self, params))]
     pub(crate) async fn raw_request<R>(
         &self,
