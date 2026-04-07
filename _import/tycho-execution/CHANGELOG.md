@@ -1,3 +1,12 @@
+## [0.172.1](https://github.com/propeller-heads/tycho-execution/compare/0.172.0...0.172.1) (2026-04-07)
+
+
+### Bug Fixes
+
+* don't allow protocols to encode transfer amount ([95fa37c](https://github.com/propeller-heads/tycho-execution/commit/95fa37cba24e022c6a73beadbe9db91e75d238d0))
+* remove zero amount transfer check ([f897776](https://github.com/propeller-heads/tycho-execution/commit/f897776c746f1f7938002d6f4bb058a9c05d8b06))
+* Univ3 cyclic exploit (temp) ([ca96e19](https://github.com/propeller-heads/tycho-execution/commit/ca96e19aa01c6cd5901e0cf6d287250436897ef5))
+
 ## [0.172.0](https://github.com/propeller-heads/tycho-execution/compare/0.171.4...0.172.0) (2026-04-07)
 
 
