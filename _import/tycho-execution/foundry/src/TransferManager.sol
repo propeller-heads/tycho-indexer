@@ -12,6 +12,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Vault} from "./Vault.sol";
 
 error TransferManager__AddressZero();
+error TransferManager__ZeroTransferAmount();
 error TransferManager__NotAContract(address addr);
 error TransferManager__ExceededTransferFromAllowance(
     uint256 allowedAmount, uint256 amountAttempted
@@ -144,6 +145,11 @@ contract TransferManager is Vault {
         // UniswapV3).
         if (transferType == TransferType.None) {
             return amount;
+        }
+
+        // slither-disable-next-line incorrect-equality
+        if (amount == 0) {
+            revert TransferManager__ZeroTransferAmount();
         }
 
         // Scenario 2: Native ETH sent via executor - accounting only
