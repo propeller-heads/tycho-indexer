@@ -83,6 +83,7 @@ pub enum Chain {
     Base,
     Bsc,
     Unichain,
+    Polygon,
 }
 
 impl From<dto::Chain> for Chain {
@@ -95,6 +96,7 @@ impl From<dto::Chain> for Chain {
             dto::Chain::Base => Chain::Base,
             dto::Chain::Bsc => Chain::Bsc,
             dto::Chain::Unichain => Chain::Unichain,
+            dto::Chain::Polygon => Chain::Polygon,
         }
     }
 }
@@ -127,8 +129,24 @@ fn wrapped_native_eth(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WETH", 18, 0, &[Some(2300)], chain, 100)
 }
 
+fn native_pol(chain: Chain) -> Token {
+    Token::new(
+        &Bytes::from_str("0x0000000000000000000000000000000000000000").unwrap(),
+        "POL",
+        18,
+        0,
+        &[Some(2300)],
+        chain,
+        100,
+    )
+}
+
 fn wrapped_native_bsc(chain: Chain, address: &str) -> Token {
     Token::new(&Bytes::from_str(address).unwrap(), "WBNB", 18, 0, &[Some(2300)], chain, 100)
+}
+
+fn wrapped_native_pol(chain: Chain, address: &str) -> Token {
+    Token::new(&Bytes::from_str(address).unwrap(), "WMATIC", 18, 0, &[Some(2300)], chain, 100)
 }
 
 impl Chain {
@@ -141,6 +159,7 @@ impl Chain {
             Chain::Base => 8453,
             Chain::Bsc => 56,
             Chain::Unichain => 130,
+            Chain::Polygon => 137,
         }
     }
 
@@ -156,6 +175,7 @@ impl Chain {
             Chain::Base => native_eth(Chain::Base),
             Chain::Bsc => native_bsc(Chain::Bsc),
             Chain::Unichain => native_eth(Chain::Unichain),
+            Chain::Polygon => native_pol(Chain::Polygon),
         }
     }
 
@@ -183,6 +203,9 @@ impl Chain {
             }
             Chain::Unichain => {
                 wrapped_native_eth(Chain::Unichain, "0x4200000000000000000000000000000000000006")
+            }
+            Chain::Polygon => {
+                wrapped_native_pol(Chain::Polygon, "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270")
             }
         }
     }
