@@ -1,3 +1,10 @@
+## [0.154.0](https://github.com/propeller-heads/tycho-indexer/compare/0.153.1...0.154.0) (2026-04-07)
+
+
+### Features
+
+* Add Chain::Polygon to tycho-common ([#901](https://github.com/propeller-heads/tycho-indexer/issues/901)) ([4e2193c](https://github.com/propeller-heads/tycho-indexer/commit/4e2193c6d8e6a187451e340074ddc83da96feb75))
+
 ## [0.153.1](https://github.com/propeller-heads/tycho-indexer/compare/0.153.0...0.153.1) (2026-04-01)
 
 
