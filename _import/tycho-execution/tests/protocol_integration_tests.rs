@@ -2219,3 +2219,255 @@ fn test_single_encoding_strategy_usv4_grouped_twif_intermediary() {
         hex_calldata.as_str(),
     );
 }
+
+#[test]
+fn test_single_encoding_strategy_liquorice_settle_single() {
+    // Generates calldata for TychoRouterForLiquoriceTest Solidity integration test.
+    // USDC -> WETH via Liquorice RFQ settleSingleOrder
+    // Real calldata captured at block 24,392,845
+    let user = Bytes::from_str("0xd2068e04cf586f76eece7ba5beb779d7bb1474a1").unwrap();
+
+    let usdc = usdc();
+    let weth = weth();
+
+    let quote_amount_out = BigUint::from_str("1000000000000000000").unwrap();
+
+    let liquorice_calldata = Bytes::from(
+        hex::decode(concat!(
+            "9935c868",
+            "00000000000000000000000006465bceeaef280bb7340a58d75dfc5e1f687058",
+            "00000000000000000000000000000000000000000000000000000000000000a0",
+            "0000000000000000000000000000000000000000000000000000000000000240",
+            "00000000000000000000000000000000000000000000000000000000b2d05e00",
+            "0000000000000000000000000000000000000000000000000000000000000320",
+            "0000000000000000000000000000000000000000000000000000000000000160",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a1",
+            "0000000000000000000000006bc529dc7b81a031828ddce2bc419d01ff268c66",
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "00000000000000000000000000000000000000000000000000000000b2d05e00",
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000069850367",
+            "00000000000000000000000006465bceeaef280bb7340a58d75dfc5e1f687058",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "3100000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000060",
+            "0000000000000000000000000000000000000000000000000000000000000041",
+            "9ab2af25941edb594c4c33388649c35f7bbc545ce0a745f9e6272c0ea0e8b251",
+            "7939f2747b980419ca5f22129742f65755464928ac9592aff9d16ac4446b18df",
+            "1c00000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000060",
+            "0000000000000000000000000000000000000000000000000000000000000020",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ))
+        .unwrap(),
+    );
+
+    let liquorice_state = MockRFQState {
+        quote_amount_out,
+        quote_data: HashMap::from([
+            ("calldata".to_string(), liquorice_calldata),
+            (
+                "base_token_amount".to_string(),
+                Bytes::from(
+                    biguint_to_u256(&BigUint::from(3_000_000_000_u64))
+                        .to_be_bytes::<32>()
+                        .to_vec(),
+                ),
+            ),
+            ("partial_fill_offset".to_string(), Bytes::from(vec![96u8])),
+            (
+                "min_base_token_amount".to_string(),
+                Bytes::from(
+                    biguint_to_u256(&BigUint::from(3_000_000_000_u64))
+                        .to_be_bytes::<32>()
+                        .to_vec(),
+                ),
+            ),
+        ]),
+    };
+
+    let liquorice_component = ProtocolComponent {
+        id: String::from("liquorice-rfq"),
+        protocol_system: String::from("rfq:liquorice"),
+        ..Default::default()
+    };
+
+    let swap_usdc_weth = Swap::new(liquorice_component, usdc.clone(), weth.clone())
+        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+        .with_protocol_state(Arc::new(liquorice_state));
+
+    let encoder = get_tycho_router_encoder();
+
+    let solution = Solution::new(
+        user.clone(),
+        user,
+        usdc,
+        weth,
+        BigUint::from_str("3000000000").unwrap(),
+        BigUint::from_str("1000000000000000000").unwrap(),
+        vec![swap_usdc_weth],
+    );
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_liquorice_settle_single",
+        hex_calldata.as_str(),
+    );
+}
+
+#[test]
+fn test_single_encoding_strategy_liquorice_settle() {
+    // Generates calldata for TychoRouterForLiquoriceTest Solidity integration test.
+    // USDC -> WETH via Liquorice RFQ settle
+    // Real calldata captured at block 24,392,845
+    let user = Bytes::from_str("0xd2068e04cf586f76eece7ba5beb779d7bb1474a1").unwrap();
+
+    let usdc = usdc();
+    let weth = weth();
+
+    let quote_amount_out = BigUint::from_str("1000000000000000000").unwrap();
+
+    let liquorice_calldata = Bytes::from(
+        hex::decode(concat!(
+            "cba673a7",
+            "00000000000000000000000006465bceeaef280bb7340a58d75dfc5e1f687058",
+            "00000000000000000000000000000000000000000000000000000000b2d05e00",
+            "00000000000000000000000000000000000000000000000000000000000000e0",
+            "0000000000000000000000000000000000000000000000000000000000000380",
+            "00000000000000000000000000000000000000000000000000000000000003a0",
+            "0000000000000000000000000000000000000000000000000000000000000420",
+            "0000000000000000000000000000000000000000000000000000000000000500",
+            "0000000000000000000000000448633eb8b0a42efed924c42069e0dcf08fb552",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000000000260",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "000000000000000000000000d2068e04cf586f76eece7ba5beb779d7bb1474a1",
+            "0000000000000000000000006bc529dc7b81a031828ddce2bc419d01ff268c66",
+            "0000000000000000000000000000000000000000000000000000000069850367",
+            "00000000000000000000000006465bceeaef280bb7340a58d75dfc5e1f687058",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            "00000000000000000000000000000000000000000000000000000000b2d05e00",
+            "00000000000000000000000000000000000000000000000000000000b2d05e00",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+            "0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "3100000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000040",
+            "0000000000000000000000000000000000000000000000000000000000000060",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000000000001",
+            "0000000000000000000000000000000000000000000000000000000000000060",
+            "0000000000000000000000000000000000000000000000000000000000000041",
+            "6e4084d38e2d4e334057a124ce1ed667947b4fe6a0b44d6cbd62baa5dd384ff9",
+            "3eba5c03f8ea1f4fec128c1c76ce49eb1aad71f053adf3a4d860ef9fe973374d",
+            "1b00000000000000000000000000000000000000000000000000000000000000",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000100",
+            "0000000000000000000000000000000000000000000000000000000000000060",
+            "0000000000000000000000000000000000000000000000000000000000000020",
+            "0000000000000000000000000000000000000000000000000000000000000000",
+        ))
+        .unwrap(),
+    );
+
+    let liquorice_state = MockRFQState {
+        quote_amount_out,
+        quote_data: HashMap::from([
+            ("calldata".to_string(), liquorice_calldata),
+            (
+                "base_token_amount".to_string(),
+                Bytes::from(
+                    biguint_to_u256(&BigUint::from(3_000_000_000_u64))
+                        .to_be_bytes::<32>()
+                        .to_vec(),
+                ),
+            ),
+            ("partial_fill_offset".to_string(), Bytes::from(vec![32u8])),
+            (
+                "min_base_token_amount".to_string(),
+                Bytes::from(
+                    biguint_to_u256(&BigUint::from(3_000_000_000_u64))
+                        .to_be_bytes::<32>()
+                        .to_vec(),
+                ),
+            ),
+        ]),
+    };
+
+    let liquorice_component = ProtocolComponent {
+        id: String::from("liquorice-rfq"),
+        protocol_system: String::from("rfq:liquorice"),
+        ..Default::default()
+    };
+
+    let swap_usdc_weth = Swap::new(liquorice_component, usdc.clone(), weth.clone())
+        .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+        .with_protocol_state(Arc::new(liquorice_state));
+
+    let encoder = get_tycho_router_encoder();
+
+    let solution = Solution::new(
+        user.clone(),
+        user,
+        usdc,
+        weth,
+        BigUint::from_str("3000000000").unwrap(),
+        BigUint::from_str("1000000000000000000").unwrap(),
+        vec![swap_usdc_weth],
+    );
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
+
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file("test_single_encoding_strategy_liquorice_settle", hex_calldata.as_str());
+}

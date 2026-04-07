@@ -11,10 +11,11 @@ use crate::encoding::{
             bebop::BebopSwapEncoder, curve::CurveSwapEncoder, ekubo::EkuboSwapEncoder,
             ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
             etherfi::EtherfiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
-            hashflow::HashflowSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
-            rocketpool::RocketpoolSwapEncoder, slipstreams::SlipstreamsSwapEncoder,
-            uniswap_v2::UniswapV2SwapEncoder, uniswap_v3::UniswapV3SwapEncoder,
-            uniswap_v4::UniswapV4SwapEncoder, weth::WethSwapEncoder,
+            hashflow::HashflowSwapEncoder, liquorice::LiquoriceSwapEncoder,
+            maverick_v2::MaverickV2SwapEncoder, rocketpool::RocketpoolSwapEncoder,
+            slipstreams::SlipstreamsSwapEncoder, uniswap_v2::UniswapV2SwapEncoder,
+            uniswap_v3::UniswapV3SwapEncoder, uniswap_v4::UniswapV4SwapEncoder,
+            weth::WethSwapEncoder,
         },
     },
     swap_encoder::SwapEncoder,
@@ -135,6 +136,9 @@ impl SwapEncoderRegistry {
             }
             "rfq:hashflow" => {
                 Ok(Box::new(HashflowSwapEncoder::new(executor_address, self.chain, config)?))
+            }
+            "rfq:liquorice" => {
+                Ok(Box::new(LiquoriceSwapEncoder::new(executor_address, self.chain, config)?))
             }
             "fluid_v1" => {
                 Ok(Box::new(FluidV1SwapEncoder::new(executor_address, self.chain, config)?))
