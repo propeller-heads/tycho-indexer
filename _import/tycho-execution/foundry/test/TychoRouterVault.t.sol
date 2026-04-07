@@ -348,7 +348,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
     function testAllowanceIssue() public {
         uint256 stolenAmount = 1 ether;
-        // The client will contribute to this swap with their own funds
+        // The client (Alice) will contribute to this swap with their own funds
         uint256 clientContribution = stolenAmount;
         vm.startPrank(ALICE);
         deal(WETH_ADDR, ALICE, clientContribution);
@@ -376,23 +376,75 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         ClientFeeParams memory feeParams =
             makeClientFeeParams(0, stolenAmount, tychoRouterAddr, ALICE_PK);
+
+        uint256 tychoBalanceBefore =
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+
+        uint256 aliceVaultBalanceBefore =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        uint256 bobVaultBalanceBefore =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+
         tychoRouter.singleSwapUsingVault(
             stolenAmount,
             WETH_ADDR,
             WETH_ADDR,
             stolenAmount,
-            BOB,
+            tychoRouterAddr,
             feeParams,
             swap
         );
 
-        // ALICE (client) doesn't have funds anymore
-        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR))), 0);
-        // Attacker BOB and maliciousPool have both stolenAmount
-        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), stolenAmount); // from BOB's own vault
-        assertEq(
-            IERC20(WETH_ADDR).balanceOf(address(maliciousPool)), stolenAmount
-        ); // from the client contribution
+        uint256 aliceVaultBalanceAfter =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        uint256 bobVaultBalanceAfter =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        console.logString("Alice balance before:");
+        console.logUint(aliceVaultBalanceBefore);
+        console.logString("Alice balance after:");
+        console.logUint(aliceVaultBalanceAfter);
+
+        console.logString("Bob balance before:");
+        console.logUint(bobVaultBalanceBefore);
+        console.logString("Bob balance after:");
+        console.logUint(bobVaultBalanceAfter);
+
+        uint256 tychoBalanceAfter = IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+        console.logString("Tycho balance before:");
+        console.logUint(tychoBalanceBefore);
+        console.logString("Tycho balance after:");
+        console.logUint(tychoBalanceAfter);
+        //  Alice balance before:
+        //  1000000000000000000
+        //  Alice balance after:
+        //  0
+
+        //  Bob balance before:
+        //  1000000000000000000
+        //  Bob balance after:
+        //  0
+        //  Bob should have gotten Alice's contribution - but Alice's contribution went
+        //  to the pool, so both Bob and Alice are left with nothing.
+        //  Technically, only 1000000000000000000 was stolen from the TychoRouter, but
+        //  neither Bob not Alice can access this amount anymore since their Vault
+        //  accounting says they have nothing.
+        //  Who wins in the end? The malicious pool, if controlled by Bob, now has
+        //  Bob's funds, so he wins nothing. BUT he has managed to mess up Alice's
+        //  vault balance.
+
+        //  Tycho balance before:
+        //  2000000000000000000
+        //  Tycho balance after:
+        //  1000000000000000000
+
+        //  maliciousPool balance after:
+        //  1000000000000000000
+
+        uint256 maliciousPoolBalanceAfter =
+            IERC20(WETH_ADDR).balanceOf(address(maliciousPool));
+
+        console.logString("maliciousPool balance after:");
+        console.logUint(maliciousPoolBalanceAfter);
     }
 
     // ==================== Rebalance Vault tests ====================
