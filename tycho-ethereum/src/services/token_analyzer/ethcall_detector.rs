@@ -29,8 +29,7 @@ const GAS_LIMIT: u64 = 30_000_000;
 ///
 /// Injects the Analyzer contract at the token holder's address and the Forwarder contract at the
 /// settlement address, then executes the full round-trip transfer simulation in a single
-/// `eth_call`. Works on any EVM chain that supports `eth_call` state overrides, including
-/// Arbitrum Nitro (which does not support `trace_callMany`).
+/// `eth_call`. Compatible with any EVM chain that supports `eth_call` state overrides.
 pub struct EthCallDetector {
     rpc: EthereumRpcClient,
     finder: Arc<dyn TokenOwnerFinding>,
