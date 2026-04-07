@@ -57,6 +57,7 @@ pub enum Chain {
     Base,
     Bsc,
     Unichain,
+    Polygon,
 }
 
 impl From<models::contract::Account> for ResponseAccount {
@@ -91,6 +92,7 @@ impl From<models::Chain> for Chain {
             models::Chain::Base => Chain::Base,
             models::Chain::Bsc => Chain::Bsc,
             models::Chain::Unichain => Chain::Unichain,
+            models::Chain::Polygon => Chain::Polygon,
         }
     }
 }
