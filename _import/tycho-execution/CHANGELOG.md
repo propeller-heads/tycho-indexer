@@ -1,3 +1,10 @@
+## [0.171.4](https://github.com/propeller-heads/tycho-execution/compare/0.171.3...0.171.4) (2026-04-07)
+
+
+### Bug Fixes
+
+* Zero callback amount exploit ([797f58f](https://github.com/propeller-heads/tycho-execution/commit/797f58f06a06b6669bd3f89ef480373411cf234e))
+
 ## [0.171.3](https://github.com/propeller-heads/tycho-execution/compare/0.171.2...0.171.3) (2026-04-06)
 
 
