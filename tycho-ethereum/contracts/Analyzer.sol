@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
-    function transfer(address to, uint256 amount) external returns (bool);
     function approve(address spender, uint256 amount) external returns (bool);
 }
 
@@ -16,15 +15,20 @@ interface IForwarder {
 /// @notice Injected at a token holder's address via eth_call state override. Simulates a full
 /// round-trip ERC20 transfer (holder -> settlement -> recipient) in a single call and reports
 /// balances, gas costs, and success flags. No on-chain deployment required.
-/// @dev Compiled with: solc 0.8.34 --bin-runtime --via-ir --optimize --optimize-runs 200
-/// Runtime bytecode is embedded as a constant in token_analyzer_bytecode.rs.
+/// @dev Compiled with: solc 0.8.34 --bin-runtime --via-ir --optimize --optimize-runs 200 --no-cbor-metadata
+/// Runtime bytecode is embedded as a constant in bytecode.rs.
+///
+/// The inbound transfer uses a low-level call rather than a typed interface so that tokens with
+/// non-standard transfer() implementations (e.g. USDT, which omits the bool return value) are
+/// handled correctly. balanceOf and approve are called via the typed interface since they are
+/// consistently implemented across tokens.
 contract Analyzer {
     /// @notice Simulate ERC20 transfer in and out, measuring balances and gas at each step.
     /// @param token   The ERC20 token to analyze.
     /// @param amount  The amount to transfer in from this address (the holder).
     /// @param settlement  Intermediary address (injected with Forwarder bytecode).
     /// @param recipient   Final recipient of the outbound transfer.
-    /// @return transferInOk    Whether transfer(settlement, amount) returned true without reverting.
+    /// @return transferInOk    Whether transfer(settlement, amount) succeeded.
     /// @return transferOutOk   Whether forwardTransfer(token, recipient, received) succeeded.
     /// @return approvalOk      Whether forwardApprove(token, recipient, MAX_UINT256) succeeded.
     /// @return balanceBeforeIn Settlement balance before transfer in.
@@ -57,12 +61,15 @@ contract Analyzer {
         balanceBeforeIn = erc20.balanceOf(settlement);
         recipientBefore = erc20.balanceOf(recipient);
 
-        // Transfer from holder (this address, which has the actual balance) to settlement.
+        // Transfer from holder (this address) to settlement using a low-level call so that tokens
+        // which omit the bool return value (e.g. USDT) do not cause a revert during ABI decoding.
+        // Success condition: call did not revert AND, if return data is present, it decodes true.
         uint256 g1 = gasleft();
-        try erc20.transfer(settlement, amount) returns (bool success) {
-            transferInOk = success;
-        } catch {
-            transferInOk = false;
+        {
+            (bool ok, bytes memory data) = token.call(
+                abi.encodeWithSelector(0xa9059cbb, settlement, amount)
+            );
+            transferInOk = ok && (data.length == 0 || abi.decode(data, (bool)));
         }
         gasIn = g1 - gasleft();
 
