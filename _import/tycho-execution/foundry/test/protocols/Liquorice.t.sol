@@ -114,6 +114,8 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(liquoriceExecutor));
+        vm.prank(address(liquoriceExecutor));
+        IERC20(tokenIn).approve(LIQUORICE_BALANCE_MANAGER, amountIn);
 
         liquoriceExecutor.swap(amountIn, params, address(liquoriceExecutor));
 
@@ -158,6 +160,8 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(liquoriceExecutor));
+        vm.prank(address(liquoriceExecutor));
+        IERC20(tokenIn).approve(LIQUORICE_BALANCE_MANAGER, amountIn);
 
         liquoriceExecutor.swap(amountIn, params, address(liquoriceExecutor));
 
@@ -200,6 +204,8 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(liquoriceExecutor));
+        vm.prank(address(liquoriceExecutor));
+        IERC20(tokenIn).approve(LIQUORICE_BALANCE_MANAGER, amountIn);
 
         liquoriceExecutor.swap(amountIn, params, address(liquoriceExecutor));
 
@@ -244,6 +250,8 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
         uint256 initialTokenOutBalance =
             IERC20(tokenOut).balanceOf(address(liquoriceExecutor));
+        vm.prank(address(liquoriceExecutor));
+        IERC20(tokenIn).approve(LIQUORICE_BALANCE_MANAGER, amountIn);
 
         liquoriceExecutor.swap(amountIn, params, address(liquoriceExecutor));
 
