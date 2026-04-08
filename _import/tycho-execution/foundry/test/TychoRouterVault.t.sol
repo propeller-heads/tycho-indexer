@@ -398,7 +398,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         uint256 aliceVaultBalanceAfter =
             tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
         uint256 bobVaultBalanceAfter =
-            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+            tychoRouter.balanceOf(BOB, uint256(uint160(WETH_ADDR)));
         console.logString("Alice balance before:");
         console.logUint(aliceVaultBalanceBefore);
         console.logString("Alice balance after:");

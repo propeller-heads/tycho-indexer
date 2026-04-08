@@ -24,6 +24,7 @@ import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {TransferManager} from "./TransferManager.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
+import {console2} from "forge-std/console2.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
 //                                   ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -1109,13 +1110,35 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             }
             // Debit the client's vault balance
             _debitVault(client, tokenOut, requiredContribution);
+            // This would be zero in the case of a cyclical swap where
             int256 outputDelta = _getDelta(tokenOut);
+            console2.log("outputDelta:", outputDelta);
+            console2.log("required contribution:", requiredContribution);
             if (outputDelta > 0) {
                 // out tokens are still in the Router
                 _updateDeltaAccounting(tokenOut, int256(requiredContribution));
             } else {
                 // send contribution separately
-                if (tokenOut == address(0)) {
+                if (receiver == address(this)) {
+                    console2.log(
+                        "Reached the right part. Crediting Bob's vault."
+                    );
+                    console2.log(
+                        "Bob's vault before crediting:",
+                        this.balanceOf(msg.sender, uint256(uint160(tokenOut)))
+                    );
+                    // ***** THE FIX *****
+                    _creditVault(msg.sender, tokenOut, requiredContribution);
+                    // ***** END OF THE FIX *****
+                    console2.log(
+                        "Bob's vault after crediting:",
+                        this.balanceOf(msg.sender, uint256(uint160(tokenOut)))
+                    );
+                    int256 outputDelta = _getDelta(tokenOut);
+                    console2.log(
+                        "Output delta after client contribution:", outputDelta
+                    );
+                } else if (tokenOut == address(0)) {
                     Address.sendValue(payable(receiver), requiredContribution);
                 } else {
                     IERC20(tokenOut)
