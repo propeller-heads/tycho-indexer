@@ -1,3 +1,16 @@
+## [0.155.0](https://github.com/propeller-heads/tycho-indexer/compare/0.154.0...0.155.0) (2026-04-08)
+
+
+### Features
+
+* **token-analyzer:** add Analyzer + Forwarder Solidity contracts ([00d4b53](https://github.com/propeller-heads/tycho-indexer/commit/00d4b538ca3df62ea9836d77610725de763cafc2))
+* **token-analyzer:** add Analyzer + Forwarder Solidity contracts ([#897](https://github.com/propeller-heads/tycho-indexer/issues/897)) ([eb371fa](https://github.com/propeller-heads/tycho-indexer/commit/eb371fab3843d77e7f7d8669bbee9a1c1c79bcec))
+
+
+### Bug Fixes
+
+* **token-analyzer:** handle non-standard transfer() in Analyzer and Forwarder ([694fe64](https://github.com/propeller-heads/tycho-indexer/commit/694fe64bf6647716510e90f600d90f5a764ee8d4))
+
 ## [0.154.0](https://github.com/propeller-heads/tycho-indexer/compare/0.153.1...0.154.0) (2026-04-07)
 
 
