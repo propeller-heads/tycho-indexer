@@ -69,8 +69,8 @@ impl EVMEntrypointService {
             tx_params["from"] = json!(caller.to_string());
         }
 
-        if params.state_overrides.is_none()
-            || params
+        if params.state_overrides.is_none() ||
+            params
                 .state_overrides
                 .as_ref()
                 .unwrap_or(&BTreeMap::new())
