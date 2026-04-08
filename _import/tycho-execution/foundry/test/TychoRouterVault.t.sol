@@ -414,6 +414,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         console.logUint(tychoBalanceBefore);
         console.logString("Tycho balance after:");
         console.logUint(tychoBalanceAfter);
+        //  **** BEFORE FIX ****
         //  Alice balance before:
         //  1000000000000000000
         //  Alice balance after:
@@ -431,6 +432,30 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         //  Who wins in the end? The malicious pool, if controlled by Bob, now has
         //  Bob's funds, so he wins nothing. BUT he has managed to mess up Alice's
         //  vault balance.
+
+        //  Tycho balance before:
+        //  2000000000000000000
+        //  Tycho balance after:
+        //  1000000000000000000
+
+        //  maliciousPool balance after:
+        //  1000000000000000000
+
+        //
+        //  **** AFTER FIX ****
+        //  Alice balance before:
+        //  1000000000000000000
+        //  Alice balance after:
+        //  0
+
+        //  Bob balance before:
+        //  1000000000000000000
+        //  Bob balance after:
+        //  1000000000000000000
+        //
+        //  Alice's vault funds rightfully went to Bob after the pool stole the
+        //  allowance. Alice should not have set her client contribution so high.
+        //  An even better fix would be to totally revert here.
 
         //  Tycho balance before:
         //  2000000000000000000
