@@ -76,6 +76,8 @@ impl EthCallDetector {
     ) -> Result<(TokenQuality, Option<U256>, Option<U256>), String> {
         let block_tag = map_block_tag(block);
 
+        // Arbitrary amount that is large enough that small relative fees should be
+        // visible.
         const MIN_AMOUNT: u64 = 100_000;
         let (holder, amount) = match self
             .finder
