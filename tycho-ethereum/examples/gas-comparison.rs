@@ -80,7 +80,8 @@ const TOKENS: &[TokenConfig] = &[
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let rpc_url = std::env::var("RPC_URL").expect("RPC_URL must be set");
     let rpc = EthereumRpcClient::new(&rpc_url).expect("failed to create RPC client");
-    // Raw alloy client for eth_getLogs / eth_getTransactionReceipt (not wrapped in EthereumRpcClient)
+    // Raw alloy client for eth_getLogs / eth_getTransactionReceipt (not wrapped in
+    // EthereumRpcClient)
     let raw_client = ClientBuilder::default().http(rpc_url.parse()?);
 
     let settlement: Address = COWSWAP_SETTLEMENT.parse()?;

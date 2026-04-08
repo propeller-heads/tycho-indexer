@@ -398,7 +398,8 @@ mod tests {
         use super::*;
         use crate::test_fixtures::{ARB_ARB_STR, ARB_TOKEN_HOLDERS, ARB_USDC_STR, ARB_WETH_STR};
 
-        const ARB_COWSWAP_SETTLEMENT: Address = address!("9008D19f58AAbD9eD0D60971565AA8510560ab41");
+        const ARB_COWSWAP_SETTLEMENT: Address =
+            address!("9008D19f58AAbD9eD0D60971565AA8510560ab41");
 
         impl TestFixture {
             pub(crate) fn create_arb_ethcall_detector(&self) -> EthCallDetector {

@@ -165,8 +165,10 @@ impl TestFixture {
     /// Creates a test fixture for Arbitrum using `ARB_RPC_URL`.
     pub fn new_arbitrum() -> Self {
         let url = std::env::var("ARB_RPC_URL").expect("ARB_RPC_URL must be set for Arbitrum tests");
-        let inner_rpc = ClientBuilder::default()
-            .http(url.parse().expect("Invalid ARB_RPC_URL"));
+        let inner_rpc = ClientBuilder::default().http(
+            url.parse()
+                .expect("Invalid ARB_RPC_URL"),
+        );
         let block = Block::new(
             0,
             Chain::Arbitrum,
