@@ -6,7 +6,7 @@ use std::{
 };
 
 use alloy::{
-    primitives::{private::serde, Address, B256, Bytes as AlloyBytes, U256},
+    primitives::{private::serde, Address, Bytes as AlloyBytes, B256, U256},
     providers::{Provider, ProviderBuilder},
     rpc::{
         client::{ClientBuilder, ReqwestClient},

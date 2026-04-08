@@ -611,8 +611,8 @@ pub(crate) mod tests {
         let elapsed = start_time.elapsed();
 
         // Calculate expected elapsed time due-to-backoff as a geometric series sum
-        let expected_average = (multiplier.powi(max_retries as i32) - 1.0) / (multiplier - 1.0) *
-            start_interval as f64;
+        let expected_average = (multiplier.powi(max_retries as i32) - 1.0) / (multiplier - 1.0)
+            * start_interval as f64;
         // Due to default 50% jitter applied by backoff crate we expect half of that time at minimum
         let expected_min = expected_average * 0.5;
 

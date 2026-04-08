@@ -128,14 +128,20 @@ impl EthCallDetector {
             .gas_limit(GAS_LIMIT);
 
         let mut overrides = StateOverride::default();
-        overrides.insert(holder, AccountOverride {
-            code: Some(AlloyBytes::copy_from_slice(ANALYZER_BYTECODE)),
-            ..Default::default()
-        });
-        overrides.insert(self.settlement_contract, AccountOverride {
-            code: Some(AlloyBytes::copy_from_slice(FORWARDER_BYTECODE)),
-            ..Default::default()
-        });
+        overrides.insert(
+            holder,
+            AccountOverride {
+                code: Some(AlloyBytes::copy_from_slice(ANALYZER_BYTECODE)),
+                ..Default::default()
+            },
+        );
+        overrides.insert(
+            self.settlement_contract,
+            AccountOverride {
+                code: Some(AlloyBytes::copy_from_slice(FORWARDER_BYTECODE)),
+                ..Default::default()
+            },
+        );
 
         let raw: AlloyBytes = self
             .rpc
