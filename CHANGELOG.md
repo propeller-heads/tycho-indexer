@@ -1,3 +1,13 @@
+## [0.156.0](https://github.com/propeller-heads/tycho-indexer/compare/0.155.0...0.156.0) (2026-04-08)
+
+
+### Features
+
+* **token-analyzer:** expose settlement address as CLI arg ([7dd4ab7](https://github.com/propeller-heads/tycho-indexer/commit/7dd4ab79c767d329cc220d1dc999912e9c20a980))
+* **token-analyzer:** implement EthCallDetector ([#898](https://github.com/propeller-heads/tycho-indexer/issues/898)) ([3c341ae](https://github.com/propeller-heads/tycho-indexer/commit/3c341ae89974c200d001fe7241f1d7a67f6545cb))
+* **token-analyzer:** implement EthCallDetector using eth_call with state overrides ([bd64af6](https://github.com/propeller-heads/tycho-indexer/commit/bd64af66ed9be3a02b3c958519becc1b8fdd2755))
+* **token-analyzer:** make settlement address configurable ([#900](https://github.com/propeller-heads/tycho-indexer/issues/900)) ([65209e8](https://github.com/propeller-heads/tycho-indexer/commit/65209e81d5a0805af52fd988562c0394724382cd))
+
 ## [0.155.0](https://github.com/propeller-heads/tycho-indexer/compare/0.154.0...0.155.0) (2026-04-08)
 
 
