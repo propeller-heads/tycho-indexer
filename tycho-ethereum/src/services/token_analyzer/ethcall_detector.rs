@@ -265,11 +265,13 @@ impl EthCallDetector {
 mod tests {
     use std::{str::FromStr, sync::Arc};
 
-    use alloy::primitives::Address;
+    use alloy::primitives::{address, Address};
     use tycho_common::models::token::{TokenOwnerStore, TokenQuality};
 
     use super::*;
     use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
+
+    const COWSWAP_SETTLEMENT: Address = address!("c9f2e6ea1637E499406986ac50ddC92401ce1f58");
 
     // Return value builder for unit tests — all fields default to zero / true.
     fn good_return(amount: U256) -> <analyzeCall as SolCall>::Return {
@@ -354,11 +356,7 @@ mod tests {
         pub(crate) fn create_ethcall_detector(&self) -> EthCallDetector {
             let rpc = self.create_rpc_client(false);
             let finder = TokenOwnerStore::new(TOKEN_HOLDERS.clone());
-            EthCallDetector::new(
-                &rpc,
-                Arc::new(finder),
-                Address::from_str("0xc9f2e6ea1637E499406986ac50ddC92401ce1f58").unwrap(),
-            )
+            EthCallDetector::new(&rpc, Arc::new(finder), COWSWAP_SETTLEMENT)
         }
     }
 

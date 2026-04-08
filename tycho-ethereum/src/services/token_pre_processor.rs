@@ -25,11 +25,12 @@ use crate::{
 pub struct EthereumTokenPreProcessor {
     rpc: EthereumRpcClient,
     chain: Chain,
+    settlement_contract: Address,
 }
 
 impl EthereumTokenPreProcessor {
-    pub fn new(rpc: &EthereumRpcClient, chain: Chain) -> Self {
-        EthereumTokenPreProcessor { rpc: rpc.clone(), chain }
+    pub fn new(rpc: &EthereumRpcClient, chain: Chain, settlement_contract: Address) -> Self {
+        EthereumTokenPreProcessor { rpc: rpc.clone(), chain, settlement_contract }
     }
 
     async fn call_symbol(&self, token: Address) -> String {
@@ -107,7 +108,8 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
             let symbol = self.call_symbol(token_address).await;
             let decimals = self.call_decimals(token_address).await;
 
-            let trace_call = TraceCallDetector::new(&self.rpc, token_finder.clone());
+            let trace_call =
+                TraceCallDetector::new(&self.rpc, token_finder.clone(), self.settlement_contract);
 
             let (token_quality, gas, tax) = trace_call
                 .analyze(address.clone(), block)
@@ -156,17 +158,20 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
 mod tests {
     use std::str::FromStr;
 
+    use alloy::primitives::address;
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
     use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
+
+    const COWSWAP_SETTLEMENT: Address = address!("c9f2e6ea1637E499406986ac50ddC92401ce1f58");
 
     impl TestFixture {
         fn create_token_preprocessor(&self) -> EthereumTokenPreProcessor {
             // We do not enable batching as the token pre-processor does not leverage it currently
             let rpc = self.create_rpc_client(false);
 
-            EthereumTokenPreProcessor::new(&rpc, Chain::Ethereum)
+            EthereumTokenPreProcessor::new(&rpc, Chain::Ethereum, COWSWAP_SETTLEMENT)
         }
     }
 
