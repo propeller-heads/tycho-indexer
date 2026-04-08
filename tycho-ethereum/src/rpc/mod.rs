@@ -6,11 +6,13 @@ use std::{
 };
 
 use alloy::{
-    primitives::{private::serde, Address, B256, U256},
+    primitives::{private::serde, Address, B256, Bytes as AlloyBytes, U256},
+    providers::{Provider, ProviderBuilder},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
         types::{
             debug::{StorageMap, StorageRangeResult, StorageResult},
+            state::StateOverride,
             trace::{
                 geth::GethTrace,
                 parity::{TraceResults, TraceType},
@@ -655,33 +657,35 @@ impl EthereumRpcClient {
             })
     }
 
-    /// Sends a raw JSON-RPC request with an arbitrary serialisable params array.
+    /// Executes `eth_call` with EVM state overrides.
     ///
-    /// Used for calls that require parameter shapes unavailable without the alloy `providers`
-    /// feature (e.g. `eth_call` with state overrides via `EthCall::overrides`). If `providers` is
-    /// ever added as a dependency, callers should migrate to the typed API.
-    #[instrument(level = "debug", skip(self, params))]
-    pub(crate) async fn raw_request<R>(
+    /// Injects arbitrary bytecode or storage at specified addresses before the call executes.
+    /// Returns the raw ABI-encoded return data.
+    #[instrument(level = "debug", skip(self, tx, overrides))]
+    pub(crate) async fn eth_call_with_state_overrides(
         &self,
-        method: &str,
-        params: serde_json::Value,
-    ) -> Result<R, RPCError>
-    where
-        R: serde::de::DeserializeOwned + Send + Sync + Unpin + std::fmt::Debug + 'static,
-    {
-        let method = method.to_string();
+        tx: TransactionRequest,
+        block: BlockNumberOrTag,
+        overrides: StateOverride,
+    ) -> Result<AlloyBytes, RPCError> {
+        let provider = ProviderBuilder::new().connect_client(self.inner.clone());
+        let block_id: BlockId = block.into();
         self.retry_policy
             .retry_request(|| {
-                let method = method.clone();
-                let params = params.clone();
-                async move { self.inner.request(method, params).await }
+                let tx = tx.clone();
+                let overrides = overrides.clone();
+                let provider = provider.clone();
+                async move {
+                    provider
+                        .call(tx)
+                        .overrides(overrides)
+                        .block(block_id)
+                        .await
+                }
             })
             .await
             .map_err(|e| {
-                RPCError::from_alloy(
-                    format!("Failed to send raw JSON-RPC request for method {method}"),
-                    e,
-                )
+                RPCError::from_alloy("eth_call with state overrides failed".to_string(), e)
             })
     }
 

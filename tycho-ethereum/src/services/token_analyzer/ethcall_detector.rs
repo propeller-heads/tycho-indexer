@@ -2,9 +2,12 @@ use std::{cmp, sync::Arc};
 
 use alloy::{
     primitives::{Address, Bytes as AlloyBytes, U256},
+    rpc::types::{
+        state::{AccountOverride, StateOverride},
+        TransactionInput, TransactionRequest,
+    },
     sol_types::SolCall,
 };
-use serde_json::json;
 use tycho_common::{
     models::{
         blockchain::BlockTag,
@@ -114,32 +117,29 @@ impl EthCallDetector {
 
         let recipient = arbitrary_recipient();
 
-        let calldata = AlloyBytes::from(
-            analyzeCall { token, amount, settlement: self.settlement_contract, recipient }
-                .abi_encode(),
-        );
-        let holder_str = format!("{holder:#x}");
-        let settlement_str = format!("{:#x}", self.settlement_contract);
-        let analyzer_code = AlloyBytes::copy_from_slice(ANALYZER_BYTECODE);
-        let forwarder_code = AlloyBytes::copy_from_slice(FORWARDER_BYTECODE);
+        let tx = TransactionRequest::default()
+            .from(holder)
+            .to(holder)
+            .input(TransactionInput::both(
+                analyzeCall { token, amount, settlement: self.settlement_contract, recipient }
+                    .abi_encode()
+                    .into(),
+            ))
+            .gas_limit(GAS_LIMIT);
 
-        let params = json!([
-            {
-                "from": holder_str,
-                "to":   holder_str,
-                "data": calldata,
-                "gas":  format!("{:#x}", GAS_LIMIT),
-            },
-            block_tag,
-            {
-                holder_str: { "code": analyzer_code },
-                settlement_str: { "code": forwarder_code },
-            }
-        ]);
+        let mut overrides = StateOverride::default();
+        overrides.insert(holder, AccountOverride {
+            code: Some(AlloyBytes::copy_from_slice(ANALYZER_BYTECODE)),
+            ..Default::default()
+        });
+        overrides.insert(self.settlement_contract, AccountOverride {
+            code: Some(AlloyBytes::copy_from_slice(FORWARDER_BYTECODE)),
+            ..Default::default()
+        });
 
         let raw: AlloyBytes = self
             .rpc
-            .raw_request("eth_call", params)
+            .eth_call_with_state_overrides(tx, block_tag, overrides)
             .await
             .map_err(|e| format!("eth_call with state overrides failed: {e}"))?;
 
