@@ -68,6 +68,11 @@ const executors_to_deploy = {
         {
             exchange: "EkuboV3Executor", args: []
         },
+        // Args: WETH address
+        {
+            exchange: "WethExecutor", args: ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"]
+        },
+
     ],
     "base": [
         // USV2 - Args: Fee BPS
@@ -88,6 +93,10 @@ const executors_to_deploy = {
         },
         // Aerodrome Slipstreams - Args: (none)
         {exchange: "SlipstreamsExecutor", args: []},
+        // Args: WETH address
+        {
+            exchange: "WethExecutor", args: ["0x4200000000000000000000000000000000000006"]
+        },
     ],
     "unichain": [
         // USV2 - Args: Fee BPS
@@ -111,6 +120,10 @@ const executors_to_deploy = {
         },
         // Aerodrome Slipstreams - Args: (none)
         {exchange: "SlipstreamsExecutor", args: []},
+        // Args: WETH address
+        {
+            exchange: "WethExecutor", args: ["0x4200000000000000000000000000000000000006"]
+        },
     ],
 }
 

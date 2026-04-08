@@ -546,8 +546,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         )
     {
         bytes calldata stripped = data[68:];
@@ -559,7 +558,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
             // zeroForOne[164:196] amountIn[196:228] receiver[228:260]
 
             bool zeroForOne = uint8(stripped[195]) != 0;
-            amount = uint128(bytes16(stripped[212:228]));
             if (zeroForOne) {
                 tokenIn = address(bytes20(stripped[16:36]));
             } else {
@@ -576,7 +574,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
             // Currency[4:36] amountIn[36:68] receiver[68:100]
 
             tokenIn = address(bytes20(stripped[16:36]));
-            amount = uint128(bytes16(stripped[52:68]));
             if (tokenIn == address(0)) {
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;

@@ -23,8 +23,9 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn, uint256 amount) =
-            abi.decode(result, (uint8, address, address, uint256));
+        (, address receiver, address tokenIn) =
+            abi.decode(result, (uint8, address, address));
+        uint256 amount = uint128(bytes16(msg.data[36:52]));
 
         if (tokenIn != address(0)) {
             IERC20(tokenIn).transfer(receiver, amount);

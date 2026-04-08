@@ -690,8 +690,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         // whatever the pool reported. The transient-storage delta accounting detects
         // the unexpected negative PEPE delta and reverts the entire transaction.
         //
-        //  WETH ──(USV2)──> DAI ─┬──(USV2, 100%)──────────> USDC
-        //                        └──(HACKED POOL, 0%)─────> USDC
+        //  WETH ──(USV2)──> DAI ─┬──(USV2, 60%)──────────> USDC
+        //                        └──(HACKED POOL, 40%)─────> USDC
         //                             └─> callback steals PEPE
 
         HackedCallbackDataPool hackedPool = new HackedCallbackDataPool();
@@ -717,18 +717,21 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR)
         );
 
-        // Swap 2: DAI -> USDC, 100%
+        // Swap 2: DAI -> USDC, 60% — leaves 40% for the hacked pool leg so that
+        // the split input amount is non-zero
         swaps[1] = encodeSplitSwap(
             uint8(1),
             uint8(2),
-            uint24(0), // 100%
+            (0xffffff * 60) / 100, // 60%
             address(usv2Executor),
             encodeUniswapV2Swap(DAI_USDC_POOL, DAI_ADDR, USDC_ADDR)
         );
 
-        // Swap 3: DAI -> USDC, split 0 (no DAI left)
+        // Swap 3: DAI -> USDC, 40%
         // Routes through the hacked pool via the real UniswapV3Executor. The pool's
-        // callback requests a PEPE transfer instead of DAI.
+        // callback requests a PEPE transfer instead of DAI. The Dispatcher reads
+        // the declared input amount from tstore (40% of DAI) and transfers that many
+        // PEPE tokens to the pool, creating a negative PEPE delta.
         bytes memory v3Data = abi.encodePacked(
             DAI_ADDR, // tokenIn
             USDC_ADDR, // tokenOut
@@ -740,11 +743,12 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1), uint8(2), uint24(0), address(usv3Executor), v3Data
         );
 
-        // Delta accounting detects:
+        // Delta accounting detects two non-zero deltas:
         //   PEPE delta < 0  (stolen in callback)
+        //   DAI  delta > 0  (40% of DAI never actually left the router)
         vm.expectRevert(
             abi.encodeWithSelector(
-                Vault__UnexpectedNonZeroCount.selector, uint256(1)
+                Vault__UnexpectedNonZeroCount.selector, uint256(2)
             )
         );
         tychoRouter.splitSwap(

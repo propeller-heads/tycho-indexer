@@ -16,7 +16,8 @@
     "fluid_v1": "0xAE3ceee21CB9Be4C6C70dE0912947B537bC00b61",
     "rocketpool": "0x6Ad86dec4c9b897640730eaEdF8ff4659A3be8BE",
     "erc4626": "0x11C1951e404e1a2A18a046F22501019a02C23D0B",
-    "ekubo_v3": "0x128BA676f1426D0260f7f1EEDD799777dbe12fdb"
+    "ekubo_v3": "0x128BA676f1426D0260f7f1EEDD799777dbe12fdb",
+    "weth": "0x8b2042d7be0be18303464362d39d667ca5e74d42"
   },
   "base": {
     "uniswap_v2": "0xD689b184C250E543eB3938D524733Ff6B4cfC296",
@@ -24,13 +25,15 @@
     "pancakeswap_v3": "0x6e644B877c1247c8ab8613fE0787a7B444768d23",
     "uniswap_v4": "0x711EA5D03541AB0ee84711D1ED92B5De0bB178c1",
     "rfq:bebop": "0xbfb5fBfD4C4182D3A1df91CEd45335C543BED3f0",
-    "aerodrome_slipstreams": "0x8fccDb466b71B715355919b3Db0f6B14bfba9dD7"
+    "aerodrome_slipstreams": "0x8fccDb466b71B715355919b3Db0f6B14bfba9dD7",
+    "weth": "0xa2f2d75F08cdf36AdD125Da906D42737527E4E30"
   },
   "unichain": {
     "uniswap_v2": "0x6794ce07fddc3bb5f747b4510d0ebb0d11a03f2c",
     "uniswap_v3": "0x7270991eb529c7e45a3ec98de542b01e4da32d82",
     "uniswap_v4": "0x45356073646354f162982bed83c71ef0f310e201",
     "velodrome_slipstreams": "0xb208092276fde05cff20341049f1e384b1b31112",
-    "vm:curve": "0xbc4d9e944ad40480a34ebaf38cd2acf6e1dc0def"
+    "vm:curve": "0xbc4d9e944ad40480a34ebaf38cd2acf6e1dc0def",
+    "weth": "0x13AcF9532C173753484ed1Bef86C98cBfe83Ba90"
   }
 }

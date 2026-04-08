@@ -158,11 +158,10 @@ contract FluidV1Executor is IExecutor, ICallback {
         returns (
             TransferManager.TransferType transferType,
             address receiver,
-            address tokenIn,
-            uint256 amount
+            address tokenIn
         )
     {
-        (tokenIn, amount) = abi.decode(data[4:68], (address, uint256));
+        tokenIn = abi.decode(data[4:36], (address));
         if (tokenIn == address(0)) {
             // ETH transfers are handled before the callback by calling dex.swapIn
             // instead of dex.swapInWithCallback.

@@ -28,10 +28,17 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         external
         returns (bytes memory)
     {
-        (, address receiver, address tokenIn, uint256 amount) =
+        (, address receiver, address tokenIn) =
             this.getCallbackTransferData(msg.data);
-        IERC20(tokenIn).safeTransfer(receiver, amount);
         bytes calldata stripped = msg.data[68:];
+        bytes4 sel = bytes4(stripped[:4]);
+        uint256 amount;
+        if (sel == this.swapExactInputSingle.selector) {
+            amount = uint128(bytes16(stripped[212:228]));
+        } else {
+            amount = uint128(bytes16(stripped[52:68]));
+        }
+        IERC20(tokenIn).safeTransfer(receiver, amount);
         return abi.encode(_unlockCallback(stripped));
     }
 }

@@ -41,6 +41,46 @@ contract MockProtocolWillDebitExecutor is IExecutor {
     }
 }
 
+contract NormalCallbackAmountPool is TychoRouterTestSetup {
+    // Honest NO-OP pool that takes 10k WETH and gives 10k WETH
+    function swap(address, bool, int256, uint160, bytes calldata)
+        external
+        returns (int256, int256)
+    {
+        bytes memory callbackData = abi.encodeWithSignature(
+            "slipstreamsCallback(int256,int256,bytes)",
+            int256(10_000 ether), // callback amount
+            int256(0),
+            abi.encodePacked(WETH_ADDR, bytes23(0)) // token to steal
+        );
+        (bool success,) = address(msg.sender).call(callbackData);
+        IERC20(WETH_ADDR).transfer(address(msg.sender), 10_000 ether);
+        require(success, "Callback failed");
+        return (0, 0);
+    }
+}
+
+contract ZeroCallbackAmountPool is TychoRouterTestSetup {
+    // When swap() is called, calls back into TychoRouter with crafted data instructing
+    // the router to transfer zero tokens, attempting to impact delta accounting
+    // in unexpected ways. Pool transfers nothing in return.
+
+    function swap(address, bool, int256, uint160, bytes calldata)
+        external
+        returns (int256, int256)
+    {
+        bytes memory callbackData = abi.encodeWithSignature(
+            "slipstreamsCallback(int256,int256,bytes)",
+            int256(0), // callback amount
+            int256(0),
+            abi.encodePacked(WETH_ADDR, bytes23(0)) // token to steal
+        );
+        (bool success,) = address(msg.sender).call(callbackData);
+        require(success, "Callback failed");
+        return (0, 0);
+    }
+}
+
 contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
     function _getSequentialSwaps() internal view returns (bytes[] memory) {
         // Trade 1 WETH for USDC through DAI with 2 swaps on Uniswap V2
@@ -587,9 +627,8 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
         tychoRouter.deposit(WETH_ADDR, amountIn);
 
-        // The fake pool produces 0 output, so the USV2 swap receives 0
-        // input and reverts with INSUFFICIENT_OUTPUT_AMOUNT.
-        vm.expectRevert(bytes("UniswapV2: INSUFFICIENT_OUTPUT_AMOUNT"));
+        // The fake pool produces 0 output, so the USV2 swap receives 0 input
+        vm.expectRevert("UniswapV2: INSUFFICIENT_OUTPUT_AMOUNT");
         tychoRouter.sequentialSwapUsingVault(
             amountIn,
             WETH_ADDR,
@@ -748,5 +787,69 @@ contract TychoRouterSequentialSwapTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).allowance(tychoRouterAddr, fakePool), 0);
 
         vm.stopPrank();
+    }
+
+    function testZeroCallbackAmountSequentialSwap() public {
+        // Alice tries to take advantage of cyclical swap accounting using a malicious
+        // zero-amount callback pool to move router funds into her vault.
+
+        uint256 stolenAmount = 10_000 ether;
+        uint256 routerBalance = 10_000 ether;
+        deal(WETH_ADDR, tychoRouterAddr, stolenAmount);
+
+        NormalCallbackAmountPool normalPool = new NormalCallbackAmountPool();
+        ZeroCallbackAmountPool maliciousPool = new ZeroCallbackAmountPool();
+
+        deal(WETH_ADDR, ALICE, stolenAmount);
+
+        // No-op pool that trades tokens 1-1
+        deal(WETH_ADDR, address(normalPool), 10_000 ether);
+
+        // Router has some WETH that does not belong to Alice.
+        deal(WETH_ADDR, tychoRouterAddr, routerBalance);
+
+        bytes memory normalPoolProtocolData = abi.encodePacked(
+            WETH_ADDR, WETH_ADDR, bytes3(0), address(normalPool), uint8(1)
+        );
+        bytes memory zeroPoolProtocolData = abi.encodePacked(
+            WETH_ADDR, WETH_ADDR, bytes3(0), address(maliciousPool), uint8(1)
+        );
+
+        bytes[] memory swaps = new bytes[](2);
+        swaps[0] =
+            encodeSequentialSwap(address(usv3Executor), normalPoolProtocolData);
+        swaps[1] =
+            encodeSequentialSwap(address(usv3Executor), zeroPoolProtocolData);
+
+        uint256 aliceVaultBalanceBefore =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        uint256 routerBalanceBefore =
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+
+        vm.startPrank(ALICE);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector, 0, 10_000 ether
+            )
+        );
+        tychoRouter.sequentialSwapUsingVault(
+            10_000 ether,
+            WETH_ADDR,
+            WETH_ADDR,
+            10_000 ether,
+            tychoRouterAddr,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+
+        uint256 aliceVaultBalanceAfter =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        uint256 routerBalanceAfter =
+            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
+
+        // Alice's should not have changed.
+        assertEq(aliceVaultBalanceBefore, aliceVaultBalanceAfter);
+        assertEq(routerBalanceBefore, routerBalanceAfter);
     }
 }
