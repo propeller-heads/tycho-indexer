@@ -71,11 +71,6 @@ contract LiquoriceExecutor is IExecutor {
 
         // Grant approval to Liquorice balance manager if needed
         address tokenIn = address(bytes20(data[0:20]));
-        if (approvalNeeded && tokenIn != address(0)) {
-            // slither-disable-next-line unused-return
-            IERC20(tokenIn)
-                .forceApprove(liquoriceBalanceManager, type(uint256).max);
-        }
 
         amountIn =
             _clampAmount(amountIn, originalBaseTokenAmount, minBaseTokenAmount);

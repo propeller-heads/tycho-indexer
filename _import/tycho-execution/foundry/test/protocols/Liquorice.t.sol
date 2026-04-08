@@ -373,6 +373,8 @@ contract TychoRouterForLiquoriceTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_liquorice_settle_single"
         );
+        // Mock ecrecover to return MAKER so Liquorice accepts the order signature
+        vm.mockCall(address(0x01), abi.encode(), abi.encode(MAKER));
 
         (bool success,) = tychoRouterAddr.call(callData);
 
@@ -400,6 +402,8 @@ contract TychoRouterForLiquoriceTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_liquorice_settle"
         );
+        // Mock ecrecover to return MAKER so Liquorice accepts the order signature
+        vm.mockCall(address(0x01), abi.encode(), abi.encode(MAKER));
 
         (bool success,) = tychoRouterAddr.call(callData);
 
