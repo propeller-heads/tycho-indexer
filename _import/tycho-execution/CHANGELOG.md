@@ -1,3 +1,11 @@
+## [0.172.2](https://github.com/propeller-heads/tycho-execution/compare/0.172.1...0.172.2) (2026-04-08)
+
+
+### Bug Fixes
+
+* _maybeAddClientContribution if receiver == address(this) ([be16155](https://github.com/propeller-heads/tycho-execution/commit/be16155f87ca31346b0aa2cde44bf9cff1f4a63d))
+* Disallow unprofitable arbitrages ([a3b9f0d](https://github.com/propeller-heads/tycho-execution/commit/a3b9f0dea0db2e0d9b46288ea0fdb5d4f5dfa208))
+
 ## [0.172.1](https://github.com/propeller-heads/tycho-execution/compare/0.172.0...0.172.1) (2026-04-07)
 
 
