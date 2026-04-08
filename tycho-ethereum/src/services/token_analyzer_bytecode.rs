@@ -9,15 +9,15 @@
 ///
 /// # Recompiling
 ///
-/// Source files live in `tycho-ethereum/src/services/token_analyzer/contracts/`. Recompile with:
+/// Source files live in `tycho-ethereum/contracts/`. Both were compiled with:
+/// `solc 0.8.34 --bin-runtime --via-ir --optimize --optimize-runs 200 --no-cbor-metadata`
 ///
 /// ```sh
 /// solc --bin-runtime --via-ir --optimize --optimize-runs 200 --no-cbor-metadata Analyzer.sol
 /// solc --bin-runtime --via-ir --optimize --optimize-runs 200 --no-cbor-metadata Forwarder.sol
 /// ```
 ///
-/// Update the `hex!` constants below with the new output. The compiler version used is
-/// recorded in the `@dev` tag of each contract.
+/// Update the `hex!` constants below with the new output.
 use alloy::sol;
 
 /// Runtime bytecode for `contracts/Analyzer.sol`.
