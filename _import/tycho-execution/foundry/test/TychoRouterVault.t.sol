@@ -1,7 +1,11 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
+import {
+    TychoRouter,
+    ClientFeeParams,
+    TychoRouter__NegativeOutputDelta
+} from "@src/TychoRouter.sol";
 import {
     Vault__UnexpectedInputDelta,
     Vault__UnexpectedNonZeroCount,
@@ -346,7 +350,14 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testAllowanceIssue() public {
+    function testNegativeOutputCyclicalSwap() public {
+        // Performs a cyclical swap on a pool which transfers the input amount while
+        // offering no output in return. The client contribution is 1 ether, so the
+        // client makes up for the whole amount. However, since this pool result in
+        // a negative delta at the time of computing client fees, an unprofitable
+        // arbitrage is detected and the TychoRouter reverts with
+        // TychoRouter__NegativeOutputDelta
+
         uint256 stolenAmount = 1 ether;
         // The client (Alice) will contribute to this swap with their own funds
         uint256 clientContribution = stolenAmount;
@@ -377,14 +388,12 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         ClientFeeParams memory feeParams =
             makeClientFeeParams(0, stolenAmount, tychoRouterAddr, ALICE_PK);
 
-        uint256 tychoBalanceBefore =
-            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
-
-        uint256 aliceVaultBalanceBefore =
-            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
-        uint256 bobVaultBalanceBefore =
-            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
-
+        int256 negativeOutput = -int256(stolenAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeOutputDelta.selector, negativeOutput
+            )
+        );
         tychoRouter.singleSwapUsingVault(
             stolenAmount,
             WETH_ADDR,
@@ -394,82 +403,62 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             feeParams,
             swap
         );
+    }
 
-        uint256 aliceVaultBalanceAfter =
+    function testZeroOutputDeltaClientContribution() public {
+        // The pool returns the same amount as it gets, so the output delta is zero.
+        // However, Bob has requested twice this amount, so the rest comes from
+        // Alice's client contribution.
+
+        uint256 inputAmount = 1 ether;
+
+        // The client (Alice) will contribute to this swap with their own funds
+        uint256 clientContribution = inputAmount;
+        vm.startPrank(ALICE);
+        deal(WETH_ADDR, ALICE, clientContribution);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        tychoRouter.deposit(WETH_ADDR, clientContribution);
+
+        vm.stopPrank();
+        vm.startPrank(BOB);
+        deal(WETH_ADDR, BOB, inputAmount);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        tychoRouter.deposit(WETH_ADDR, inputAmount);
+
+        OneToOneCurvePool oneToOnePool = new OneToOneCurvePool();
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            address(oneToOnePool),
+            uint8(3),
+            uint8(1),
+            uint8(1)
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), protocolData);
+
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, inputAmount, tychoRouterAddr, ALICE_PK);
+
+        int256 negativeOutput = -int256(inputAmount);
+        tychoRouter.singleSwapUsingVault(
+            inputAmount,
+            WETH_ADDR,
+            WETH_ADDR,
+            2 * inputAmount,
+            tychoRouterAddr,
+            feeParams,
+            swap
+        );
+        uint256 aliceBalance =
             tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
-        uint256 bobVaultBalanceAfter =
+        uint256 bobBalance =
             tychoRouter.balanceOf(BOB, uint256(uint160(WETH_ADDR)));
-        console.logString("Alice balance before:");
-        console.logUint(aliceVaultBalanceBefore);
-        console.logString("Alice balance after:");
-        console.logUint(aliceVaultBalanceAfter);
-
-        console.logString("Bob balance before:");
-        console.logUint(bobVaultBalanceBefore);
-        console.logString("Bob balance after:");
-        console.logUint(bobVaultBalanceAfter);
-
-        uint256 tychoBalanceAfter = IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
-        console.logString("Tycho balance before:");
-        console.logUint(tychoBalanceBefore);
-        console.logString("Tycho balance after:");
-        console.logUint(tychoBalanceAfter);
-        //  **** BEFORE FIX ****
-        //  Alice balance before:
-        //  1000000000000000000
-        //  Alice balance after:
-        //  0
-
-        //  Bob balance before:
-        //  1000000000000000000
-        //  Bob balance after:
-        //  0
-        //  Bob should have gotten Alice's contribution - but Alice's contribution went
-        //  to the pool, so both Bob and Alice are left with nothing.
-        //  Technically, only 1000000000000000000 was stolen from the TychoRouter, but
-        //  neither Bob not Alice can access this amount anymore since their Vault
-        //  accounting says they have nothing.
-        //  Who wins in the end? The malicious pool, if controlled by Bob, now has
-        //  Bob's funds, so he wins nothing. BUT he has managed to mess up Alice's
-        //  vault balance.
-
-        //  Tycho balance before:
-        //  2000000000000000000
-        //  Tycho balance after:
-        //  1000000000000000000
-
-        //  maliciousPool balance after:
-        //  1000000000000000000
-
-        //
-        //  **** AFTER FIX ****
-        //  Alice balance before:
-        //  1000000000000000000
-        //  Alice balance after:
-        //  0
-
-        //  Bob balance before:
-        //  1000000000000000000
-        //  Bob balance after:
-        //  1000000000000000000
-        //
-        //  Alice's vault funds rightfully went to Bob after the pool stole the
-        //  allowance. Alice should not have set her client contribution so high.
-        //  An even better fix would be to totally revert here.
-
-        //  Tycho balance before:
-        //  2000000000000000000
-        //  Tycho balance after:
-        //  1000000000000000000
-
-        //  maliciousPool balance after:
-        //  1000000000000000000
-
-        uint256 maliciousPoolBalanceAfter =
-            IERC20(WETH_ADDR).balanceOf(address(maliciousPool));
-
-        console.logString("maliciousPool balance after:");
-        console.logUint(maliciousPoolBalanceAfter);
+        assertEq(aliceBalance, 0);
+        // Bob should now have his original amount plus Alice's contribution
+        assertEq(bobBalance, 2 * inputAmount);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 2 * inputAmount);
     }
 
     // ==================== Rebalance Vault tests ====================

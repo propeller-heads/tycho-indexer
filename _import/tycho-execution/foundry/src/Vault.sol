@@ -12,7 +12,6 @@ import {
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ERC6909} from "@openzeppelin/contracts/token/ERC6909/ERC6909.sol";
 
-import {console2} from "forge-std/console2.sol";
 error Vault__InsufficientBalance(
     address user, address token, uint256 requested, uint256 available
 );
@@ -339,7 +338,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
         bool useVault = _getUseVault();
 
         if (useVault) {
-            console2.log("nonZeroCount in _finalizeBalances:", nonZeroCount);
             // When vault usage is allowed, allow a single negative delta
             // Check that there is only one negative delta: the input token
             if (nonZeroCount > 1) {
@@ -350,7 +348,6 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
                     revert Vault__UnexpectedInputDelta(inputDelta);
                 }
                 uint256 id = _toId(inputToken);
-                console2.log("Burning Bob's debts:", inputDelta);
                 _burn(user, id, inputAmount);
             }
         } else {

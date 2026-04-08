@@ -47,7 +47,7 @@ contract FakeSlipstreamPool {
     }
 }
 
-// Fake Curve pool that accepts any swap call tries to steal because we gave it allowances
+// Fake Curve pool that accepts any swap, performs a transferFrom, and does nothing
 contract FakeCurvePool {
     using SafeERC20 for IERC20;
 
@@ -57,5 +57,20 @@ contract FakeCurvePool {
         // ignoring the indices for simplicity
         address token = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
         IERC20(token).transferFrom(msg.sender, address(this), dx);
+    }
+}
+
+// Fake Curve pool that accepts any swap, performs a transferFrom, and transfers it
+// back to the router
+contract OneToOneCurvePool {
+    using SafeERC20 for IERC20;
+
+    function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
+        external
+    {
+        // ignoring the indices for simplicity
+        address token = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+        IERC20(token).transferFrom(msg.sender, address(this), dx);
+        IERC20(token).transfer(msg.sender, dx);
     }
 }
