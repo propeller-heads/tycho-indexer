@@ -75,6 +75,7 @@ error TychoRouter__NegativeSlippage(uint256 amount, uint256 minAmount);
 error TychoRouter__InvalidDataLength();
 error TychoRouter__UndefinedMinAmountOut();
 error TychoRouter__InvalidClientSignature();
+error TychoRouter__NegativeOutputDelta(int256 amount);
 error TychoRouter__ExpiredClientSignature(
     uint256 deadline, uint256 blockTimestamp
 );
@@ -1111,16 +1112,22 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             _debitVault(client, tokenOut, requiredContribution);
             int256 outputDelta = _getDelta(tokenOut);
             if (outputDelta > 0) {
-                // out tokens are still in the Router
+                // Output tokens are still in the Router. This could be because no
+                // output swap has been performed, or the user has specified the
+                // receiver to be the router in order to rebalance their vault.
                 _updateDeltaAccounting(tokenOut, int256(requiredContribution));
-            } else {
-                // send contribution separately
-                if (tokenOut == address(0)) {
+            } else if (outputDelta == 0) {
+                if (receiver == address(this)) {
+                    _creditVault(msg.sender, tokenOut, requiredContribution);
+                } else if (tokenOut == address(0)) {
                     Address.sendValue(payable(receiver), requiredContribution);
                 } else {
                     IERC20(tokenOut)
                         .safeTransfer(receiver, requiredContribution);
                 }
+            } else {
+                // Negative output delta indicates unprofitable arbitrage.
+                revert TychoRouter__NegativeOutputDelta(outputDelta);
             }
             amount = minAmountOut;
         } else {
