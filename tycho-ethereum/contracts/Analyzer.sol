@@ -15,10 +15,7 @@ interface IForwarder {
 /// @notice Injected at a token holder's address via eth_call state override. Simulates a full
 /// round-trip ERC20 transfer (holder -> settlement -> recipient) in a single call and reports
 /// balances, gas costs, and success flags. No on-chain deployment required.
-/// @dev Compiled with: solc 0.8.34 --bin-runtime --via-ir --optimize --optimize-runs 200 --no-cbor-metadata
-/// Runtime bytecode is embedded as a constant in bytecode.rs.
-///
-/// The inbound transfer uses a low-level call rather than a typed interface so that tokens with
+/// @dev The inbound transfer uses a low-level call rather than a typed interface so that tokens with
 /// non-standard transfer() implementations (e.g. USDT, which omits the bool return value) are
 /// handled correctly. balanceOf and approve are called via the typed interface since they are
 /// consistently implemented across tokens.
