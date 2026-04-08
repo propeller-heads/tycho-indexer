@@ -5,4 +5,5 @@ mod trace_detector;
 
 pub(crate) use common::{arbitrary_recipient, calculate_fee, call_request, map_block_tag};
 pub use ethcall_detector::EthCallDetector;
+#[allow(deprecated)]
 pub use trace_detector::TraceCallDetector;

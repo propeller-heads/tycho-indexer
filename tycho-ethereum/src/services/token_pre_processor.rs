@@ -17,7 +17,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use crate::{
     erc20::{decimalsCall, symbolCall},
     rpc::EthereumRpcClient,
-    services::token_analyzer::{call_request, TraceCallDetector},
+    services::token_analyzer::{call_request, EthCallDetector},
     BytesCodec,
 };
 
@@ -108,10 +108,10 @@ impl TokenPreProcessor for EthereumTokenPreProcessor {
             let symbol = self.call_symbol(token_address).await;
             let decimals = self.call_decimals(token_address).await;
 
-            let trace_call =
-                TraceCallDetector::new(&self.rpc, token_finder.clone(), self.settlement_contract);
+            let detector =
+                EthCallDetector::new(&self.rpc, token_finder.clone(), self.settlement_contract);
 
-            let (token_quality, gas, tax) = trace_call
+            let (token_quality, gas, tax) = detector
                 .analyze(address.clone(), block)
                 .await
                 .unwrap_or_else(|e| {

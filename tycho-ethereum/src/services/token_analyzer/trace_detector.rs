@@ -31,12 +31,24 @@ use crate::{
 /// - we cannot find an amm pool of the token to one of the base tokens
 /// - transfer into the settlement contract or back out fails
 /// - a transfer loses total balance
+///
+/// # Deprecated
+///
+/// Superseded by [`crate::services::token_analyzer::EthCallDetector`], which uses a single
+/// `eth_call` with bytecode state overrides instead of `trace_callMany`. Prefer
+/// `EthCallDetector` for all new usage.
+#[deprecated(
+    since = "0.154.0",
+    note = "Use EthCallDetector instead. TraceCallDetector requires trace_callMany which is \
+            not available on all chains and was slow to execute."
+)]
 pub struct TraceCallDetector {
     pub rpc: EthereumRpcClient,
     pub finder: Arc<dyn TokenOwnerFinding>,
     pub settlement_contract: Address,
 }
 
+#[allow(deprecated)]
 #[async_trait::async_trait]
 impl TokenAnalyzer for TraceCallDetector {
     type Error = String;
@@ -64,6 +76,7 @@ enum TraceRequestType {
     DoubleTransfer(U256),
 }
 
+#[allow(deprecated)]
 impl TraceCallDetector {
     pub fn new(
         rpc: &EthereumRpcClient,
@@ -406,6 +419,7 @@ fn ensure_transaction_ok_and_get_gas(trace: &TraceResults) -> Result<Result<U256
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use std::{str::FromStr, sync::Arc};
 

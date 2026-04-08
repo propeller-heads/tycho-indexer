@@ -14,7 +14,7 @@ use tycho_common::{
     traits::TokenAnalyzer,
     Bytes,
 };
-use tycho_ethereum::{rpc::EthereumRpcClient, services::token_analyzer::TraceCallDetector};
+use tycho_ethereum::{rpc::EthereumRpcClient, services::token_analyzer::EthCallDetector};
 
 use crate::cli::AnalyzeTokenArgs;
 
@@ -136,7 +136,7 @@ async fn analyze_batch(
             }
         })
         .collect::<HashMap<_, _>>();
-    let analyzer = TraceCallDetector::new(
+    let analyzer = EthCallDetector::new(
         rpc,
         Arc::new(TokenOwnerStore::new(liquidity_token_owners)),
         settlement_contract,
