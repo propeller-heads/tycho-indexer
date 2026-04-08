@@ -1,6 +1,6 @@
-use std::{collections::HashMap, str::FromStr};
+use std::collections::HashMap;
 
-use alloy::{primitives::Address, sol_types::SolValue};
+use alloy::sol_types::SolValue;
 use tokio::runtime::Handle;
 use tycho_common::{
     models::{protocol::GetAmountOutParams, Chain},
@@ -9,10 +9,7 @@ use tycho_common::{
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::{
-        approvals::protocol_approvals_manager::ProtocolApprovalsManager,
-        utils::{bytes_to_address, create_encoding_runtime, on_blocking_thread, SafeRuntime},
-    },
+    evm::utils::{bytes_to_address, create_encoding_runtime, on_blocking_thread, SafeRuntime},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -25,11 +22,9 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract.
-/// * `balance_manager_address` - The address of the Liquorice balance manager contract.
 #[derive(Clone)]
 pub struct LiquoriceSwapEncoder {
     executor_address: Bytes,
-    balance_manager_address: Bytes,
     runtime_handle: Handle,
     #[allow(dead_code)]
     runtime: SafeRuntime,
@@ -39,28 +34,10 @@ impl SwapEncoder for LiquoriceSwapEncoder {
     fn new(
         executor_address: Bytes,
         _chain: Chain,
-        config: Option<HashMap<String, String>>,
+        _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let config = config.ok_or(EncodingError::FatalError(
-            "Missing liquorice specific addresses in config".to_string(),
-        ))?;
-        let balance_manager_address = config
-            .get("balance_manager_address")
-            .ok_or_else(|| {
-                EncodingError::FatalError(
-                    "Missing liquorice balance manager address in config".to_string(),
-                )
-            })
-            .and_then(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError(
-                        "Invalid liquorice balance manager address".to_string(),
-                    )
-                })
-            })?;
-
         let (runtime_handle, runtime) = create_encoding_runtime()?;
-        Ok(Self { executor_address, balance_manager_address, runtime_handle, runtime })
+        Ok(Self { executor_address, runtime_handle, runtime })
     }
 
     fn encode_swap(
@@ -153,27 +130,16 @@ impl SwapEncoder for LiquoriceSwapEncoder {
         let original_base_token_amount = pad_to_32_bytes(base_token_amount);
         let min_base_token_amount = pad_to_32_bytes(min_base_token_amount);
 
-        // Check if approval is needed from Router to balance manager
-        let router_address = bytes_to_address(&router_address)?;
-        let balance_manager_address = Address::from_slice(&self.balance_manager_address);
-        let approval_needed = ProtocolApprovalsManager::new()?.approval_needed(
-            token_in,
-            router_address,
-            balance_manager_address,
-        )?;
-
         // Encode packed data for the executor
         // Format: token_in | token_out | partial_fill_offset |
         //         original_base_token_amount | min_base_token_amount |
-        //         approval_needed | liquorice_calldata
-        let approval_byte = [approval_needed as u8];
+        //         liquorice_calldata
         let args = (
             token_in,
             token_out,
             partial_fill_offset,
             original_base_token_amount,
             min_base_token_amount,
-            approval_byte.as_slice(),
             liquorice_calldata.as_ref(),
         );
 
@@ -277,7 +243,7 @@ mod tests {
         // Expected format:
         // token_in (20) | token_out (20) | partial_fill_offset (4) |
         // original_base_token_amount (32) | min_base_token_amount (32)
-        // | approval_needed (1) | calldata (variable)
+        // | calldata (variable)
         let expected_swap = String::from(concat!(
             // token_in (USDC)
             "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
@@ -291,8 +257,6 @@ mod tests {
             // min_base_token_amount (2500000000 as U256)
             "00000000000000000000000000000000",
             "0000000000000000000000009502f900",
-            // approval_needed
-            "01",
         ));
         assert_eq!(hex_swap, expected_swap + &liquorice_calldata.to_string()[2..]);
     }

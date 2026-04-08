@@ -33,7 +33,6 @@ contract LiquoriceExecutorExposed is LiquoriceExecutor {
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
-            bool approvalNeeded,
             bytes memory liquoriceCalldata
         )
     {
@@ -96,7 +95,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenOut = WETH_ADDR;
         uint32 partialFillOffset = 96;
         uint256 amountIn = 3000e6;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 1 ether;
 
         deal(WETH_ADDR, MAKER, expectedAmountOut);
@@ -108,7 +106,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             partialFillOffset,
             amountIn, // originalBaseTokenAmount
             amountIn, // minBaseTokenAmount (same for full fill)
-            uint8(approvalNeeded ? 1 : 0),
             liquoriceCalldata
         );
 
@@ -142,7 +139,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 originalAmountIn = 3000e6;
         uint256 amountIn = 1500e6;
         uint256 minAmountIn = 1500e6;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 0.5 ether;
 
         deal(WETH_ADDR, MAKER, expectedAmountOut);
@@ -154,7 +150,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             partialFillOffset,
             originalAmountIn,
             minAmountIn,
-            uint8(approvalNeeded ? 1 : 0),
             liquoriceCalldata
         );
 
@@ -186,7 +181,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         address tokenOut = WETH_ADDR;
         uint32 partialFillOffset = 32;
         uint256 amountIn = 3000e6;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 1 ether;
 
         deal(WETH_ADDR, MAKER, expectedAmountOut);
@@ -198,7 +192,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             partialFillOffset,
             amountIn,
             amountIn,
-            uint8(approvalNeeded ? 1 : 0),
             liquoriceCalldata
         );
 
@@ -232,7 +225,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 originalAmountIn = 3000e6;
         uint256 amountIn = 1500e6;
         uint256 minAmountIn = 1500e6;
-        bool approvalNeeded = true;
         uint256 expectedAmountOut = 0.5 ether;
 
         deal(WETH_ADDR, MAKER, expectedAmountOut);
@@ -244,7 +236,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             partialFillOffset,
             originalAmountIn,
             minAmountIn,
-            uint8(approvalNeeded ? 1 : 0),
             liquoriceCalldata
         );
 
@@ -284,7 +275,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint32(5), // partialFillOffset (4 bytes)
             originalAmount, // originalBaseTokenAmount (32 bytes)
             minAmount, // minBaseTokenAmount (32 bytes)
-            uint8(0), // approvalNeeded (1 byte) - false
             liquoriceCalldata // variable length
         );
 
@@ -292,7 +282,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             uint32 decodedPartialFillOffset,
             uint256 decodedOriginalAmount,
             uint256 decodedMinAmount,
-            bool decodedApprovalNeeded,
             bytes memory decodedCalldata
         ) = liquoriceExecutor.decodeData(params);
 
@@ -301,7 +290,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
             decodedOriginalAmount, originalAmount, "originalAmount mismatch"
         );
         assertEq(decodedMinAmount, minAmount, "minAmount mismatch");
-        assertFalse(decodedApprovalNeeded, "approvalNeeded should be false");
         assertEq(
             keccak256(decodedCalldata),
             keccak256(liquoriceCalldata),

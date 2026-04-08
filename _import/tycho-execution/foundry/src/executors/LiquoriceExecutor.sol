@@ -65,7 +65,6 @@ contract LiquoriceExecutor is IExecutor {
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
-            bool approvalNeeded,
             bytes memory liquoriceCalldata
         ) = _decodeData(data);
 
@@ -100,15 +99,13 @@ contract LiquoriceExecutor is IExecutor {
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
-            bool approvalNeeded,
             bytes memory liquoriceCalldata
         )
     {
         // Minimum fixed fields:
         // tokenIn (20) + tokenOut (20) + partialFillOffset (4) +
-        // originalBaseTokenAmount (32) + minBaseTokenAmount (32) +
-        // approvalNeeded (1) = 109 bytes
-        if (data.length < 109) {
+        // originalBaseTokenAmount (32) + minBaseTokenAmount (32) = 108 bytes
+        if (data.length < 108) {
             revert LiquoriceExecutor__InvalidDataLength();
         }
 
@@ -117,8 +114,7 @@ contract LiquoriceExecutor is IExecutor {
         partialFillOffset = uint32(bytes4(data[40:44]));
         originalBaseTokenAmount = uint256(bytes32(data[44:76]));
         minBaseTokenAmount = uint256(bytes32(data[76:108]));
-        approvalNeeded = data[108] != 0;
-        liquoriceCalldata = data[109:];
+        liquoriceCalldata = data[108:];
     }
 
     /// @dev Clamps the given amount to be within the valid range
@@ -166,7 +162,7 @@ contract LiquoriceExecutor is IExecutor {
             bool outputToRouter
         )
     {
-        if (data.length < 109) {
+        if (data.length < 108) {
             revert LiquoriceExecutor__InvalidDataLength();
         }
 
