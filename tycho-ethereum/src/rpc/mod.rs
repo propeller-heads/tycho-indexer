@@ -6,11 +6,13 @@ use std::{
 };
 
 use alloy::{
-    primitives::{private::serde, Address, B256, U256},
+    primitives::{private::serde, Address, Bytes as AlloyBytes, B256, U256},
+    providers::{Provider, ProviderBuilder},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
         types::{
             debug::{StorageMap, StorageRangeResult, StorageResult},
+            state::StateOverride,
             trace::{
                 geth::GethTrace,
                 parity::{TraceResults, TraceType},
@@ -652,6 +654,38 @@ impl EthereumRpcClient {
                     format!("Failed to send an eth_call request for block {block}"),
                     e,
                 )
+            })
+    }
+
+    /// Executes `eth_call` with EVM state overrides.
+    ///
+    /// Injects arbitrary bytecode or storage at specified addresses before the call executes.
+    /// Returns the raw ABI-encoded return data.
+    #[instrument(level = "debug", skip(self, tx, overrides))]
+    pub(crate) async fn eth_call_with_state_overrides(
+        &self,
+        tx: TransactionRequest,
+        block: BlockNumberOrTag,
+        overrides: StateOverride,
+    ) -> Result<AlloyBytes, RPCError> {
+        let provider = ProviderBuilder::new().connect_client(self.inner.clone());
+        let block_id: BlockId = block.into();
+        self.retry_policy
+            .retry_request(|| {
+                let tx = tx.clone();
+                let overrides = overrides.clone();
+                let provider = provider.clone();
+                async move {
+                    provider
+                        .call(tx)
+                        .overrides(overrides)
+                        .block(block_id)
+                        .await
+                }
+            })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy("eth_call with state overrides failed".to_string(), e)
             })
     }
 

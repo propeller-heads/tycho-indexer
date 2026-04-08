@@ -1,10 +1,10 @@
 use std::{cmp, sync::Arc};
 
 use alloy::{
-    primitives::{keccak256, Address, U256},
+    primitives::{Address, U256},
     rpc::types::{
         trace::parity::{TraceOutput, TraceResults},
-        BlockNumberOrTag, TransactionInput, TransactionRequest,
+        TransactionRequest,
     },
     sol_types::SolCall,
 };
@@ -17,6 +17,7 @@ use tycho_common::{
     Bytes,
 };
 
+use super::{arbitrary_recipient, calculate_fee, call_request, map_block_tag};
 use crate::{
     erc20::{approveCall, balanceOfCall, transferCall},
     rpc::EthereumRpcClient,
@@ -167,15 +168,6 @@ impl TraceCallDetector {
             .map_err(|e| e.to_string())
     }
 
-    // For the out transfer we use an arbitrary address without balance to detect
-    // tokens that usually apply fees but not if the the sender or receiver is
-    // specifically exempt like their own uniswap pools.
-    fn arbitrary_recipient() -> Address {
-        // Create a deterministic address from hash
-        let hash = keccak256(b"propeller");
-        Address::from_slice(&hash[..20])
-    }
-
     fn create_trace_request(
         &self,
         token: Address,
@@ -184,6 +176,7 @@ impl TraceCallDetector {
         request_type: TraceRequestType,
     ) -> Vec<TransactionRequest> {
         let mut requests = Vec::new();
+        let recipient = arbitrary_recipient();
 
         // 0 Get balance of settlement_contract before
         let calldata = balanceOfCall { _owner: self.settlement_contract }.abi_encode();
@@ -198,7 +191,6 @@ impl TraceCallDetector {
         requests.push(call_request(None, token, calldata));
 
         // 3 Get balance of arbitrary_recipient before
-        let recipient = Self::arbitrary_recipient();
         let calldata = balanceOfCall { _owner: recipient }.abi_encode();
         requests.push(call_request(None, token, calldata));
 
@@ -246,7 +238,7 @@ impl TraceCallDetector {
                 ))
             }
         };
-        let arbitrary = Self::arbitrary_recipient();
+        let arbitrary = arbitrary_recipient();
         let gas_out = match ensure_transaction_ok_and_get_gas(&traces[4])? {
             Ok(gas) => gas,
             Err(reason) => {
@@ -292,7 +284,7 @@ impl TraceCallDetector {
             None => return Ok((bad, Some(gas_per_transfer), None)),
         };
 
-        let fees = Self::calculate_fee(
+        let fees = calculate_fee(
             amount,
             middle_amount,
             balance_before_in,
@@ -388,113 +380,6 @@ impl TraceCallDetector {
 
         Ok((TokenQuality::Good, Some(gas_per_transfer), Some(fees)))
     }
-
-    fn calculate_fee(
-        amount: U256,
-        middle_amount: U256,
-        balance_before_in: U256,
-        balance_after_in: U256,
-        balance_recipient_before: U256,
-        balance_recipient_after: U256,
-    ) -> Result<U256, String> {
-        Ok(
-            match (
-                balance_after_in != error_add(balance_before_in, amount)?,
-                balance_recipient_after != error_add(balance_recipient_before, middle_amount)?,
-            ) {
-                (true, true) => {
-                    let first_transfer_fees = error_div(
-                        error_mul(
-                            error_add(balance_before_in, error_sub(amount, balance_after_in)?)?,
-                            U256::from(10_000),
-                        )?,
-                        amount,
-                    )?;
-                    let second_transfer_fees = error_div(
-                        error_mul(
-                            error_add(
-                                balance_recipient_before,
-                                error_sub(middle_amount, balance_recipient_after)?,
-                            )?,
-                            U256::from(10_000),
-                        )?,
-                        middle_amount,
-                    )?;
-                    if first_transfer_fees >= second_transfer_fees {
-                        first_transfer_fees
-                    } else {
-                        second_transfer_fees
-                    }
-                }
-                (true, false) => error_div(
-                    error_mul(
-                        error_add(balance_before_in, error_sub(amount, balance_after_in)?)?,
-                        U256::from(10_000),
-                    )?,
-                    amount,
-                )?,
-                (false, true) => error_div(
-                    error_mul(
-                        error_add(
-                            balance_recipient_before,
-                            error_sub(middle_amount, balance_recipient_after)?,
-                        )?,
-                        U256::from(10_000),
-                    )?,
-                    middle_amount,
-                )?,
-                (false, false) => U256::ZERO,
-            },
-        )
-    }
-}
-
-/// Converts a tycho BlockTag to an alloy BlockNumberOrTag.
-fn map_block_tag(block: BlockTag) -> BlockNumberOrTag {
-    match block {
-        BlockTag::Finalized => BlockNumberOrTag::Finalized,
-        BlockTag::Safe => BlockNumberOrTag::Safe,
-        BlockTag::Latest => BlockNumberOrTag::Latest,
-        BlockTag::Earliest => BlockNumberOrTag::Earliest,
-        BlockTag::Pending => BlockNumberOrTag::Pending,
-        BlockTag::Number(n) => BlockNumberOrTag::Number(n),
-    }
-}
-
-pub(crate) fn call_request(
-    from: Option<Address>,
-    to: Address,
-    calldata: Vec<u8>,
-) -> TransactionRequest {
-    let mut req = TransactionRequest::default()
-        .to(to)
-        .input(TransactionInput::both(calldata.into()));
-
-    if let Some(addr) = from {
-        req = req.from(addr);
-    }
-
-    req
-}
-
-fn error_add(a: U256, b: U256) -> Result<U256, String> {
-    a.checked_add(b)
-        .ok_or_else(|| "overflow".to_string())
-}
-
-fn error_sub(a: U256, b: U256) -> Result<U256, String> {
-    a.checked_sub(b)
-        .ok_or_else(|| "overflow".to_string())
-}
-
-fn error_div(a: U256, b: U256) -> Result<U256, String> {
-    a.checked_div(b)
-        .ok_or_else(|| "overflow".to_string())
-}
-
-fn error_mul(a: U256, b: U256) -> Result<U256, String> {
-    a.checked_mul(b)
-        .ok_or_else(|| "overflow".to_string())
 }
 
 /// Returns none if the length of the bytes in the trace output is not 32.
@@ -534,7 +419,7 @@ mod tests {
     use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR};
 
     impl TestFixture {
-        fn create_trace_call_detector(&self) -> TraceCallDetector {
+        pub(crate) fn create_trace_call_detector(&self) -> TraceCallDetector {
             // We do not enable batching as the token pre-processor does not leverage it currently
             let rpc = self.create_rpc_client(false);
 
@@ -580,15 +465,5 @@ mod tests {
                 panic!("Failed to analyze USDC: {}", e);
             }
         }
-    }
-
-    #[test]
-    fn test_map_block_tag() {
-        assert_eq!(map_block_tag(BlockTag::Finalized), BlockNumberOrTag::Finalized);
-        assert_eq!(map_block_tag(BlockTag::Safe), BlockNumberOrTag::Safe);
-        assert_eq!(map_block_tag(BlockTag::Latest), BlockNumberOrTag::Latest);
-        assert_eq!(map_block_tag(BlockTag::Earliest), BlockNumberOrTag::Earliest);
-        assert_eq!(map_block_tag(BlockTag::Pending), BlockNumberOrTag::Pending);
-        assert_eq!(map_block_tag(BlockTag::Number(123)), BlockNumberOrTag::Number(123));
     }
 }
