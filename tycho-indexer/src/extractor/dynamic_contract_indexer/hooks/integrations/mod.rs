@@ -3,6 +3,7 @@ use crate::extractor::dynamic_contract_indexer::hooks::component_metadata::{
 };
 
 pub(super) mod euler;
+pub(super) mod universal;
 
 pub(super) fn register_integrations(
     generator_registry: &mut MetadataGeneratorRegistry,
@@ -11,6 +12,12 @@ pub(super) fn register_integrations(
     rpc_url: String,
 ) {
     euler::register_euler_integrations(
+        generator_registry,
+        parser_registry,
+        provider_registry,
+        rpc_url.clone(),
+    );
+    universal::register_universal_integrations(
         generator_registry,
         parser_registry,
         provider_registry,
