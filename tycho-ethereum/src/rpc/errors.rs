@@ -98,12 +98,10 @@ mod tests {
 
     #[test]
     fn redacts_path_component() {
-        let input = "error sending request for url (https://arbitrum.chainstack.com/supersecretkey)";
+        let input =
+            "error sending request for url (https://arbitrum.chainstack.com/supersecretkey)";
         let output = redact_url_paths(input);
-        assert_eq!(
-            output,
-            "error sending request for url (https://arbitrum.chainstack.com/***)"
-        );
+        assert_eq!(output, "error sending request for url (https://arbitrum.chainstack.com/***)");
     }
 
     #[test]
