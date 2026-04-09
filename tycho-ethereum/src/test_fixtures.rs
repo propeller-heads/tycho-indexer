@@ -83,7 +83,7 @@ pub static ARB_TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyL
             Address::from_str(ARB_USDC_STR).unwrap(),
             (
                 Bytes::from_str(ARB_USDC_HOLDER_ADDR).unwrap(),
-                Bytes::from_str("0x2386f26fc10000000").unwrap(), // ~40M USDC (6 decimals)
+                Bytes::from_str("0x09184e72a000").unwrap(), // 1M USDC (6 decimals)
             ),
         ),
         (
@@ -97,7 +97,7 @@ pub static ARB_TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyL
             Address::from_str(ARB_ARB_STR).unwrap(),
             (
                 Bytes::from_str(ARB_ARB_HOLDER_ADDR).unwrap(),
-                Bytes::from_str("0x84595161401484a000000").unwrap(), // ~10M ARB (18 decimals)
+                Bytes::from_str("0x3635c9adc5dea00000").unwrap(), // 1000 ARB (18 decimals)
             ),
         ),
     ])

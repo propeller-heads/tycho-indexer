@@ -3,6 +3,43 @@ use std::fmt::Display;
 use alloy::transports::{RpcError as AlloyRpcError, TransportErrorKind};
 use thiserror::Error;
 
+/// Redacts the path component of any URLs in `s`.
+///
+/// Prevents API keys embedded in URL paths (e.g. `/6da0db2d2bfcd644f87e6f75db0a0d3b`) from
+/// leaking into logs or error messages.
+fn redact_url_paths(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut pos = 0;
+
+    while pos < s.len() {
+        let Some(idx) = s[pos..].find("://") else {
+            result.push_str(&s[pos..]);
+            break;
+        };
+
+        let abs = pos + idx;
+        result.push_str(&s[pos..abs + 3]); // include "://"
+        pos = abs + 3;
+
+        // Find end of URL token (whitespace or closing delimiter)
+        let token_end = s[pos..]
+            .find(|c: char| c.is_whitespace() || matches!(c, '(' | ')' | '"' | '\''))
+            .map(|i| pos + i)
+            .unwrap_or(s.len());
+
+        // If there's a path component, replace it with /***
+        if let Some(slash) = s[pos..token_end].find('/') {
+            result.push_str(&s[pos..pos + slash]); // host only
+            result.push_str("/***");
+        } else {
+            result.push_str(&s[pos..token_end]); // host with no path
+        }
+        pos = token_end;
+    }
+
+    result
+}
+
 #[derive(Error, Debug)]
 pub struct ReqwestError {
     pub msg: String,
@@ -12,7 +49,7 @@ pub struct ReqwestError {
 
 impl Display for ReqwestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.msg, self.source)
+        write!(f, "{}: {}", self.msg, redact_url_paths(&self.source.to_string()))
     }
 }
 
@@ -25,7 +62,7 @@ pub enum RequestError {
 impl Display for RequestError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestError::Reqwest(e) => write!(f, "{}: {}", e.msg, e.source),
+            RequestError::Reqwest(e) => write!(f, "{e}"),
             RequestError::Other(e) => write!(f, "{e}"),
         }
     }
@@ -52,5 +89,45 @@ impl RPCError {
             msg: msg.to_string(),
             source: error,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redact_url_paths;
+
+    #[test]
+    fn redacts_path_component() {
+        let input =
+            "error sending request for url (https://arbitrum.chainstack.com/supersecretkey)";
+        let output = redact_url_paths(input);
+        assert_eq!(output, "error sending request for url (https://arbitrum.chainstack.com/***)");
+    }
+
+    #[test]
+    fn preserves_url_without_path() {
+        let input = "error sending request for url (https://arbitrum.chainstack.com)";
+        let output = redact_url_paths(input);
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn passthrough_when_no_url() {
+        let input = "connection refused";
+        assert_eq!(redact_url_paths(input), input);
+    }
+
+    #[test]
+    fn redacts_multiple_urls() {
+        let input = "primary https://a.example.com/key1 fallback https://b.example.com/key2";
+        let output = redact_url_paths(input);
+        assert_eq!(output, "primary https://a.example.com/*** fallback https://b.example.com/***");
+    }
+
+    #[test]
+    fn redacts_url_at_end_of_string() {
+        let input = "failed: https://node.example.com/apikey";
+        let output = redact_url_paths(input);
+        assert_eq!(output, "failed: https://node.example.com/***");
     }
 }
