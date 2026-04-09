@@ -54,22 +54,19 @@ contract LiquoriceExecutor is IExecutor {
 
     /// @notice Executes a swap through Liquorice's RFQ system
     /// @param amountIn The amount of input token to swap
-    /// @param data Encoded swap data containing tokens and liquorice
-    ///     calldata
+    /// @param data Encoded swap data containing tokens and liquorice calldata
     /// @param receiver The address to receive output tokens
     function swap(uint256 amountIn, bytes calldata data, address receiver)
         external
         payable
     {
         (
+            address tokenIn,
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
             bytes memory liquoriceCalldata
         ) = _decodeData(data);
-
-        // Grant approval to Liquorice balance manager if needed
-        address tokenIn = address(bytes20(data[0:20]));
 
         amountIn =
             _clampAmount(amountIn, originalBaseTokenAmount, minBaseTokenAmount);
@@ -96,6 +93,7 @@ contract LiquoriceExecutor is IExecutor {
         internal
         pure
         returns (
+            address tokenIn,
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
@@ -109,8 +107,7 @@ contract LiquoriceExecutor is IExecutor {
             revert LiquoriceExecutor__InvalidDataLength();
         }
 
-        // tokenIn at data[0:20] and tokenOut at data[20:40] are read
-        // via getTransferData
+        tokenIn = address(bytes20(data[0:20]));
         partialFillOffset = uint32(bytes4(data[40:44]));
         originalBaseTokenAmount = uint256(bytes32(data[44:76]));
         minBaseTokenAmount = uint256(bytes32(data[76:108]));
@@ -133,13 +130,18 @@ contract LiquoriceExecutor is IExecutor {
     }
 
     /// @dev Modifies the filledTakerAmount in the liquorice calldata
+    /// @param liquoriceCalldata The original calldata for the liquorice settlement
+    /// @param givenAmount The actual amount available from the router
+    /// @param partialFillOffset The offset from Liquorice API indicating where the fill amount is located
+    /// @return The modified calldata with updated fill amount
     function _modifyFilledTakerAmount(
         bytes memory liquoriceCalldata,
         uint256 givenAmount,
         uint32 partialFillOffset
     ) internal pure returns (bytes memory) {
-        uint256 fillAmountPos =
-            4 + uint256(partialFillOffset);
+        // Use the offset from Liquorice API to locate the fill amount
+        // Position = 4 bytes (selector) + offset bytes
+        uint256 fillAmountPos = 4 + uint256(partialFillOffset);
 
         // slither-disable-next-line assembly
         assembly {

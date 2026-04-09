@@ -30,6 +30,7 @@ contract LiquoriceExecutorExposed is LiquoriceExecutor {
         external
         pure
         returns (
+            address tokenIn,
             uint32 partialFillOffset,
             uint256 originalBaseTokenAmount,
             uint256 minBaseTokenAmount,
@@ -59,10 +60,6 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
 
     address constant AUTH_MANAGER = 0x000438801500c89E225E8D6CB69D9c14dD05e000;
 
-    IERC20 WETH = IERC20(WETH_ADDR);
-    IERC20 USDC = IERC20(USDC_ADDR);
-    IERC20 WBTC = IERC20(WBTC_ADDR);
-
     address constant MAKER = 0x06465bcEEaef280Bb7340A58D75dfc5E1F687058;
     uint256 constant FORK_BLOCK = 24_392_845;
 
@@ -83,7 +80,7 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         authenticator.addMaker(MAKER);
 
         vm.prank(MAKER);
-        WETH.approve(LIQUORICE_BALANCE_MANAGER, type(uint256).max);
+        IERC20(WETH_ADDR).approve(LIQUORICE_BALANCE_MANAGER, type(uint256).max);
     }
 
     function testSettleSingle() public {
@@ -97,7 +94,7 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 3000e6;
         uint256 expectedAmountOut = 1 ether;
 
-        deal(WETH_ADDR, MAKER, expectedAmountOut);
+        deal(tokenOut, MAKER, expectedAmountOut);
         deal(tokenIn, address(liquoriceExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
@@ -141,7 +138,7 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 minAmountIn = 1500e6;
         uint256 expectedAmountOut = 0.5 ether;
 
-        deal(WETH_ADDR, MAKER, expectedAmountOut);
+        deal(tokenOut, MAKER, expectedAmountOut);
         deal(tokenIn, address(liquoriceExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
@@ -183,7 +180,7 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 amountIn = 3000e6;
         uint256 expectedAmountOut = 1 ether;
 
-        deal(WETH_ADDR, MAKER, expectedAmountOut);
+        deal(tokenOut, MAKER, expectedAmountOut);
         deal(tokenIn, address(liquoriceExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
@@ -227,7 +224,7 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         uint256 minAmountIn = 1500e6;
         uint256 expectedAmountOut = 0.5 ether;
 
-        deal(WETH_ADDR, MAKER, expectedAmountOut);
+        deal(tokenOut, MAKER, expectedAmountOut);
         deal(tokenIn, address(liquoriceExecutor), amountIn);
 
         bytes memory params = abi.encodePacked(
@@ -279,12 +276,14 @@ contract LiquoriceExecutorTest is Constants, Permit2TestHelper, TestUtils {
         );
 
         (
+            address tokenIn,
             uint32 decodedPartialFillOffset,
             uint256 decodedOriginalAmount,
             uint256 decodedMinAmount,
             bytes memory decodedCalldata
         ) = liquoriceExecutor.decodeData(params);
 
+        assertEq(tokenIn, USDC_ADDR);
         assertEq(decodedPartialFillOffset, 5, "partialFillOffset mismatch");
         assertEq(
             decodedOriginalAmount, originalAmount, "originalAmount mismatch"
@@ -369,7 +368,9 @@ contract TychoRouterForLiquoriceTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_liquorice_settle_single"
         );
-        // Mock ecrecover to return MAKER so Liquorice accepts the order signature
+        // Mock ecrecover precompile to return MAKER, bypassing order signature
+        // verification. The test calldata uses a modified user address, so the
+        // original signature no longer recovers to the correct maker.
         vm.mockCall(address(0x01), abi.encode(), abi.encode(MAKER));
 
         (bool success,) = tychoRouterAddr.call(callData);
@@ -398,7 +399,9 @@ contract TychoRouterForLiquoriceTest is TychoRouterTestSetup {
         bytes memory callData = loadCallDataFromFile(
             "test_single_encoding_strategy_liquorice_settle"
         );
-        // Mock ecrecover to return MAKER so Liquorice accepts the order signature
+        // Mock ecrecover precompile to return MAKER, bypassing order signature
+        // verification. The test calldata uses a modified user address, so the
+        // original signature no longer recovers to the correct maker.
         vm.mockCall(address(0x01), abi.encode(), abi.encode(MAKER));
 
         (bool success,) = tychoRouterAddr.call(callData);
