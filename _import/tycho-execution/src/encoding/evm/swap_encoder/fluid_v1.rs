@@ -46,6 +46,7 @@ impl SwapEncoder for FluidV1SwapEncoder {
             dex_address,
             self.coerce_native_address(swap.token_in()) <
                 self.coerce_native_address(swap.token_out()),
+            bytes_to_address(swap.token_in())?,
             bytes_to_address(swap.token_out())?,
             *swap.token_in() == self.chain.native_token().address,
         );
@@ -114,7 +115,9 @@ mod tests {
                 "1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b",
                 // zero2one
                 "01",
-                // outputToken
+                // tokenIn (sUSDe)
+                "9d39a5de30e57443bff2a8307a4256c8797a3497",
+                // tokenOut (USDT)
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // isNativeSell
                 "00",

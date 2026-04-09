@@ -8,6 +8,17 @@ import {
 contract BalancerV3ExecutorExposed is BalancerV3Executor {
     constructor() BalancerV3Executor() {}
 
+    // keccak256("BalancerV3Executor#SWAP_TOKEN_IN_SLOT")
+    function setSwapTokenIn(address tokenIn) external {
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(
+                0x4cc7ac20795fd45516e40dcca5f64da078d10c8c827772d2b4780868fab6027f,
+                tokenIn
+            )
+        }
+    }
+
     function decodeParams(bytes calldata data)
         external
         pure
@@ -89,6 +100,7 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         uint256 amountOwed = 1 ether;
         bytes memory params =
             abi.encodePacked(amountOwed, WBTC_ADDR, address(0), address(0));
+        balancerV3Exposed.setSwapTokenIn(WBTC_ADDR);
         (, address receiver, address tokenIn) =
             balancerV3Exposed.getCallbackTransferData(params);
         assertEq(receiver, 0xbA1333333333a1BA1108E8412f11850A5C319bA9);

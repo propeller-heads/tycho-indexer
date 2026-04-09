@@ -8,6 +8,17 @@ import "forge-std/Test.sol";
 contract FluidV1ExecutorExposed is FluidV1Executor {
     constructor(address _liquidity) FluidV1Executor(_liquidity) {}
 
+    // keccak256("FluidV1Executor#SWAP_TOKEN_IN_SLOT")
+    function setSwapTokenIn(address tokenIn) external {
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(
+                0xda0e4f882dc4efcea85306907dc3da81baebbcf2cd7b7c4fd7b1f3c8dcc82cbd,
+                tokenIn
+            )
+        }
+    }
+
     function decodeData(bytes calldata data)
         external
         pure
@@ -49,8 +60,10 @@ contract FluidV1ExecutorTest is Test, Constants {
 
     function testDecodeData() public view {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        address inputToken = 0x9D39A5DE30e57443BfF2A8307A4256c8797A3497; // sUSDe
         address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
-        bytes memory params = abi.encodePacked(dex, true, outputToken, false);
+        bytes memory params =
+            abi.encodePacked(dex, true, inputToken, outputToken, false);
         IFluidV1Dex dexVal;
         bool zero2oneVal;
         bool isNative;
@@ -63,11 +76,12 @@ contract FluidV1ExecutorTest is Test, Constants {
 
     function testGetTransferData() public {
         address dex = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
+        address inputToken = 0x9D39A5DE30e57443BfF2A8307A4256c8797A3497; // sUSDe
         address outputToken = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         bool zero2one = true;
         bool isNative = false;
         bytes memory params =
-            abi.encodePacked(dex, zero2one, outputToken, isNative);
+            abi.encodePacked(dex, zero2one, inputToken, outputToken, isNative);
 
         (
             TransferManager.TransferType transferType,
@@ -79,7 +93,7 @@ contract FluidV1ExecutorTest is Test, Constants {
 
         assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
-        assertEq(tokenIn, address(0));
+        assertEq(tokenIn, inputToken);
         assertEq(tokenOut, 0xdAC17F958D2ee523a2206206994597C13D831ec7);
         assertEq(outputToRouter, false);
     }
@@ -90,6 +104,7 @@ contract FluidV1ExecutorTest is Test, Constants {
             abi.encodeWithSelector(hex"12345678", DAI_ADDR, amountOwed);
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
+        executor.setSwapTokenIn(DAI_ADDR);
 
         (, address receiver, address tokenIn) =
             executor.getCallbackTransferData(data);
@@ -155,7 +170,8 @@ contract FluidV1ExecutorTest is Test, Constants {
         IERC20 sUSDe = IERC20(0x9D39A5DE30e57443BfF2A8307A4256c8797A3497);
         IERC20 USDT = IERC20(0xdAC17F958D2ee523a2206206994597C13D831ec7);
         uint256 amountIn = 10e18;
-        bytes memory params = abi.encodePacked(dex, true, address(USDT), false);
+        bytes memory params =
+            abi.encodePacked(dex, true, address(sUSDe), address(USDT), false);
         deal(address(sUSDe), address(executor), amountIn);
         uint256 balanceBefore = USDT.balanceOf(BOB);
 
@@ -169,7 +185,8 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params = abi.encodePacked(dex, false, address(ezETH), true);
+        bytes memory params =
+            abi.encodePacked(dex, false, address(0), address(ezETH), true);
         deal(address(executor), amountIn);
         uint256 balanceBefore = ezETH.balanceOf(BOB);
 
@@ -183,7 +200,8 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dex = 0xDD72157A021804141817d46D9852A97addfB9F59;
         IERC20 ezETH = IERC20(0xbf5495Efe5DB9ce00f80364C8B423567e58d2110);
         uint256 amountIn = 10e18;
-        bytes memory params = abi.encodePacked(dex, true, address(0), false);
+        bytes memory params =
+            abi.encodePacked(dex, true, address(ezETH), address(0), false);
         deal(address(ezETH), address(executor), amountIn);
         uint256 balanceBefore = BOB.balance;
 
@@ -250,7 +268,8 @@ contract TychoRouterForFluidV1Test is TychoRouterTestSetup {
         bytes memory protocolData = abi.encodePacked(
             fluidDex,
             false, // zero2one
-            address(ezETH),
+            address(0), // tokenIn = native ETH
+            address(ezETH), // tokenOut
             true // isNativeSell
         );
         bytes memory swap =

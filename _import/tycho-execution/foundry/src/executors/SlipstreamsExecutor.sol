@@ -17,6 +17,10 @@ error SlipstreamsExecutor__InvalidDataLength();
 contract SlipstreamsExecutor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
+    // keccak256("SlipstreamsExecutor#SWAP_TOKEN_IN_SLOT")
+    uint256 private constant _SWAP_TOKEN_IN_SLOT =
+        0x547df2547f2dd9f68ad702c3df0975b070c05f07b7dbbfa0cbac985e275e9e1f;
+
     uint160 private constant _MIN_SQRT_RATIO = 4295128739;
     uint160 private constant _MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
@@ -40,7 +44,13 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     {
         address target;
         bool zeroForOne;
-        (target, zeroForOne) = _decodeData(data);
+        address tokenIn;
+        (target, zeroForOne, tokenIn) = _decodeData(data);
+
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
+        }
 
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
@@ -84,11 +94,12 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, bool zeroForOne)
+        returns (address target, bool zeroForOne, address tokenIn)
     {
         if (data.length != 64) {
             revert SlipstreamsExecutor__InvalidDataLength();
         }
+        tokenIn = address(bytes20(data[0:20]));
         target = address(bytes20(data[43:63]));
         zeroForOne = uint8(data[63]) > 0;
     }
@@ -117,7 +128,9 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata /* data */
+    )
         external
         payable
         returns (
@@ -126,7 +139,10 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
             address tokenIn
         )
     {
-        tokenIn = address(bytes20(data[132:152]));
+        // slither-disable-next-line assembly
+        assembly {
+            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
+        }
         transferType = TransferManager.TransferType.Transfer;
         receiver = msg.sender;
     }

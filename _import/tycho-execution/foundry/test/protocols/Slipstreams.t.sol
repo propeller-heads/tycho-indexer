@@ -10,10 +10,21 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     constructor() SlipstreamsExecutor() {}
 
+    // keccak256("SlipstreamsExecutor#SWAP_TOKEN_IN_SLOT")
+    function setSwapTokenIn(address tokenIn) external {
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(
+                0x547df2547f2dd9f68ad702c3df0975b070c05f07b7dbbfa0cbac985e275e9e1f,
+                tokenIn
+            )
+        }
+    }
+
     function decodeData(bytes calldata data)
         external
         pure
-        returns (address target, bool zeroForOne)
+        returns (address target, bool zeroForOne, address tokenIn)
     {
         return _decodeData(data);
     }
@@ -59,8 +70,10 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH, BASE_USDC, expectedTickSpacing, address(3), false
         );
 
-        (address target, bool zeroForOne) = slipstreamsExposed.decodeData(data);
+        (address target, bool zeroForOne, address tokenIn) =
+            slipstreamsExposed.decodeData(data);
 
+        assertEq(tokenIn, BASE_WETH);
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }
@@ -100,6 +113,7 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
+        slipstreamsExposed.setSwapTokenIn(BASE_WETH);
         (, address receiver, address tokenIn) =
             slipstreamsExposed.getCallbackTransferData(callbackData);
 

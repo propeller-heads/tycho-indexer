@@ -38,6 +38,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     uint256 private constant _SKIP_AHEAD = 0;
 
+    // keccak256("EkuboExecutor#SWAP_TOKEN_IN_SLOT")
+    uint256 private constant _SWAP_TOKEN_IN_SLOT =
+        0x7fb41345f8639523bbb9d5306a95d572badfdba7640974f98831477929881659;
+
     using SafeERC20 for IERC20;
 
     constructor(address core, address mevResist) {
@@ -65,6 +69,12 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
     {
         if (data.length < 72) {
             revert EkuboExecutor__InvalidDataLength();
+        }
+
+        address tokenIn = address(bytes20(data[0:20]));
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
         }
 
         // amountIn must be at most type(int128).MAX
@@ -281,19 +291,19 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             address tokenIn
         )
     {
+        // slither-disable-next-line assembly
+        assembly {
+            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
+        }
         bytes4 selector = bytes4(data[:4]);
-        bytes calldata payData = data[36:];
         if (selector == _PAY_CALLBACK_SELECTOR) {
-            tokenIn = address(bytes20(payData[12:32]));
             transferType = TransferManager.TransferType.Transfer;
             receiver = address(_core);
         } else {
             // _LOCKED_SELECTOR
-            address tokenInFromCallback = address(bytes20(payData[36:56]));
-            if (tokenInFromCallback == address(0)) {
+            if (tokenIn == address(0)) {
                 // ETH transfers are handled in the Executor, so we need to set the transferType to
-                // TransferNativeInExecutor to update the delta accounting accordingly.
-                tokenIn = address(0);
+                // TransferNativeInExecutor to update delta accounting accordingly.
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;
             } else {

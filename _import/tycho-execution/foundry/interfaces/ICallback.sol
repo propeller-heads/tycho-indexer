@@ -23,6 +23,11 @@ interface ICallback {
      * if and how to transfer tokens. Some protocols require all token transfers
      * to happen within the callback context rather than before swap execution.
      *
+     * The input token is read from transient storage (set by getTransferData before
+     * the swap) and returned here. This prevents protocols from injecting a false
+     * token via crafted callback data while avoiding a redundant tload in the
+     * Dispatcher.
+     *
      * @param data The encoded callback data.
      * @return transferType The transfer type for this executor (None, ProtocolWillDebit, or Transfer).
      * @return receiver The address that should receive the pre swap tokens (usually a pool or the TychoRouter - depending on the protocol)
@@ -31,5 +36,9 @@ interface ICallback {
     function getCallbackTransferData(bytes calldata data)
     external
     payable
-    returns (TransferManager.TransferType transferType, address receiver, address tokenIn);
+    returns (
+        TransferManager.TransferType transferType,
+        address receiver,
+        address tokenIn
+    );
 }

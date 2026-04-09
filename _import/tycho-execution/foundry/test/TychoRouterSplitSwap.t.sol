@@ -681,16 +681,16 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testHackedPoolCaughtByDeltaAccounting() public {
-        // A split swap where one leg routes through a hacked pool. The pool sends a
+    function testHackedPoolTokenInjectionBlocked() public {
+        // A split swap where one leg routes through a pool that pool sends a
         // malicious callback requesting a transfer of PEPE (a different token) from
-        // the router to the attacker. The executor itself is honest — it just relays
-        // whatever the pool reported. The transient-storage delta accounting detects
-        // the unexpected negative PEPE delta and reverts the entire transaction.
+        // the router to the attacker. The Dispatcher ignores the pool-reported tokenIn
+        // and uses the tokenIn stored in transient storage from getTransferData (DAI),
+        // so PEPE is never transferred.
         //
         //  WETH ──(USV2)──> DAI ─┬──(USV2, 60%)──────────> USDC
-        //                        └──(HACKED POOL, 40%)─────> USDC
-        //                             └─> callback steals PEPE
+        //                        └──(HACKED POOL, 40%)─────> (nothing)
+        //                             └─> callback injection blocked
 
         HackedCallbackDataPool hackedPool = new HackedCallbackDataPool();
 
@@ -727,9 +727,8 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
 
         // Swap 3: DAI -> USDC, 40%
         // Routes through the hacked pool via the real UniswapV3Executor. The pool's
-        // callback requests a PEPE transfer instead of DAI. The Dispatcher reads
-        // the declared input amount from tstore (40% of DAI) and transfers that many
-        // PEPE tokens to the pool, creating a negative PEPE delta.
+        // callback requests a PEPE transfer instead of DAI. The Dispatcher uses
+        // the tokenIn stored in transient storage (DAI) and ignores the injected PEPE.
         bytes memory v3Data = abi.encodePacked(
             DAI_ADDR, // tokenIn
             USDC_ADDR, // tokenOut
@@ -741,24 +740,19 @@ contract TychoRouterSplitSwapTest is TychoRouterTestSetup {
             uint8(1), uint8(2), uint24(0), address(usv3Executor), v3Data
         );
 
-        // Delta accounting detects two non-zero deltas:
-        //   PEPE delta < 0  (stolen in callback)
-        //   DAI  delta > 0  (40% of DAI never actually left the router)
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Vault__UnexpectedNonZeroCount.selector, uint256(2)
-            )
-        );
         tychoRouter.splitSwap(
             amountIn,
             WETH_ADDR,
             USDC_ADDR,
-            1, // min amount
+            1, // extremely low min amount to make swap pass
             3, // nTokens
             ALICE,
             noClientFee(),
             pleEncode(swaps)
         );
+
+        // PEPE was not stolen — token injection blocked.
+        assertEq(IERC20(PEPE_ADDR).balanceOf(tychoRouterAddr), stolenPepe);
         vm.stopPrank();
     }
 

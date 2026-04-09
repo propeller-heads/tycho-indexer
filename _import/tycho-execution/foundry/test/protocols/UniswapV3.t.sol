@@ -10,6 +10,17 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor() UniswapV3Executor() {}
 
+    // keccak256("UniswapV3Executor#SWAP_TOKEN_IN_SLOT")
+    function setSwapTokenIn(address tokenIn) external {
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(
+                0x7b247c863499b2985ec2418fc9ebf270c026e775d28264b99f61c72a72adfe96,
+                tokenIn
+            )
+        }
+    }
+
     function decodeData(bytes calldata data)
         external
         pure
@@ -102,6 +113,7 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
+        uniswapV3Exposed.setSwapTokenIn(WETH_ADDR);
         (, address receiver, address tokenIn) =
             uniswapV3Exposed.getCallbackTransferData(callbackData);
 

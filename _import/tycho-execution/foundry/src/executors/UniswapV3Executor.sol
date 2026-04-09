@@ -17,6 +17,10 @@ error UniswapV3Executor__InvalidDataLength();
 contract UniswapV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
+    // keccak256("UniswapV3Executor#SWAP_TOKEN_IN_SLOT")
+    uint256 private constant _SWAP_TOKEN_IN_SLOT =
+        0x7b247c863499b2985ec2418fc9ebf270c026e775d28264b99f61c72a72adfe96;
+
     uint160 private constant _MIN_SQRT_RATIO = 4295128739;
     uint160 private constant _MAX_SQRT_RATIO =
         1461446703485210103287273052203988822378723970342;
@@ -41,6 +45,12 @@ contract UniswapV3Executor is IExecutor, ICallback {
         address target;
         bool zeroForOne;
         (target, zeroForOne) = _decodeData(data);
+
+        address tokenIn = address(bytes20(data[0:20]));
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
+        }
 
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
@@ -128,7 +138,9 @@ contract UniswapV3Executor is IExecutor, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata /* data */
+    )
         external
         payable
         returns (
@@ -137,7 +149,10 @@ contract UniswapV3Executor is IExecutor, ICallback {
             address tokenIn
         )
     {
-        tokenIn = address(bytes20(data[132:152]));
+        // slither-disable-next-line assembly
+        assembly {
+            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
+        }
         transferType = TransferManager.TransferType.Transfer;
         receiver = msg.sender;
     }

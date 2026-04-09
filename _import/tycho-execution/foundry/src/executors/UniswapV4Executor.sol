@@ -59,6 +59,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
     address private immutable _angstromHookAddress;
     address private immutable _self;
 
+    // keccak256("UniswapV4Executor#SWAP_TOKEN_IN_SLOT")
+    uint256 private constant _SWAP_TOKEN_IN_SLOT =
+        0x14d08dfe0dee33a1b1c1707086278bba5e4749e8e5cb4759f44d880c57783a4f;
+
     struct UniswapV4Pool {
         address intermediaryToken;
         uint24 fee;
@@ -107,6 +111,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bool zeroForOne;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
         (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
+        // slither-disable-next-line assembly
+        assembly {
+            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
+        }
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -271,7 +279,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         return abi.encode(_unlockCallback(stripped));
     }
 
-    function verifyCallback(bytes calldata) public view poolManagerOnly {}
+    function verifyCallback(bytes calldata data) public view poolManagerOnly {}
 
     /**
      * @dev Internal function to handle the unlock callback.
@@ -540,7 +548,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata /* data */
+    )
         external
         payable
         returns (
@@ -549,39 +559,15 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn
         )
     {
-        bytes calldata stripped = data[68:];
-        bytes4 selector = bytes4(stripped[:4]);
+        // slither-disable-next-line assembly
+        assembly {
+            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
+        }
         receiver = address(poolManager);
-        if (selector == _swapExactInputSingleSelector) {
-            // swapExactInputSingle(PoolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes hookData)
-            // PoolKey: currency0[4:36] currency1[36:68] fee[68:100] tickSpacing[100:132] hooks[132:164]
-            // zeroForOne[164:196] amountIn[196:228] receiver[228:260]
-
-            bool zeroForOne = uint8(stripped[195]) != 0;
-            if (zeroForOne) {
-                tokenIn = address(bytes20(stripped[16:36]));
-            } else {
-                tokenIn = address(bytes20(stripped[48:68]));
-            }
-            if (tokenIn == address(0)) {
-                transferType =
-                TransferManager.TransferType.TransferNativeInExecutor;
-            } else {
-                transferType = TransferManager.TransferType.Transfer;
-            }
-        } else if (selector == _swapExactInputSelector) {
-            // swapExactInput(Currency, uint128 amountIn, address receiver, PathKey[])
-            // Currency[4:36] amountIn[36:68] receiver[68:100]
-
-            tokenIn = address(bytes20(stripped[16:36]));
-            if (tokenIn == address(0)) {
-                transferType =
-                TransferManager.TransferType.TransferNativeInExecutor;
-            } else {
-                transferType = TransferManager.TransferType.Transfer;
-            }
+        if (tokenIn == address(0)) {
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
-            revert UniswapV4Executor__UnknownCallback(selector);
+            transferType = TransferManager.TransferType.Transfer;
         }
     }
 }
