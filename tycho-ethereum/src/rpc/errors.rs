@@ -91,3 +91,45 @@ impl RPCError {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::redact_url_paths;
+
+    #[test]
+    fn redacts_path_component() {
+        let input = "error sending request for url (https://arbitrum.chainstack.com/supersecretkey)";
+        let output = redact_url_paths(input);
+        assert_eq!(
+            output,
+            "error sending request for url (https://arbitrum.chainstack.com/***)"
+        );
+    }
+
+    #[test]
+    fn preserves_url_without_path() {
+        let input = "error sending request for url (https://arbitrum.chainstack.com)";
+        let output = redact_url_paths(input);
+        assert_eq!(output, input);
+    }
+
+    #[test]
+    fn passthrough_when_no_url() {
+        let input = "connection refused";
+        assert_eq!(redact_url_paths(input), input);
+    }
+
+    #[test]
+    fn redacts_multiple_urls() {
+        let input = "primary https://a.example.com/key1 fallback https://b.example.com/key2";
+        let output = redact_url_paths(input);
+        assert_eq!(output, "primary https://a.example.com/*** fallback https://b.example.com/***");
+    }
+
+    #[test]
+    fn redacts_url_at_end_of_string() {
+        let input = "failed: https://node.example.com/apikey";
+        let output = redact_url_paths(input);
+        assert_eq!(output, "failed: https://node.example.com/***");
+    }
+}
