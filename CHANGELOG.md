@@ -1,3 +1,11 @@
+## [0.157.3](https://github.com/propeller-heads/tycho-indexer/compare/0.157.2...0.157.3) (2026-04-09)
+
+
+### Bug Fixes
+
+* redact URL paths in RPC error messages to prevent API key leaks ([833aca8](https://github.com/propeller-heads/tycho-indexer/commit/833aca88ecb2011174064a871ab3f971a925d400))
+* redact URL paths in RPC error messages to prevent API key leaks ([#906](https://github.com/propeller-heads/tycho-indexer/issues/906)) ([8c15eea](https://github.com/propeller-heads/tycho-indexer/commit/8c15eea88ff9c8ba6e4d7135c21b1c777e7a0763))
+
 ## [0.157.2](https://github.com/propeller-heads/tycho-indexer/compare/0.157.1...0.157.2) (2026-04-09)
 
 
