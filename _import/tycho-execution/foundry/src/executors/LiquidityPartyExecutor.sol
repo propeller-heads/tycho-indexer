@@ -57,7 +57,7 @@ contract LiquidityPartyExecutor is IExecutor {
         returns (address receiver)
     {
         // Funds go directly to the pool (prefunding approach)
-        return address(IPartyPool(address(bytes20(data[0:20]))));
+        return address(bytes20(data[0:20]));
     }
 
     function _decodeData(bytes calldata data)
