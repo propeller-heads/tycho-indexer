@@ -70,16 +70,9 @@ impl TychoRouterEncoder {
             .map(|swap| swap.component().protocol_system.clone())
             .collect();
 
-        let encoded_solution = if (solution.swaps().len() == 1) ||
-            ((protocols.len() == 1 &&
-                protocols
-                    .iter()
-                    .any(|p| GROUPABLE_PROTOCOLS.contains(&p.as_str()))) &&
-                solution
-                    .swaps()
-                    .iter()
-                    .all(|swap| swap.split() == 0.0))
-        {
+        let groups = group_swaps(solution.swaps());
+
+        let encoded_solution = if (groups.len() == 1) {
             self.single_swap_strategy
                 .encode_strategy(&solution)?
         } else if solution

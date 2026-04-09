@@ -17,6 +17,7 @@ error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
 error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
+error Dispatcher__UnsupportedSingleHopCycle(address token);
 error Dispatcher__ExecutorAlreadyExists(address executor);
 
 /**
@@ -102,7 +103,6 @@ contract Dispatcher is TransferManager {
             tstore(_CURRENTLY_SWAPPING_EXECUTOR_SLOT, executor)
             tstore(_IS_FIRST_SWAP_SLOT, isFirstSwap)
             tstore(_IS_SPLIT_SWAP_SLOT, isSplitSwap)
-            tstore(_INPUT_TRANSFER_PERFORMED_SLOT, 0)
             tstore(_SWAP_INPUT_AMOUNT_SLOT, amount)
         }
 
@@ -132,9 +132,11 @@ contract Dispatcher is TransferManager {
             (TransferManager.TransferType, address, address, address, bool)
         );
 
-        bool isCyclic = tokenIn == tokenOut && tokenIn != address(0);
-        address inputSource =
-            isCyclic ? _getInputSource(isFirstSwap) : address(0);
+        if (tokenIn == tokenOut) {
+            // Single-hop cycles (such as those made possible via UniswapV4 flash
+            // accounting) are not supported.
+            revert Dispatcher__UnsupportedSingleHopCycle(tokenIn);
+        }
 
         // Measure output before _transfer so cyclic handling is uniform
         // across callback and direct-transfer types.
@@ -182,21 +184,6 @@ contract Dispatcher is TransferManager {
         }
 
         uint256 balanceAfterSwap = _balanceOf(tokenOut, measureAt);
-
-        // Cyclic swap detection: when tokenIn == tokenOut (e.g. grouped UniswapV4
-        // swap USDC -> WETH -> USDC), we must check initial balance before any
-        // transfer and add the input amount back when needed. Also check that the
-        // input transfer is actually performed, either as a pre-swap transfer or
-        // as a callback transfer, to avoid any delta manipulation attacks.
-        if (isCyclic && measureAt == inputSource) {
-            bool inputTransferPerformed;
-            assembly {
-                inputTransferPerformed := tload(_INPUT_TRANSFER_PERFORMED_SLOT)
-            }
-            if (inputTransferPerformed) {
-                balanceAfterSwap += amount;
-            }
-        }
         amountOut = balanceAfterSwap - balanceBeforeSwap;
 
         // Forward if output landed at router but needs to go elsewhere

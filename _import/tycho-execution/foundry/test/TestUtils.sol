@@ -1,10 +1,6 @@
 pragma solidity ^0.8.10;
 
 import "forge-std/Test.sol";
-import {
-    SafeERC20,
-    IERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract TestUtils is Test {
     constructor() {}
@@ -31,46 +27,3 @@ contract TestUtils is Test {
     }
 }
 
-// Fake Slipstream pool that accepts any swap call and does nothing.
-contract FakeSlipstreamPool {
-    function swap(
-        address, /* recipient */
-        bool, /* zeroForOne */
-        int256, /* amountSpecified */
-        uint160, /* sqrtPriceLimitX96 */
-        bytes calldata /* data */
-    )
-        external
-        returns (int256, int256)
-    {
-        return (0, 0);
-    }
-}
-
-// Fake Curve pool that accepts any swap, performs a transferFrom, and does nothing
-contract FakeCurvePool {
-    using SafeERC20 for IERC20;
-
-    function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
-        external
-    {
-        // ignoring the indices for simplicity
-        address token = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-        IERC20(token).transferFrom(msg.sender, address(this), dx);
-    }
-}
-
-// Fake Curve pool that accepts any swap, performs a transferFrom, and transfers it
-// back to the router
-contract OneToOneCurvePool {
-    using SafeERC20 for IERC20;
-
-    function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
-        external
-    {
-        // ignoring the indices for simplicity
-        address token = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-        IERC20(token).transferFrom(msg.sender, address(this), dx);
-        IERC20(token).transfer(msg.sender, dx);
-    }
-}

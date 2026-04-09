@@ -60,9 +60,6 @@ contract TransferManager is Vault {
     // keccak256("TransferManager#SENDER_SLOT")
     uint256 private constant _SENDER_SLOT =
         0x99298391997747e556e81b2d36d99151315b6c1b92e826ca8d37acad5fddaf70;
-    // keccak256("TransferManager#INPUT_TRANSFER_PERFORMED_SLOT")
-    uint256 internal constant _INPUT_TRANSFER_PERFORMED_SLOT =
-        0x72ea05c8e2b7e6d67a7c985da4350531c15e2059b578c4875bf50d6fa8c240a7;
 
     constructor(address permit2_) {
         if (permit2_.code.length == 0) {
@@ -150,7 +147,6 @@ contract TransferManager is Vault {
         if (transferType == TransferType.TransferNativeInExecutor) {
             // Protocols like Fluid or Lido require us to send the ETH as
             // msg.value when calling the swap function from inside the executor.
-            _setInputTransferPerformed();
             _updateDeltaAccounting(tokenIn, -int256(amount));
             return amount;
         }
@@ -165,7 +161,6 @@ contract TransferManager is Vault {
 
         // Scenario 3 & 4: Protocol will debit tokens from router
         if (transferType == TransferType.ProtocolWillDebit) {
-            _setInputTransferPerformed();
             if (needsTransferFromUser) {
                 // Scenario 3: First swap with user funds - transfer to router, then approve
                 amount = _transferFromUser(tokenIn, address(this), amount);
@@ -191,7 +186,6 @@ contract TransferManager is Vault {
                 return amount;
             }
 
-            _setInputTransferPerformed();
             if (needsTransferFromUser) {
                 // Scenario 5: First swap with user funds - transfer directly to pool
                 amount = _transferFromUser(tokenIn, receiver, amount);
@@ -206,33 +200,6 @@ contract TransferManager is Vault {
         }
 
         revert TransferManager__UnknownTransferType();
-    }
-
-    // slither-disable-next-line assembly
-    function _setInputTransferPerformed() internal {
-        assembly {
-            tstore(_INPUT_TRANSFER_PERFORMED_SLOT, 1)
-        }
-    }
-
-    /**
-     * @dev Returns the address that provides input tokens for the current swap.
-     */
-    // slither-disable-next-line assembly
-    function _getInputSource(bool isFirstSwap)
-        internal
-        view
-        returns (address source)
-    {
-        if (!isFirstSwap) return address(this);
-        bool useVault;
-        assembly {
-            useVault := tload(_USE_VAULT_SLOT)
-        }
-        if (useVault) return address(this);
-        assembly {
-            source := tload(_SENDER_SLOT)
-        }
     }
 
     /**
