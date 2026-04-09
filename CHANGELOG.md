@@ -1,3 +1,11 @@
+## [0.157.2](https://github.com/propeller-heads/tycho-indexer/compare/0.157.1...0.157.2) (2026-04-09)
+
+
+### Bug Fixes
+
+* update Solidity compilation commands to include EVM version ([61365be](https://github.com/propeller-heads/tycho-indexer/commit/61365bec2413bf91f188b6f838c5b16d846e8e45))
+* update Solidity compilation commands to include EVM version ([#905](https://github.com/propeller-heads/tycho-indexer/issues/905)) ([cdaffbd](https://github.com/propeller-heads/tycho-indexer/commit/cdaffbd0c123abf51a3742cf6a0890b9c52feffd))
+
 ## [0.157.1](https://github.com/propeller-heads/tycho-indexer/compare/0.157.0...0.157.1) (2026-04-09)
 
 
