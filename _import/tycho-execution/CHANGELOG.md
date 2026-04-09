@@ -1,3 +1,20 @@
+## [0.173.0](https://github.com/propeller-heads/tycho-execution/compare/0.172.2...0.173.0) (2026-04-09)
+
+
+### Features
+
+* add Liquorice to the deploy executors for eth ([68cb385](https://github.com/propeller-heads/tycho-execution/commit/68cb3858745e01ff669f702a7f8bf2d4d9b8df5c))
+
+
+### Bug Fixes
+
+* move approvals to test ([b998b40](https://github.com/propeller-heads/tycho-execution/commit/b998b40648407c891102b72f1a6a3244326fa86a))
+* move tokenIn extraction into _decodeData and clean up tests ([73e0b0e](https://github.com/propeller-heads/tycho-execution/commit/73e0b0e15f3dceff2a2a1b04076730b77b46e022))
+* remove unused fields ([1a07a77](https://github.com/propeller-heads/tycho-execution/commit/1a07a77837d9bb353ae32fe00de9e3e1002879ce))
+* update liquorice calldata ([d6d19d6](https://github.com/propeller-heads/tycho-execution/commit/d6d19d6443b69463242b9df3afa1453f033e66fe))
+* update test calldata ([d570840](https://github.com/propeller-heads/tycho-execution/commit/d5708401296128303d2ee17546015186ffcf7113))
+* update user to router ([1d1b915](https://github.com/propeller-heads/tycho-execution/commit/1d1b915960b130f07e55d20d44b51c6ae6142177))
+
 ## [0.172.2](https://github.com/propeller-heads/tycho-execution/compare/0.172.1...0.172.2) (2026-04-08)
 
 
