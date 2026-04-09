@@ -1,3 +1,11 @@
+## [0.157.1](https://github.com/propeller-heads/tycho-indexer/compare/0.157.0...0.157.1) (2026-04-09)
+
+
+### Bug Fixes
+
+* reduce spammy logs ([5d67cbf](https://github.com/propeller-heads/tycho-indexer/commit/5d67cbfd494171500ca00e6f4b7c34e6324024c7))
+* reduce spammy logs ([#904](https://github.com/propeller-heads/tycho-indexer/issues/904)) ([4e0d3f9](https://github.com/propeller-heads/tycho-indexer/commit/4e0d3f93cac388ad8d3555862825c93e2b2ec007))
+
 ## [0.157.0](https://github.com/propeller-heads/tycho-indexer/compare/0.156.0...0.157.0) (2026-04-09)
 
 
