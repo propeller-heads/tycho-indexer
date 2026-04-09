@@ -1,3 +1,11 @@
+## [0.157.0](https://github.com/propeller-heads/tycho-indexer/compare/0.156.0...0.157.0) (2026-04-09)
+
+
+### Features
+
+* **token-analyzer:** replace TraceCallDetector with EthCallDetector ([ab7f9b7](https://github.com/propeller-heads/tycho-indexer/commit/ab7f9b77d2468b072fb60275102a5ea81a175e0b))
+* **token-analyzer:** replace TraceCallDetector with EthCallDetector ([#903](https://github.com/propeller-heads/tycho-indexer/issues/903)) ([df35692](https://github.com/propeller-heads/tycho-indexer/commit/df35692b80bb1025f2f6419987550836fc2941c4))
+
 ## [0.156.0](https://github.com/propeller-heads/tycho-indexer/compare/0.155.0...0.156.0) (2026-04-08)
 
 
