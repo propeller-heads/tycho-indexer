@@ -186,6 +186,11 @@ contract Constants is Test, BaseConstants {
     // Angstrom hook address
     address ANGSTROM_HOOK = 0x0000000aa232009084Bd71A5797d089AA4Edfad4;
 
+    // Liquorice
+    address LIQUORICE_SETTLEMENT = 0x0448633eb8B0A42EfED924C42069E0DcF08fb552;
+    address LIQUORICE_BALANCE_MANAGER =
+        0xb87bAE43a665EB5943A5642F81B26666bC9E5C95;
+
     // Etherfi
     address EETH_ADDR = 0x35fA164735182de50811E8e2E824cFb9B6118ac2;
     address WEETH_ADDR = 0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee;
