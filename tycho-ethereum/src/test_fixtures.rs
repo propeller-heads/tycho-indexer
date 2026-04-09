@@ -30,6 +30,16 @@ pub const USDC_STR: &str = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48";
 pub const USDT_STR: &str = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 pub const WETH_STR: &str = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
+// Arbitrum mainnet token addresses
+pub const ARB_USDC_STR: &str = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831";
+pub const ARB_WETH_STR: &str = "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1";
+pub const ARB_ARB_STR: &str = "0x912CE59144191C1204E64559FE8253a0e49E6548";
+
+// Arbitrum token holders (Uniswap V3 pools with large balances)
+pub const ARB_USDC_HOLDER_ADDR: &str = "0xC6962004f452bE9203591991D15f6b388e09E8D0"; // USDC/WETH V3
+pub const ARB_WETH_HOLDER_ADDR: &str = "0xC6962004f452bE9203591991D15f6b388e09E8D0"; // USDC/WETH V3
+pub const ARB_ARB_HOLDER_ADDR: &str = "0x92c63d0e701CAAe670C9415d91C474F686298f00"; // ARB/ETH V3
+
 // Common token addresses array
 pub const TOKEN_ADDRESSES: [&str; 5] = [BALANCER_VAULT_STR, STETH_STR, DAI_STR, WBTC_STR, USDC_STR];
 
@@ -45,25 +55,49 @@ pub const USDC_HOLDER_BALANCE: u64 = 74743132960379_u64; // Balance at the test 
 // WETH holder - Uniswap V2 WETH-USDC pair has significant WETH balance
 pub const WETH_HOLDER_ADDR: &str = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc";
 
-/// Lazily-initialized map of token addresses to their known holders and balances.
-/// This is useful for TokenOwnerStore setup in tests.
+/// Lazily-initialized map of Ethereum mainnet token addresses to their known holders and balances.
+/// This is useful for `TokenOwnerStore` setup in tests.
 pub static TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyLock::new(|| {
     HashMap::from([
         (
-            // USDC holder
             Address::from_str(USDC_STR).unwrap(),
             (
                 Bytes::from_str(USDC_HOLDER_ADDR).unwrap(),
-                Bytes::from_str("0x43f6e8f16703").unwrap(), // Large balance
+                Bytes::from_str("0x43f6e8f16703").unwrap(),
             ),
         ),
         (
-            // WETH holder
             Address::from_str(WETH_STR).unwrap(),
             (
                 Bytes::from_str(WETH_HOLDER_ADDR).unwrap(),
-                Bytes::from_str("0x2386f26fc10000").unwrap(), /* ~0.01 WETH (large enough for
-                                                               * testing) */
+                Bytes::from_str("0x2386f26fc10000").unwrap(), // ~0.01 WETH
+            ),
+        ),
+    ])
+});
+
+/// Lazily-initialized map of Arbitrum mainnet token addresses to their known holders and balances.
+pub static ARB_TOKEN_HOLDERS: LazyLock<HashMap<Address, (Bytes, Bytes)>> = LazyLock::new(|| {
+    HashMap::from([
+        (
+            Address::from_str(ARB_USDC_STR).unwrap(),
+            (
+                Bytes::from_str(ARB_USDC_HOLDER_ADDR).unwrap(),
+                Bytes::from_str("0x2386f26fc10000000").unwrap(), // ~40M USDC (6 decimals)
+            ),
+        ),
+        (
+            Address::from_str(ARB_WETH_STR).unwrap(),
+            (
+                Bytes::from_str(ARB_WETH_HOLDER_ADDR).unwrap(),
+                Bytes::from_str("0x3635c9adc5dea00000").unwrap(), // ~1000 WETH (18 decimals)
+            ),
+        ),
+        (
+            Address::from_str(ARB_ARB_STR).unwrap(),
+            (
+                Bytes::from_str(ARB_ARB_HOLDER_ADDR).unwrap(),
+                Bytes::from_str("0x84595161401484a000000").unwrap(), // ~10M ARB (18 decimals)
             ),
         ),
     ])
@@ -125,6 +159,23 @@ impl TestFixture {
         );
 
         let url = std::env::var("RPC_URL").expect("RPC_URL must be set for testing");
+        Self { block, inner_rpc, url }
+    }
+
+    /// Creates a test fixture for Arbitrum using `ARB_RPC_URL`.
+    pub fn new_arbitrum() -> Self {
+        let url = std::env::var("ARB_RPC_URL").expect("ARB_RPC_URL must be set for Arbitrum tests");
+        let inner_rpc = ClientBuilder::default().http(
+            url.parse()
+                .expect("Invalid ARB_RPC_URL"),
+        );
+        let block = Block::new(
+            0,
+            Chain::Arbitrum,
+            Default::default(),
+            Default::default(),
+            Default::default(),
+        );
         Self { block, inner_rpc, url }
     }
 }

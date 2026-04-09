@@ -393,4 +393,62 @@ mod tests {
         assert!(gas.is_some_and(|g| g > U256::ZERO));
         assert_eq!(tax, Some(U256::ZERO));
     }
+
+    mod arbitrum {
+        use super::*;
+        use crate::test_fixtures::{ARB_ARB_STR, ARB_TOKEN_HOLDERS, ARB_USDC_STR, ARB_WETH_STR};
+
+        const ARB_COWSWAP_SETTLEMENT: Address =
+            address!("9008D19f58AAbD9eD0D60971565AA8510560ab41");
+
+        impl TestFixture {
+            pub(crate) fn create_arb_ethcall_detector(&self) -> EthCallDetector {
+                let rpc = self.create_rpc_client(false);
+                let finder = TokenOwnerStore::new(ARB_TOKEN_HOLDERS.clone());
+                EthCallDetector::new(&rpc, Arc::new(finder), ARB_COWSWAP_SETTLEMENT)
+            }
+        }
+
+        #[tokio::test]
+        #[ignore = "require ARB_RPC_URL"]
+        async fn arb_usdc() {
+            let fixture = TestFixture::new_arbitrum();
+            let detector = fixture.create_arb_ethcall_detector();
+            let token = Address::from_str(ARB_USDC_STR).unwrap();
+            let (quality, gas, _tax) = detector
+                .detect_impl(token, BlockTag::Latest)
+                .await
+                .expect("detect_impl failed");
+            assert_eq!(quality, TokenQuality::Good, "Arbitrum USDC should be Good");
+            assert!(gas.is_some_and(|g| g > U256::ZERO));
+        }
+
+        #[tokio::test]
+        #[ignore = "require ARB_RPC_URL"]
+        async fn arb_weth() {
+            let fixture = TestFixture::new_arbitrum();
+            let detector = fixture.create_arb_ethcall_detector();
+            let token = Address::from_str(ARB_WETH_STR).unwrap();
+            let (quality, gas, _tax) = detector
+                .detect_impl(token, BlockTag::Latest)
+                .await
+                .expect("detect_impl failed");
+            assert_eq!(quality, TokenQuality::Good, "Arbitrum WETH should be Good");
+            assert!(gas.is_some_and(|g| g > U256::ZERO));
+        }
+
+        #[tokio::test]
+        #[ignore = "require ARB_RPC_URL"]
+        async fn arb_arb_token() {
+            let fixture = TestFixture::new_arbitrum();
+            let detector = fixture.create_arb_ethcall_detector();
+            let token = Address::from_str(ARB_ARB_STR).unwrap();
+            let (quality, gas, _tax) = detector
+                .detect_impl(token, BlockTag::Latest)
+                .await
+                .expect("detect_impl failed");
+            assert_eq!(quality, TokenQuality::Good, "ARB token should be Good");
+            assert!(gas.is_some_and(|g| g > U256::ZERO));
+        }
+    }
 }

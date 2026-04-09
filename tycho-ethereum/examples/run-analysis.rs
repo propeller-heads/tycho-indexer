@@ -8,7 +8,7 @@ use tycho_common::{
     Bytes,
 };
 use tycho_ethereum::{
-    rpc::EthereumRpcClient, services::token_analyzer::TraceCallDetector, BytesCodec,
+    rpc::EthereumRpcClient, services::token_analyzer::EthCallDetector, BytesCodec,
 };
 
 #[tokio::main]
@@ -31,9 +31,9 @@ async fn main() -> Result<(), ()> {
         ),
     )]));
 
-    let trace_call = TraceCallDetector::new(&rpc, Arc::new(tf), settlement_contract);
+    let detector = EthCallDetector::new(&rpc, Arc::new(tf), settlement_contract);
 
-    let quality = trace_call
+    let quality = detector
         .analyze(
             Bytes::from_str("3A9FfF453d50D4Ac52A6890647b823379ba36B9E").unwrap(),
             BlockTag::Latest,
