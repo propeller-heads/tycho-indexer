@@ -944,7 +944,6 @@ where
                         .and_utc()
                         .timestamp()
                 {
-                    debug!("Block with identical timestamp detected. Prev block ts: {:?} - New block ts: {:?}", last_processed_block.ts, msg.block.ts);
                     // Blockchains with fast block times (e.g., Arbitrum) may produce blocks with
                     // identical timestamps (measured in seconds). To ensure accurate ordering, we
                     // adjust each block's timestamp by adding a microsecond offset
@@ -954,7 +953,10 @@ where
                     // timestamp of each block with the same timestamp, we ensure ordering
                     // and prevent duplicate timestamps from being processed.
                     msg.block.ts = last_processed_block.ts + Duration::microseconds(1);
-                    debug!("Adjusted block timestamp: {:?}", msg.block.ts);
+                    trace!(
+                        "Block with identical timestamp detected; adjusted timestamp from {:?} to {:?}",
+                        last_processed_block.ts, msg.block.ts
+                    );
                 }
             }
 
