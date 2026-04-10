@@ -207,10 +207,10 @@ contract TychoRouterTestSetup is
             WEETH_ADDR,
             REDEMPTION_MANAGER_ADDR
         );
-        liquidityPartyExecutor = new LiquidityPartyExecutor();
         liquoriceExecutor = new LiquoriceExecutor(
             LIQUORICE_SETTLEMENT, LIQUORICE_BALANCE_MANAGER
         );
+        liquidityPartyExecutor = new LiquidityPartyExecutor();
 
         address[] memory executors = new address[](20);
         executors[0] = address(usv2Executor);
