@@ -24,6 +24,7 @@ import {SlipstreamsExecutor} from "../src/executors/SlipstreamsExecutor.sol";
 import {RocketpoolExecutor} from "../src/executors/RocketpoolExecutor.sol";
 import {ERC4626Executor} from "../src/executors/ERC4626Executor.sol";
 import {WethExecutor} from "../src/executors/WethExecutor.sol";
+import {LiquoriceExecutor} from "../src/executors/LiquoriceExecutor.sol";
 
 // Test utilities and mocks
 import "./Constants.sol";
@@ -114,6 +115,7 @@ contract TychoRouterTestSetup is
     EkuboV3Executor public ekuboV3Executor;
     EtherfiExecutor public etherfiExecutor;
     LiquidityPartyExecutor public liquidityPartyExecutor;
+    LiquoriceExecutor public liquoriceExecutor;
 
     FeeCalculator feeCalculator;
     address routerFeeReceiver;
@@ -206,8 +208,11 @@ contract TychoRouterTestSetup is
             REDEMPTION_MANAGER_ADDR
         );
         liquidityPartyExecutor = new LiquidityPartyExecutor();
+        liquoriceExecutor = new LiquoriceExecutor(
+            LIQUORICE_SETTLEMENT, LIQUORICE_BALANCE_MANAGER
+        );
 
-        address[] memory executors = new address[](19);
+        address[] memory executors = new address[](20);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -226,7 +231,8 @@ contract TychoRouterTestSetup is
         executors[15] = address(wethExecutor);
         executors[16] = address(ekuboV3Executor);
         executors[17] = address(etherfiExecutor);
-        executors[18] = address(liquidityPartyExecutor);
+        executors[18] = address(liquoriceExecutor);
+        executors[19] = address(liquidityPartyExecutor);
         return executors;
     }
 

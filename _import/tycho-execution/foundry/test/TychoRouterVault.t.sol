@@ -1,7 +1,11 @@
 pragma solidity ^0.8.26;
 
 import "@src/executors/UniswapV4Executor.sol";
-import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
+import {
+    TychoRouter,
+    ClientFeeParams,
+    TychoRouter__NegativeOutputDelta
+} from "@src/TychoRouter.sol";
 import {
     Vault__UnexpectedInputDelta,
     Vault__UnexpectedNonZeroCount,
@@ -344,6 +348,117 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(ALICE), 99641381);
 
         vm.stopPrank();
+    }
+
+    function testNegativeOutputCyclicalSwap() public {
+        // Performs a cyclical swap on a pool which transfers the input amount while
+        // offering no output in return. The client contribution is 1 ether, so the
+        // client makes up for the whole amount. However, since this pool result in
+        // a negative delta at the time of computing client fees, an unprofitable
+        // arbitrage is detected and the TychoRouter reverts with
+        // TychoRouter__NegativeOutputDelta
+
+        uint256 stolenAmount = 1 ether;
+        // The client (Alice) will contribute to this swap with their own funds
+        uint256 clientContribution = stolenAmount;
+        vm.startPrank(ALICE);
+        deal(WETH_ADDR, ALICE, clientContribution);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
+        tychoRouter.deposit(WETH_ADDR, clientContribution);
+
+        vm.stopPrank();
+        vm.startPrank(BOB);
+        deal(WETH_ADDR, BOB, stolenAmount);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
+        tychoRouter.deposit(WETH_ADDR, stolenAmount);
+
+        FakeCurvePool maliciousPool = new FakeCurvePool();
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            address(maliciousPool),
+            uint8(3),
+            uint8(1),
+            uint8(1)
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), protocolData);
+
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, stolenAmount, tychoRouterAddr, ALICE_PK);
+
+        int256 negativeOutput = -int256(stolenAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeOutputDelta.selector, negativeOutput
+            )
+        );
+        tychoRouter.singleSwapUsingVault(
+            stolenAmount,
+            WETH_ADDR,
+            WETH_ADDR,
+            stolenAmount,
+            tychoRouterAddr,
+            feeParams,
+            swap
+        );
+    }
+
+    function testZeroOutputDeltaClientContribution() public {
+        // The pool returns the same amount as it gets, so the output delta is zero.
+        // However, Bob has requested twice this amount, so the rest comes from
+        // Alice's client contribution.
+
+        uint256 inputAmount = 1 ether;
+
+        // The client (Alice) will contribute to this swap with their own funds
+        uint256 clientContribution = inputAmount;
+        vm.startPrank(ALICE);
+        deal(WETH_ADDR, ALICE, clientContribution);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        tychoRouter.deposit(WETH_ADDR, clientContribution);
+
+        vm.stopPrank();
+        vm.startPrank(BOB);
+        deal(WETH_ADDR, BOB, inputAmount);
+        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        tychoRouter.deposit(WETH_ADDR, inputAmount);
+
+        OneToOneCurvePool oneToOnePool = new OneToOneCurvePool();
+
+        bytes memory protocolData = abi.encodePacked(
+            WETH_ADDR,
+            WETH_ADDR,
+            address(oneToOnePool),
+            uint8(3),
+            uint8(1),
+            uint8(1)
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(curveExecutor), protocolData);
+
+        ClientFeeParams memory feeParams =
+            makeClientFeeParams(0, inputAmount, tychoRouterAddr, ALICE_PK);
+
+        int256 negativeOutput = -int256(inputAmount);
+        tychoRouter.singleSwapUsingVault(
+            inputAmount,
+            WETH_ADDR,
+            WETH_ADDR,
+            2 * inputAmount,
+            tychoRouterAddr,
+            feeParams,
+            swap
+        );
+        uint256 aliceBalance =
+            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
+        uint256 bobBalance =
+            tychoRouter.balanceOf(BOB, uint256(uint160(WETH_ADDR)));
+        assertEq(aliceBalance, 0);
+        // Bob should now have his original amount plus Alice's contribution
+        assertEq(bobBalance, 2 * inputAmount);
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), 2 * inputAmount);
     }
 
     // ==================== Rebalance Vault tests ====================
