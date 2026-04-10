@@ -159,7 +159,7 @@ To maintain up-to-date states of the protocols you wish to simulate over, you ca
 
 #### Step 1: Fetch tokens
 
-It is necessary to collect all tokens you are willing to support/swap over as this must be set on the stream builder in step 2. You can either set up custom logic to define this, or use the Tycho Indexer RPC to fetch and filter for tokens of interest. To simplify this, a util function called `load_all_tokens`is supplied and can be used as follows:
+Collect token metadata up front and pass it to the stream builder in step 2. This token set is used to decode startup snapshots and initialize protocol states correctly. To simplify this, a util function called `load_all_tokens` is supplied and can be used as follows:
 
 ```rust
 use tycho_simulation::utils::load_all_tokens;
@@ -201,6 +201,8 @@ let mut protocol_stream = ProtocolStreamBuilder::new("tycho-beta.propellerheads.
     .expect("Failed building protocol stream");
 ```
 
+`set_tokens(...)` does **not** act as an ongoing stream filter. New snapshots/components streamed later include the token metadata required for decoding.
+
 Some protocols, such as Balancer V2 and Curve, require a pool filter to be defined to filter out unsupported pools. If a protocol needs a pool filter and the user does not provide one, a warning will be raised during the stream setup process.
 
 The stream created emits `Update` messages which consist of:
@@ -211,6 +213,8 @@ The stream created emits `Update` messages which consist of:
 * `states`- the updated `ProtocolSim` states for all components modified in this block
 
 The first message received will contain states for all protocol components registered to. Thereafter, further block updates will only contain data for updated or new components.
+
+If you want to restrict processing to specific tokens (for example USDC/WETH only), apply that filter in your own consumer logic when reading `new_pairs` and `states`.
 
 > Note: For efficiency, `ProtocolSim` states contain simulation-critical data only. Reference data such as protocol names and token information is provided in the `ProtocolComponent` objects within the `new_pairs` field. Consider maintaining a store of these components if you need this metadata.
 
