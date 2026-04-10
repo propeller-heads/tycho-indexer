@@ -8,6 +8,9 @@ import {CurveExecutor} from "../src/executors/CurveExecutor.sol";
 import {EkuboExecutor} from "../src/executors/EkuboExecutor.sol";
 import {EkuboV3Executor} from "../src/executors/EkuboV3Executor.sol";
 import {EtherfiExecutor} from "../src/executors/EtherfiExecutor.sol";
+import {
+    LiquidityPartyExecutor
+} from "../src/executors/LiquidityPartyExecutor.sol";
 import {HashflowExecutor} from "../src/executors/HashflowExecutor.sol";
 import {MaverickV2Executor} from "../src/executors/MaverickV2Executor.sol";
 import {UniswapV2Executor} from "../src/executors/UniswapV2Executor.sol";
@@ -111,6 +114,7 @@ contract TychoRouterTestSetup is
     WethExecutor public wethExecutor;
     EkuboV3Executor public ekuboV3Executor;
     EtherfiExecutor public etherfiExecutor;
+    LiquidityPartyExecutor public liquidityPartyExecutor;
     LiquoriceExecutor public liquoriceExecutor;
 
     FeeCalculator feeCalculator;
@@ -206,8 +210,9 @@ contract TychoRouterTestSetup is
         liquoriceExecutor = new LiquoriceExecutor(
             LIQUORICE_SETTLEMENT, LIQUORICE_BALANCE_MANAGER
         );
+        liquidityPartyExecutor = new LiquidityPartyExecutor();
 
-        address[] memory executors = new address[](19);
+        address[] memory executors = new address[](20);
         executors[0] = address(usv2Executor);
         executors[1] = address(usv3Executor);
         executors[2] = address(pancakev3Executor);
@@ -227,6 +232,7 @@ contract TychoRouterTestSetup is
         executors[16] = address(ekuboV3Executor);
         executors[17] = address(etherfiExecutor);
         executors[18] = address(liquoriceExecutor);
+        executors[19] = address(liquidityPartyExecutor);
         return executors;
     }
 
