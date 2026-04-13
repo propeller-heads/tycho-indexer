@@ -17,7 +17,8 @@
     "rocketpool": "0x6Ad86dec4c9b897640730eaEdF8ff4659A3be8BE",
     "erc4626": "0x11C1951e404e1a2A18a046F22501019a02C23D0B",
     "ekubo_v3": "0x128BA676f1426D0260f7f1EEDD799777dbe12fdb",
-    "weth": "0x8b2042d7be0be18303464362d39d667ca5e74d42"
+    "weth": "0x8b2042d7be0be18303464362d39d667ca5e74d42",
+    "rfq:liquorice": "0xAC51c531555b7154Fe1BCB7cF4508E93A3BEDa75"
   },
   "base": {
     "uniswap_v2": "0xD689b184C250E543eB3938D524733Ff6B4cfC296",
