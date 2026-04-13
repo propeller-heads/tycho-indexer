@@ -146,14 +146,20 @@ mod tests {
     #[case::missing_is_stable("is_stable")]
     async fn test_aerodrome_v1_try_from_missing_attribute(#[case] missing_attribute: &str) {
         let (token0, token1) = token_keys();
-        let attributes = HashMap::from([
+        let mut attributes = HashMap::from([
             ("reserve0".to_string(), Bytes::from(vec![0; 32])),
             ("reserve1".to_string(), Bytes::from(vec![0; 32])),
         ]);
         let mut static_attributes =
             HashMap::from([("is_stable".to_string(), Bytes::from(vec![0]))]);
-        if missing_attribute == "is_stable" {
-            static_attributes.remove(missing_attribute);
+        match missing_attribute {
+            "reserve0" | "reserve1" => {
+                attributes.remove(missing_attribute);
+            }
+            "is_stable" => {
+                static_attributes.remove(missing_attribute);
+            }
+            _ => unreachable!("unexpected attribute under test: {missing_attribute}"),
         }
 
         let snapshot = ComponentWithState {
