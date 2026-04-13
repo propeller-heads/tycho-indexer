@@ -1,3 +1,10 @@
+## [0.174.0](https://github.com/propeller-heads/tycho-execution/compare/0.173.0...0.174.0) (2026-04-13)
+
+
+### Features
+
+* add deployed liquorice executor address ([e4bb1fe](https://github.com/propeller-heads/tycho-execution/commit/e4bb1fee28293e568fa3ad7340b83356a1ee3ca4))
+
 ## [0.173.0](https://github.com/propeller-heads/tycho-execution/compare/0.172.2...0.173.0) (2026-04-09)
 
 
