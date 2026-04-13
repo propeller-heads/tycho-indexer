@@ -39,9 +39,9 @@ pub fn get_amount_out(
         (reserve1_normalized, reserve0_normalized, decimals1, decimals0)
     };
 
-    let fee_multiplier = U256::from(10000 - fee_bps);
-    let amount_in_with_fee =
-        safe_div_u256(safe_mul_u256(amount_in, fee_multiplier)?, U256::from(10000))?;
+    let fee_amount =
+        safe_div_u256(safe_mul_u256(amount_in, U256::from(fee_bps))?, U256::from(10000))?;
+    let amount_in_with_fee = safe_sub_u256(amount_in, fee_amount)?;
 
     let decimals_in_scale = U256::from(10u128.pow(decimals_in as u32));
     let amount_in_normalized =

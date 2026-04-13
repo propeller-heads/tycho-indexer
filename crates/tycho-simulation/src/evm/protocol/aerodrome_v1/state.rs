@@ -18,11 +18,8 @@ use tycho_common::{
 };
 
 use crate::evm::protocol::{
-    cpmm::protocol::{
-        cpmm_fee, cpmm_get_amount_out, cpmm_get_limits, cpmm_spot_price, cpmm_swap_to_price,
-        ProtocolFee,
-    },
-    safe_math::{safe_add_u256, safe_sub_u256},
+    cpmm::protocol::{cpmm_fee, cpmm_get_limits, cpmm_spot_price, cpmm_swap_to_price, ProtocolFee},
+    safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
     solidly_stable::protocol::{
         get_amount_out as solidly_stable_get_amount_out, get_limits as solidly_stable_get_limits,
     },
@@ -89,6 +86,38 @@ impl AerodromeV1State {
 
         Ok(ProtocolFee::new(U256::from(FEE_PRECISION_BPS - fee_bps), FEE_PRECISION))
     }
+
+    /// Aerodrome V1 volatile pools do not match our generic CPMM helper exactly.
+    ///
+    /// The on-chain pool first computes `floor(amount_in * fee / 10000)`, subtracts that fee from
+    /// `amount_in`, and only then applies the constant-product formula. Reusing
+    /// `cpmm_get_amount_out` would instead fold the fee into the numerator/denominator as
+    /// `amount_in * (10000 - fee) / 10000`, which is algebraically equivalent over reals but not
+    /// under Solidity integer division. That rounding difference is observable on-chain, so we
+    /// mirror the contract implementation here.
+    fn volatile_get_amount_out(
+        &self,
+        amount_in: U256,
+        reserve_in: U256,
+        reserve_out: U256,
+    ) -> Result<U256, SimulationError> {
+        if amount_in == U256::ZERO {
+            return Err(SimulationError::InvalidInput("Amount in cannot be zero".to_string(), None));
+        }
+
+        if reserve_in == U256::ZERO || reserve_out == U256::ZERO {
+            return Err(SimulationError::RecoverableError("No liquidity".to_string()));
+        }
+
+        let fee_bps = self.resolved_fee_bps();
+        let fee_amount =
+            safe_div_u256(safe_mul_u256(amount_in, U256::from(fee_bps))?, FEE_PRECISION)?;
+        let amount_in_after_fee = safe_sub_u256(amount_in, fee_amount)?;
+        let numerator = safe_mul_u256(amount_in_after_fee, reserve_out)?;
+        let denominator = safe_add_u256(reserve_in, amount_in_after_fee)?;
+
+        safe_div_u256(numerator, denominator)
+    }
 }
 
 #[typetag::serde]
@@ -126,8 +155,7 @@ impl ProtocolSim for AerodromeV1State {
             } else {
                 (self.reserve1, self.reserve0)
             };
-            let fee = self.protocol_fee()?;
-            cpmm_get_amount_out(amount_in, reserve_in, reserve_out, fee)?
+            self.volatile_get_amount_out(amount_in, reserve_in, reserve_out)?
         };
         let mut new_state = self.clone();
         let (reserve0_mut, reserve1_mut) = (&mut new_state.reserve0, &mut new_state.reserve1);
@@ -261,7 +289,10 @@ impl ProtocolSim for AerodromeV1State {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        collections::{HashMap, HashSet},
+        str::FromStr,
+    };
 
     use alloy::primitives::U256;
     use num_bigint::BigUint;
@@ -288,21 +319,62 @@ mod tests {
         Token::new(&Bytes::from(addr), "T1", 18, 0, &[Some(10_000)], Chain::Ethereum, 100)
     }
 
+    fn base_usdc() -> Token {
+        Token::new(
+            &Bytes::from_str("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913").unwrap(),
+            "USDC",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Base,
+            100,
+        )
+    }
+
+    fn base_usdt() -> Token {
+        Token::new(
+            &Bytes::from_str("0xfde4c96c8593536e31f229ea8f37b2ada2699bb2").unwrap(),
+            "USDT",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Base,
+            100,
+        )
+    }
+
+    fn base_aero() -> Token {
+        Token::new(
+            &Bytes::from_str("0x940181a94a35a4569e4529a3cdfb74e38fd98631").unwrap(),
+            "AERO",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Base,
+            100,
+        )
+    }
+
     #[test]
-    fn test_get_amount_out_works() {
+    fn test_get_amount_out_matches_real_volatile_pool_on_chain() {
+        // Base Aerodrome volatile USDC/AERO pool 0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d
+        // at block 44,628,997:
+        // - fee: 30 bps
+        // - reserves: 12_130_133_468_200 / 33_517_464_576_714_176_786_208_401
+        // - getAmountOut(26_225_348_558, USDC) = 72_091_968_892_551_547_616_192
         let state = AerodromeV1State::new(
-            U256::from(2_000_000u32),
-            U256::from(1_000_000u32),
+            U256::from_str("12130133468200").unwrap(),
+            U256::from_str("33517464576714176786208401").unwrap(),
             false,
             30,
-            18,
+            6,
             18,
         );
-        let amount_in = BigUint::from(1_000u32);
-        let result = state
-            .get_amount_out(amount_in, &token_0(), &token_1())
+        let out = state
+            .get_amount_out(BigUint::from_str("26225348558").unwrap(), &base_usdc(), &base_aero())
             .expect("swap should succeed");
-        assert!(result.amount > BigUint::from(0u32));
+
+        assert_eq!(out.amount, BigUint::from_str("72091968892551547616192").unwrap());
     }
 
     #[test]
@@ -421,5 +493,28 @@ mod tests {
             .expect("stable swap should succeed");
 
         assert_eq!(out.amount, BigUint::from(2_004_830_151_166_915_124u128));
+    }
+
+    #[test]
+    fn test_get_amount_out_matches_real_stable_pool_on_chain() {
+        // Base Aerodrome stable USDC/USDT pool 0x96508AE8037c6bD16162620187691F1c1e3e07C1
+        // at block 44,629,732:
+        // - fee: 5 bps
+        // - reserves: 2_170_141_538 / 2_029_164_659
+        // - getAmountOut(123_456_789, USDC) = 123_320_126
+        let state = AerodromeV1State::new(
+            U256::from(2_170_141_538u32),
+            U256::from(2_029_164_659u32),
+            true,
+            5,
+            6,
+            6,
+        );
+
+        let out = state
+            .get_amount_out(BigUint::from(123_456_789u32), &base_usdc(), &base_usdt())
+            .expect("stable swap should succeed");
+
+        assert_eq!(out.amount, BigUint::from(123_320_126u32));
     }
 }
