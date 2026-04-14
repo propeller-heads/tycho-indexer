@@ -1,7 +1,7 @@
 pragma solidity ^0.8.26;
 
-import "@src/executors/UniswapV4Executor.sol";
 import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
+import {Dispatcher__UnsupportedSingleHopCycle} from "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 import {Vault__InsufficientBalance} from "@src/Vault.sol";
 
@@ -40,27 +40,6 @@ contract FalseTokenCallbackPool is TychoRouterTestSetup {
         );
         (bool success,) = address(msg.sender).call(callbackData);
         IERC20(DAI_ADDR).transfer(address(msg.sender), 1000e6);
-        require(success, "Callback failed");
-        return (0, 0);
-    }
-}
-
-contract ZeroCallbackAmountPool is TychoRouterTestSetup {
-    // When swap() is called, calls back into TychoRouter with crafted data instructing
-    // the router to transfer zero tokens, attempting to impact delta accounting
-    // in unexpected ways. Pool transfers nothing in return.
-
-    function swap(address, bool, int256, uint160, bytes calldata)
-        external
-        returns (int256, int256)
-    {
-        bytes memory callbackData = abi.encodeWithSignature(
-            "slipstreamsCallback(int256,int256,bytes)",
-            int256(0), // callback amount
-            int256(0),
-            abi.encodePacked(WETH_ADDR, bytes23(0)) // token to steal
-        );
-        (bool success,) = address(msg.sender).call(callbackData);
         require(success, "Callback failed");
         return (0, 0);
     }
@@ -209,58 +188,6 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         // No USDC was stolen
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), stolenAmount);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(maliciousPool)), 0);
-    }
-
-    function testZeroCallbackAmountSingleSwap() public {
-        // Alice tries to take advantage of cyclical swap accounting using a malicious
-        // zero-amount callback pool to move router funds into her vault.
-
-        uint256 stolenAmount = 10_000 ether;
-        uint256 routerBalance = 10_000 ether;
-        deal(WETH_ADDR, tychoRouterAddr, stolenAmount);
-
-        ZeroCallbackAmountPool maliciousPool = new ZeroCallbackAmountPool();
-
-        // Malicious pool that gives no tokens and asked for 0 amount in callback
-        deal(WETH_ADDR, address(maliciousPool), stolenAmount);
-
-        // Router has some WETH that does not belong to Alice.
-        deal(WETH_ADDR, tychoRouterAddr, routerBalance);
-
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR, WETH_ADDR, bytes3(0), address(maliciousPool), uint8(1)
-        );
-        bytes memory swap =
-            encodeSingleSwap(address(slipstreamsExecutor), protocolData);
-
-        uint256 aliceVaultBalanceBefore =
-            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
-        uint256 routerBalanceBefore =
-            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
-
-        vm.startPrank(ALICE);
-
-        vm.expectRevert(
-            abi.encodeWithSelector(TychoRouter__NegativeSlippage.selector, 0, 1)
-        );
-        tychoRouter.singleSwapUsingVault(
-            10_000 ether,
-            WETH_ADDR,
-            WETH_ADDR,
-            1,
-            tychoRouterAddr,
-            noClientFee(),
-            swap
-        );
-
-        uint256 aliceVaultBalanceAfter =
-            tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
-        uint256 routerBalanceAfter =
-            IERC20(WETH_ADDR).balanceOf(tychoRouterAddr);
-
-        // Alice's should not have changed.
-        assertEq(aliceVaultBalanceBefore, aliceVaultBalanceAfter);
-        assertEq(routerBalanceBefore, routerBalanceAfter);
     }
 
     function testSingleSwapInsufficientApproval() public {
@@ -636,6 +563,31 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             ALICE,
             noClientFee(),
             swap
+        );
+        vm.stopPrank();
+    }
+
+    function testSingleHopCyclicSwapReverts() public {
+        // Any swap where tokenIn == tokenOut within a single executor call is blocked
+        // by Dispatcher.__UnsupportedSingleHopCycle.
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, WETH_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Dispatcher__UnsupportedSingleHopCycle.selector, WETH_ADDR
+            )
+        );
+        tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, WETH_ADDR, 1, ALICE, noClientFee(), swap
         );
         vm.stopPrank();
     }

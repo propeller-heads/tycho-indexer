@@ -89,7 +89,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             WETH_ADDR,
             WBTC_ADDR,
             1, // min amount
-            4,
+            2, // nTokens: [WETH=0, WBTC=1]
             ALICE, // receiver
             noClientFee(),
             pleEncode(swaps)
@@ -350,64 +350,52 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    function testNegativeOutputCyclicalSwap() public {
-        // Performs a cyclical swap on a pool which transfers the input amount while
-        // offering no output in return. The client contribution is 1 ether, so the
-        // client makes up for the whole amount. However, since this pool result in
-        // a negative delta at the time of computing client fees, an unprofitable
-        // arbitrage is detected and the TychoRouter reverts with
-        // TychoRouter__NegativeOutputDelta
+    function testUnprofitableArbitrageReverts() public {
+        // A two-hop cyclic route (USDC → WETH → USDC) that loses money to pool
+        // fees. When the client tries to cover the shortfall with a vault
+        // contribution, the router detects a negative USDC delta (vault paid out
+        // more than it received) and reverts with NegativeOutputDelta rather
+        // than silently draining the client.
+        uint256 amountIn = 1_000_000_000; // 1000 USDC
 
-        uint256 stolenAmount = 1 ether;
-        // The client (Alice) will contribute to this swap with their own funds
-        uint256 clientContribution = stolenAmount;
+        deal(USDC_ADDR, ALICE, amountIn * 2);
         vm.startPrank(ALICE);
-        deal(WETH_ADDR, ALICE, clientContribution);
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
-        tychoRouter.deposit(WETH_ADDR, clientContribution);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn * 2);
+        tychoRouter.deposit(USDC_ADDR, amountIn * 2);
 
-        vm.stopPrank();
-        vm.startPrank(BOB);
-        deal(WETH_ADDR, BOB, stolenAmount);
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), stolenAmount);
-        tychoRouter.deposit(WETH_ADDR, stolenAmount);
+        // USDC → WETH on USV3, WETH → USDC on USV2
+        bytes memory usdcWethV3Data =
+            encodeUniswapV3Swap(USDC_ADDR, WETH_ADDR, USDC_WETH_USV3, true);
+        bytes memory wethUsdcV2Data =
+            encodeUniswapV2Swap(USDC_WETH_USV2, WETH_ADDR, USDC_ADDR);
 
-        FakeCurvePool maliciousPool = new FakeCurvePool();
-
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            WETH_ADDR,
-            address(maliciousPool),
-            uint8(3),
-            uint8(1),
-            uint8(1)
-        );
-        bytes memory swap =
-            encodeSingleSwap(address(curveExecutor), protocolData);
+        bytes[] memory swaps = new bytes[](2);
+        swaps[0] = encodeSequentialSwap(address(usv3Executor), usdcWethV3Data);
+        swaps[1] = encodeSequentialSwap(address(usv2Executor), wethUsdcV2Data);
 
         ClientFeeParams memory feeParams =
-            makeClientFeeParams(0, stolenAmount, tychoRouterAddr, ALICE_PK);
+            makeClientFeeParams(0, amountIn / 10, tychoRouterAddr, ALICE_PK);
 
-        int256 negativeOutput = -int256(stolenAmount);
         vm.expectRevert(
             abi.encodeWithSelector(
-                TychoRouter__NegativeOutputDelta.selector, negativeOutput
+                TychoRouter__NegativeOutputDelta.selector, int256(-4144175)
             )
         );
-        tychoRouter.singleSwapUsingVault(
-            stolenAmount,
-            WETH_ADDR,
-            WETH_ADDR,
-            stolenAmount,
+        tychoRouter.sequentialSwapUsingVault(
+            amountIn,
+            USDC_ADDR,
+            USDC_ADDR,
+            amountIn,
             tychoRouterAddr,
             feeParams,
-            swap
+            pleEncode(swaps)
         );
+        vm.stopPrank();
     }
 
     function testZeroOutputDeltaClientContribution() public {
-        // The pool returns the same amount as it gets, so the output delta is zero.
-        // However, Bob has requested twice this amount, so the rest comes from
+        // The protocols return the same amount as they gets, so the output delta is
+        // zero. However, Bob has requested twice this amount, so the rest comes from
         // Alice's client contribution.
 
         uint256 inputAmount = 1 ether;
@@ -416,41 +404,39 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         uint256 clientContribution = inputAmount;
         vm.startPrank(ALICE);
         deal(WETH_ADDR, ALICE, clientContribution);
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, clientContribution);
         tychoRouter.deposit(WETH_ADDR, clientContribution);
 
         vm.stopPrank();
         vm.startPrank(BOB);
         deal(WETH_ADDR, BOB, inputAmount);
-        IERC20(WETH_ADDR).approve(address(tychoRouterAddr), inputAmount);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, inputAmount);
         tychoRouter.deposit(WETH_ADDR, inputAmount);
 
-        OneToOneCurvePool oneToOnePool = new OneToOneCurvePool();
-
-        bytes memory protocolData = abi.encodePacked(
-            WETH_ADDR,
-            WETH_ADDR,
-            address(oneToOnePool),
-            uint8(3),
-            uint8(1),
-            uint8(1)
+        // Hop 1: WETH → ETH (unwrap), Hop 2: ETH → WETH (wrap)
+        bytes[] memory swaps = new bytes[](2);
+        swaps[0] = encodeSequentialSwap(
+            address(wethExecutor), abi.encodePacked(uint8(0))
         );
-        bytes memory swap =
-            encodeSingleSwap(address(curveExecutor), protocolData);
+        swaps[1] = encodeSequentialSwap(
+            address(wethExecutor), abi.encodePacked(uint8(1))
+        );
 
+        // Client contributes up to amountIn to cover the break-even shortfall.
         ClientFeeParams memory feeParams =
             makeClientFeeParams(0, inputAmount, tychoRouterAddr, ALICE_PK);
 
-        int256 negativeOutput = -int256(inputAmount);
-        tychoRouter.singleSwapUsingVault(
+        tychoRouter.sequentialSwapUsingVault(
             inputAmount,
             WETH_ADDR,
             WETH_ADDR,
             2 * inputAmount,
             tychoRouterAddr,
             feeParams,
-            swap
+            pleEncode(swaps)
         );
+        vm.stopPrank();
+
         uint256 aliceBalance =
             tychoRouter.balanceOf(ALICE, uint256(uint160(WETH_ADDR)));
         uint256 bobBalance =
@@ -765,43 +751,5 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         // Router balance reflects vault balance
         uint256 routerDaiAfter = IERC20(DAI_ADDR).balanceOf(tychoRouterAddr);
         assertEq(routerDaiAfter - routerDaiBefore, expectedAmountOut);
-    }
-
-    function testCyclicVaultDrainIsBlocked() public {
-        // Attacker calls singleSwapUsingVault with tokenIn == tokenOut and a
-        // fake pool that does nothing. The dispatcher should correctly report a
-        // 0 swap output and the router should fail with NegativeSlippage.
-        uint256 victimDeposit = 1000e6;
-        uint256 stealAmount = 500e6;
-
-        deal(USDC_ADDR, BOB, victimDeposit);
-        vm.startPrank(BOB);
-        IERC20(USDC_ADDR).approve(tychoRouterAddr, victimDeposit);
-        tychoRouter.deposit(USDC_ADDR, victimDeposit);
-        vm.stopPrank();
-
-        FakeSlipstreamPool fakePool = new FakeSlipstreamPool();
-
-        bytes memory protocolData = abi.encodePacked(
-            USDC_ADDR, USDC_ADDR, bytes3(0), address(fakePool), uint8(1)
-        );
-        bytes memory swapData =
-            encodeSingleSwap(address(slipstreamsExecutor), protocolData);
-
-        vm.prank(ALICE);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                TychoRouter__NegativeSlippage.selector, 0, stealAmount
-            )
-        );
-        tychoRouter.singleSwapUsingVault(
-            stealAmount,
-            USDC_ADDR,
-            USDC_ADDR,
-            stealAmount,
-            tychoRouterAddr,
-            noClientFee(),
-            swapData
-        );
     }
 }

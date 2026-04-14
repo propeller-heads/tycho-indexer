@@ -853,7 +853,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         uint256[] memory remainingAmounts = new uint256[](nTokens);
         uint256[] memory amounts = new uint256[](nTokens);
         uint256 cyclicSwapAmountOut = 0;
-        uint8 lastTokenOutIndex = 0;
         amounts[0] = amountIn;
         remainingAmounts[0] = amountIn;
 
@@ -868,7 +867,6 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                 address executor,
                 bytes calldata protocolData
             ) = swapData.decodeSplitSwap();
-            lastTokenOutIndex = tokenOutIndex;
 
             uint256 currentAmountIn = split > 0
                 ? (amounts[tokenInIndex] * split) / 0xffffff
@@ -899,9 +897,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             remainingAmounts[tokenOutIndex] += currentAmountOut;
             remainingAmounts[tokenInIndex] -= currentAmountIn;
         }
-        return lastTokenOutIndex == 0
-            ? cyclicSwapAmountOut
-            : amounts[lastTokenOutIndex];
+        // For cyclic routes the output token is at index 0; for regular routes
+        // it is at the last index (nTokens - 1).
+        return isCyclical ? cyclicSwapAmountOut : amounts[nTokens - 1];
     }
 
     /**

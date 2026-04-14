@@ -52,7 +52,15 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
         // so we need to check the last swap's out token as well
         let no_split = swap.split() == 0.0 && *swap.token_in() == last_swap_out_token;
 
-        if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split {
+        // Merging this swap would make the group's token_out equal to its token_in, which
+        // the router rejects as an unsupported single-hop cycle. Keep the swap in its
+        // own group instead.
+        let no_cycle = current_group
+            .as_ref()
+            .map_or(true, |g| swap.token_out() != &g.token_in);
+
+        if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split && no_cycle
+        {
             // Second or later groupable pool in a sequence of groupable pools. Merge to the
             // current group.
             if let Some(group) = current_group.as_mut() {
@@ -293,6 +301,110 @@ mod tests {
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
                 }
+            ]
+        );
+    }
+
+    #[test]
+    fn test_group_swaps_cyclic_two_hops() {
+        // A two-hop cycle entirely on USV4 must NOT be collapsed into one group,
+        // because that would produce token_in == token_out, which
+        // the Router rejects as an unsupported single-hop cycle.
+        //
+        //   USDC ──(USV4)──> WETH ──(USV4)──> USDC
+        //
+        // Expected: two separate groups
+        //   Group 1: USDC -> WETH
+        //   Group 2: WETH -> USDC
+
+        let weth = weth();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+
+        let swap_usdc_weth = Swap::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            usdc.clone(),
+            weth.clone(),
+        );
+        let swap_weth_usdc = Swap::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            usdc.clone(),
+        );
+
+        let grouped_swaps = group_swaps(&[swap_usdc_weth.clone(), swap_weth_usdc.clone()]);
+
+        assert_eq!(
+            grouped_swaps,
+            vec![
+                SwapGroup {
+                    swaps: vec![swap_usdc_weth],
+                    token_in: usdc.clone(),
+                    token_out: weth.clone(),
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_weth_usdc],
+                    token_in: weth,
+                    token_out: usdc,
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn test_group_swaps_cyclic_three_hops() {
+        // A three-hop cycle on USV4: the first two hops are safe to group.
+        // The third hop would make the group cyclic, so it must start a new group.
+        //
+        //   USDC ──(USV4)──> WETH ──(USV4)──> DAI ──(USV4)──> USDC
+        //
+        // Expected: two groups
+        //   Group 1: USDC -> WETH -> DAI  (two swaps)
+        //   Group 2: DAI  -> USDC        (one swap)
+
+        let weth = weth();
+        let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
+        let swap_usdc_weth = Swap::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            usdc.clone(),
+            weth.clone(),
+        );
+        let swap_weth_dai = Swap::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            weth.clone(),
+            dai.clone(),
+        );
+        let swap_dai_usdc = Swap::new(
+            ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
+            dai.clone(),
+            usdc.clone(),
+        );
+
+        let grouped_swaps =
+            group_swaps(&[swap_usdc_weth.clone(), swap_weth_dai.clone(), swap_dai_usdc.clone()]);
+
+        assert_eq!(
+            grouped_swaps,
+            vec![
+                SwapGroup {
+                    swaps: vec![swap_usdc_weth, swap_weth_dai],
+                    token_in: usdc.clone(),
+                    token_out: dai.clone(),
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
+                SwapGroup {
+                    swaps: vec![swap_dai_usdc],
+                    token_in: dai,
+                    token_out: usdc,
+                    protocol_system: "uniswap_v4".to_string(),
+                    split: 0f64,
+                },
             ]
         );
     }
