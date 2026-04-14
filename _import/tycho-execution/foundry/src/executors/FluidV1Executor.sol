@@ -34,9 +34,6 @@ contract FluidV1Executor is IExecutor, ICallback {
     // stores current dex address
     bytes32 private constant _CURRENT_DEX_SLOT =
         0x823205ddf0d345ca541c0f695a3f87b5dce7be9df5ecffce73a87e1ad796ad20;
-    // keccak256("FluidV1Executor#SWAP_TOKEN_IN_SLOT")
-    uint256 private constant _SWAP_TOKEN_IN_SLOT =
-        0xda0e4f882dc4efcea85306907dc3da81baebbcf2cd7b7c4fd7b1f3c8dcc82cbd;
     // dexCallback(address,amount)
     bytes4 private constant _CALLBACK_SELECTOR = 0x9410ae88;
 
@@ -69,13 +66,6 @@ contract FluidV1Executor is IExecutor, ICallback {
         bool isNativeSell;
 
         (dex, zero2one, isNativeSell) = _decodeData(data);
-
-        address tokenIn =
-            isNativeSell ? address(0) : address(bytes20(data[21:41]));
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
-        }
 
         if (!isNativeSell) {
             _setCurrentDex(dex);
@@ -166,20 +156,13 @@ contract FluidV1Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata /* data */
+        bytes calldata, /* data */
+        address /* tokenIn */
     )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // slither-disable-next-line assembly
-        assembly {
-            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
-        }
         // This is only called for ERC20 swaps. Native sells use swapIn() (no
         // callback) rather than swapInWithCallback(), so this path is never
         // reached for native tokens.

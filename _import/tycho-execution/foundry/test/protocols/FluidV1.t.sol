@@ -8,17 +8,6 @@ import "forge-std/Test.sol";
 contract FluidV1ExecutorExposed is FluidV1Executor {
     constructor(address _liquidity) FluidV1Executor(_liquidity) {}
 
-    // keccak256("FluidV1Executor#SWAP_TOKEN_IN_SLOT")
-    function setSwapTokenIn(address tokenIn) external {
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(
-                0xda0e4f882dc4efcea85306907dc3da81baebbcf2cd7b7c4fd7b1f3c8dcc82cbd,
-                tokenIn
-            )
-        }
-    }
-
     function decodeData(bytes calldata data)
         external
         pure
@@ -35,12 +24,11 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
         return _getCurrentDex();
     }
 
-    function dexCallback(address, uint256) public {
-        (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = this.getCallbackTransferData(msg.data);
+    // The Fluid protocol calls dexCallback(address token, uint256 amount) during swapInWithCallback.
+    // The first argument is the token that must be transferred to liquidity.
+    function dexCallback(address tokenIn, uint256) public {
+        (TransferManager.TransferType transferType, address receiver) =
+            this.getCallbackTransferData(msg.data, tokenIn);
         if (transferType == TransferManager.TransferType.Transfer) {
             uint256 amount = abi.decode(msg.data[36:68], (uint256));
             IERC20(tokenIn).transfer(receiver, amount);
@@ -104,13 +92,10 @@ contract FluidV1ExecutorTest is Test, Constants {
             abi.encodeWithSelector(hex"12345678", DAI_ADDR, amountOwed);
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
-        executor.setSwapTokenIn(DAI_ADDR);
 
-        (, address receiver, address tokenIn) =
-            executor.getCallbackTransferData(data);
+        (, address receiver) = executor.getCallbackTransferData(data, DAI_ADDR);
 
         assertEq(receiver, FLUIDV1_LIQUIDITY);
-        assertEq(tokenIn, DAI_ADDR);
     }
 
     function testGetCallbackTransferDataETH() public {
@@ -120,11 +105,10 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
-        (, address receiver, address tokenIn) =
-            executor.getCallbackTransferData(data);
+        (, address receiver) =
+            executor.getCallbackTransferData(data, address(0));
 
         assertEq(receiver, FLUIDV1_LIQUIDITY);
-        assertEq(tokenIn, address(0));
     }
 
     function testSwapParamsRoundtrip() public {

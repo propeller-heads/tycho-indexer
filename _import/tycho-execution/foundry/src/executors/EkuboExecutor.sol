@@ -38,10 +38,6 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
 
     uint256 private constant _SKIP_AHEAD = 0;
 
-    // keccak256("EkuboExecutor#SWAP_TOKEN_IN_SLOT")
-    uint256 private constant _SWAP_TOKEN_IN_SLOT =
-        0x7fb41345f8639523bbb9d5306a95d572badfdba7640974f98831477929881659;
-
     using SafeERC20 for IERC20;
 
     constructor(address core, address mevResist) {
@@ -72,10 +68,6 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         }
 
         address tokenIn = address(bytes20(data[0:20]));
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
-        }
 
         // amountIn must be at most type(int128).MAX
         _lock(
@@ -282,19 +274,11 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(bytes calldata data, address tokenIn)
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // slither-disable-next-line assembly
-        assembly {
-            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
-        }
         bytes4 selector = bytes4(data[:4]);
         if (selector == _PAY_CALLBACK_SELECTOR) {
             transferType = TransferManager.TransferType.Transfer;
@@ -302,14 +286,14 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         } else {
             // _LOCKED_SELECTOR
             if (tokenIn == address(0)) {
-                // ETH transfers are handled in the Executor, so we need to set the transferType to
-                // TransferNativeInExecutor to update delta accounting accordingly.
+                // ETH transfers are handled in the Executor, so we need to set the
+                // transferType to TransferNativeInExecutor to update delta accounting.
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;
             } else {
+                // Locked callback: no transfer needed for ERC20 tokens. This is
+                // done in the Pay callback.
                 transferType = TransferManager.TransferType.None;
-                receiver = address(0);
-                tokenIn = address(0);
             }
         }
     }

@@ -10,17 +10,6 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     constructor() SlipstreamsExecutor() {}
 
-    // keccak256("SlipstreamsExecutor#SWAP_TOKEN_IN_SLOT")
-    function setSwapTokenIn(address tokenIn) external {
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(
-                0x547df2547f2dd9f68ad702c3df0975b070c05f07b7dbbfa0cbac985e275e9e1f,
-                tokenIn
-            )
-        }
-    }
-
     function decodeData(bytes calldata data)
         external
         pure
@@ -34,15 +23,20 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
         int256 amount1Delta,
         bytes calldata /* data */
     ) external {
+        // tokenIn is the first 20 bytes of the protocol data embedded in msg.data
+        // layout: selector(4) + amount0(32) + amount1(32) + offset(32) + length(32) + protocolData
+        // protocolData starts at byte 132: tokenIn(20), tokenOut(20), tickSpacing(3)
+        address tokenIn = address(bytes20(msg.data[132:152]));
+
         // Use delegatecall to preserve msg.sender
-        bytes memory callData =
-            abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
+        bytes memory callData = abi.encodeWithSignature(
+            "getCallbackTransferData(bytes,address)", msg.data, tokenIn
+        );
         (bool success, bytes memory result) =
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn) =
-            abi.decode(result, (uint8, address, address));
+        (, address receiver) = abi.decode(result, (uint8, address));
 
         uint256 amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -113,12 +107,10 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        slipstreamsExposed.setSwapTokenIn(BASE_WETH);
-        (, address receiver, address tokenIn) =
-            slipstreamsExposed.getCallbackTransferData(callbackData);
+        (, address receiver) =
+            slipstreamsExposed.getCallbackTransferData(callbackData, BASE_WETH);
 
         assertEq(receiver, address(this));
-        assertEq(tokenIn, BASE_WETH);
     }
 
     function testSwap() public {

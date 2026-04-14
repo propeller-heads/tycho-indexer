@@ -10,17 +10,6 @@ import {Test} from "../../lib/forge-std/src/Test.sol";
 contract UniswapV3ExecutorExposed is UniswapV3Executor {
     constructor() UniswapV3Executor() {}
 
-    // keccak256("UniswapV3Executor#SWAP_TOKEN_IN_SLOT")
-    function setSwapTokenIn(address tokenIn) external {
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(
-                0x7b247c863499b2985ec2418fc9ebf270c026e775d28264b99f61c72a72adfe96,
-                tokenIn
-            )
-        }
-    }
-
     function decodeData(bytes calldata data)
         external
         pure
@@ -34,15 +23,20 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
         int256 amount1Delta,
         bytes calldata /* data */
     ) external {
+        // tokenIn is the first 20 bytes of the protocol data embedded in msg.data
+        // layout: selector(4) + amount0(32) + amount1(32) + offset(32) + length(32) + protocolData
+        // protocolData starts at byte 132: tokenIn(20), tokenOut(20), fee(3)
+        address tokenIn = address(bytes20(msg.data[132:152]));
+
         // Use delegatecall to preserve msg.sender
-        bytes memory callData =
-            abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
+        bytes memory callData = abi.encodeWithSignature(
+            "getCallbackTransferData(bytes,address)", msg.data, tokenIn
+        );
         (bool success, bytes memory result) =
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn) =
-            abi.decode(result, (uint8, address, address));
+        (, address receiver) = abi.decode(result, (uint8, address));
 
         uint256 amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -113,12 +107,10 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        uniswapV3Exposed.setSwapTokenIn(WETH_ADDR);
-        (, address receiver, address tokenIn) =
-            uniswapV3Exposed.getCallbackTransferData(callbackData);
+        (, address receiver) =
+            uniswapV3Exposed.getCallbackTransferData(callbackData, WETH_ADDR);
 
         assertEq(receiver, address(this));
-        assertEq(tokenIn, WETH_ADDR);
     }
 
     function testSwapIntegration() public {

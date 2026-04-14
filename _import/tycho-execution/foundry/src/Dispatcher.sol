@@ -48,6 +48,9 @@ contract Dispatcher is TransferManager {
     // keccak256("Dispatcher#SWAP_INPUT_AMOUNT_SLOT")
     uint256 private constant _SWAP_INPUT_AMOUNT_SLOT =
         0xce9e2e8e50d57f2d688020ea7ab16e2039bcf4dc7175eba827e178586597bb39;
+    // keccak256("Dispatcher#SWAP_INPUT_TOKEN_SLOT")
+    uint256 private constant _SWAP_INPUT_TOKEN_SLOT =
+        0x0c22c14aba48b0e26e3b58475c66f358c352532122e537c32e8184c0159e6e10;
 
     uint256 public constant DELAY_EXECUTOR_ACTIVATION = 3 days;
 
@@ -138,6 +141,12 @@ contract Dispatcher is TransferManager {
             revert Dispatcher__UnsupportedSingleHopCycle(tokenIn);
         }
 
+        // Store tokenIn so it can be passed to getCallbackTransferData if a
+        // callback occurs during the swap.
+        assembly {
+            tstore(_SWAP_INPUT_TOKEN_SLOT, tokenIn)
+        }
+
         // Measure output before _transfer so cyclic handling is uniform
         // across callback and direct-transfer types.
         address measureAt = outputToRouter ? address(this) : receiver;
@@ -166,6 +175,7 @@ contract Dispatcher is TransferManager {
             tstore(_IS_FIRST_SWAP_SLOT, 0)
             tstore(_IS_SPLIT_SWAP_SLOT, 0)
             tstore(_SWAP_INPUT_AMOUNT_SLOT, 0)
+            tstore(_SWAP_INPUT_TOKEN_SLOT, 0)
         }
 
         // Revoke any lingering allowance the protocol didn't consume.
@@ -207,18 +217,20 @@ contract Dispatcher is TransferManager {
         bool isFirstSwap;
         bool isSplitSwap;
         uint256 amount;
+        address tokenIn;
         assembly {
             executor := tload(_CURRENTLY_SWAPPING_EXECUTOR_SLOT)
             isFirstSwap := tload(_IS_FIRST_SWAP_SLOT)
             isSplitSwap := tload(_IS_SPLIT_SWAP_SLOT)
             amount := tload(_SWAP_INPUT_AMOUNT_SLOT)
+            tokenIn := tload(_SWAP_INPUT_TOKEN_SLOT)
         }
 
         _validateExecutor(executor);
 
         (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
             abi.encodeWithSelector(
-                ICallback.getCallbackTransferData.selector, data
+                ICallback.getCallbackTransferData.selector, data, tokenIn
             )
         );
 
@@ -232,13 +244,8 @@ contract Dispatcher is TransferManager {
             );
         }
 
-        (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = abi.decode(
-            transferData, (TransferManager.TransferType, address, address)
-        );
+        (TransferManager.TransferType transferType, address receiver) =
+            abi.decode(transferData, (TransferManager.TransferType, address));
 
         _transfer(
             receiver,

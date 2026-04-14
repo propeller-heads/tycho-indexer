@@ -53,10 +53,6 @@ contract EkuboV3Executor is IExecutor, ICallback {
 
     uint256 private constant _SKIP_AHEAD = 0;
 
-    // keccak256("EkuboV3Executor#SWAP_TOKEN_IN_SLOT")
-    uint256 private constant _SWAP_TOKEN_IN_SLOT =
-        0xeec2d11ff99b64746d43339f0145bc3d1448e71c96759d46589a500ecd8bd6ff;
-
     using SafeERC20 for IERC20;
 
     constructor() {}
@@ -111,10 +107,6 @@ contract EkuboV3Executor is IExecutor, ICallback {
         if (data.length < 72) revert EkuboV3Executor__InvalidDataLength();
 
         address tokenIn = address(bytes20(data[0:20]));
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
-        }
         // startPayments needs to be called in CORE before we transfer the token IN (which happens during callback)
         // slither-disable-next-line unused-return
         LibCall.callContract(
@@ -153,20 +145,13 @@ contract EkuboV3Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata /* data */
+        bytes calldata, /* data */
+        address tokenIn
     )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // slither-disable-next-line assembly
-        assembly {
-            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
-        }
         receiver = CORE_ADDRESS;
 
         if (tokenIn == NATIVE_TOKEN_ADDRESS) {

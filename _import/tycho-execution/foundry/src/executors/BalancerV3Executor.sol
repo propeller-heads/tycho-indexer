@@ -20,10 +20,6 @@ error BalancerV3Executor__SenderIsNotVault(address sender);
 contract BalancerV3Executor is IExecutor, ICallback {
     using SafeERC20 for IERC20;
 
-    // keccak256("BalancerV3Executor#SWAP_TOKEN_IN_SLOT")
-    uint256 private constant _SWAP_TOKEN_IN_SLOT =
-        0x4cc7ac20795fd45516e40dcca5f64da078d10c8c827772d2b4780868fab6027f;
-
     IVault private constant _VAULT =
         IVault(0xbA1333333333a1BA1108E8412f11850A5C319bA9);
 
@@ -46,11 +42,6 @@ contract BalancerV3Executor is IExecutor, ICallback {
     {
         if (data.length != 60) {
             revert BalancerV3Executor__InvalidDataLength();
-        }
-        address tokenIn = address(bytes20(data[0:20]));
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
         }
         // slither-disable-next-line unused-return
         _VAULT.unlock(abi.encodePacked(amountIn, data, receiver));
@@ -155,21 +146,14 @@ contract BalancerV3Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata /* data */
+        bytes calldata, /* data */
+        address /* tokenIn */
     )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // slither-disable-next-line assembly
-        assembly {
-            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
-        }
-        receiver = address(_VAULT);
         transferType = TransferManager.TransferType.Transfer;
+        receiver = address(_VAULT);
     }
 }

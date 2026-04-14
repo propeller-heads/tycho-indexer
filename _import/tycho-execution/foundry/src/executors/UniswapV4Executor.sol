@@ -59,10 +59,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
     address private immutable _angstromHookAddress;
     address private immutable _self;
 
-    // keccak256("UniswapV4Executor#SWAP_TOKEN_IN_SLOT")
-    uint256 private constant _SWAP_TOKEN_IN_SLOT =
-        0x14d08dfe0dee33a1b1c1707086278bba5e4749e8e5cb4759f44d880c57783a4f;
-
     struct UniswapV4Pool {
         address intermediaryToken;
         uint24 fee;
@@ -111,10 +107,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bool zeroForOne;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
         (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
-        // slither-disable-next-line assembly
-        assembly {
-            tstore(_SWAP_TOKEN_IN_SLOT, tokenIn)
-        }
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -549,20 +541,13 @@ contract UniswapV4Executor is IExecutor, ICallback {
     }
 
     function getCallbackTransferData(
-        bytes calldata /* data */
+        bytes calldata, /* data */
+        address tokenIn
     )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // slither-disable-next-line assembly
-        assembly {
-            tokenIn := tload(_SWAP_TOKEN_IN_SLOT)
-        }
         receiver = address(poolManager);
         if (tokenIn == address(0)) {
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
