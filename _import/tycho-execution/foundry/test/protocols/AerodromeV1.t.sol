@@ -1,60 +1,15 @@
 pragma solidity ^0.8.26;
 
-import {Test} from "../../lib/forge-std/src/Test.sol";
+import {TestUtils} from "../TestUtils.sol";
 import {
     AerodromeV1Executor,
     AerodromeV1Executor__InvalidDataLength,
     AerodromeV1Executor__InvalidTokenPair,
     IAerodromeV1Pool
 } from "@src/executors/AerodromeV1Executor.sol";
+import {Constants} from "../Constants.sol";
 import {TransferManager} from "@src/TransferManager.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-
-contract MockERC20 is ERC20 {
-    constructor(string memory name_, string memory symbol_)
-        ERC20(name_, symbol_)
-    {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
-
-contract MockAerodromeV1Pool is IAerodromeV1Pool {
-    address public immutable override token0;
-    address public immutable override token1;
-    uint256 public immutable rate;
-
-    constructor(address token0_, address token1_, uint256 rate_) {
-        token0 = token0_;
-        token1 = token1_;
-        rate = rate_;
-    }
-
-    function getAmountOut(uint256 amountIn, address tokenIn)
-        external
-        view
-        override
-        returns (uint256)
-    {
-        require(tokenIn == token0 || tokenIn == token1, "invalid tokenIn");
-        return (amountIn * rate) / 1e18;
-    }
-
-    function swap(
-        uint256 amount0Out,
-        uint256 amount1Out,
-        address to,
-        bytes calldata
-    ) external override {
-        if (amount0Out > 0) {
-            ERC20(token0).transfer(to, amount0Out);
-        }
-        if (amount1Out > 0) {
-            ERC20(token1).transfer(to, amount1Out);
-        }
-    }
-}
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract AerodromeV1ExecutorExposed is AerodromeV1Executor {
     function decodeParams(bytes calldata data)
@@ -66,44 +21,50 @@ contract AerodromeV1ExecutorExposed is AerodromeV1Executor {
     }
 }
 
-contract AerodromeV1ExecutorTest is Test {
-    AerodromeV1ExecutorExposed executor;
-    MockERC20 token0;
-    MockERC20 token1;
-    MockAerodromeV1Pool pool;
+contract AerodromeV1ExecutorTest is Constants, TestUtils {
+    address constant AERODROME_V1_POOL =
+        0x723AEf6543aecE026a15662Be4D3fb3424D502A9;
+    address constant AERODROME_V1_TOKEN0 =
+        0x236aa50979D5f3De3Bd1Eeb40E81137F22ab794b;
+    address constant AERODROME_V1_TOKEN1 =
+        0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA;
+
+    AerodromeV1ExecutorExposed aerodromeV1Exposed;
+    IERC20 token0 = IERC20(AERODROME_V1_TOKEN0);
+    IERC20 token1 = IERC20(AERODROME_V1_TOKEN1);
 
     function setUp() public {
-        executor = new AerodromeV1ExecutorExposed();
-        token0 = new MockERC20("token0", "TK0");
-        token1 = new MockERC20("token1", "TK1");
-        pool = new MockAerodromeV1Pool(address(token0), address(token1), 2e18);
+        uint256 forkBlock = 44682102;
+        vm.createSelectFork(vm.rpcUrl("base"), forkBlock);
 
-        token0.mint(address(pool), 1_000_000e18);
-        token1.mint(address(pool), 1_000_000e18);
+        aerodromeV1Exposed = new AerodromeV1ExecutorExposed();
     }
 
     function testDecodeParams() public view {
-        bytes memory params =
-            abi.encodePacked(address(pool), address(token0), address(token1));
+        bytes memory params = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN0, AERODROME_V1_TOKEN1
+        );
 
         (address target, address tokenIn, address tokenOut) =
-            executor.decodeParams(params);
+            aerodromeV1Exposed.decodeParams(params);
 
-        assertEq(target, address(pool));
-        assertEq(tokenIn, address(token0));
-        assertEq(tokenOut, address(token1));
+        assertEq(target, AERODROME_V1_POOL);
+        assertEq(tokenIn, AERODROME_V1_TOKEN0);
+        assertEq(tokenOut, AERODROME_V1_TOKEN1);
     }
 
     function testDecodeParamsInvalidDataLength() public {
-        bytes memory invalidParams = abi.encodePacked(address(pool), address(token0));
+        bytes memory invalidParams =
+            abi.encodePacked(AERODROME_V1_POOL, AERODROME_V1_TOKEN0);
 
         vm.expectRevert(AerodromeV1Executor__InvalidDataLength.selector);
-        executor.decodeParams(invalidParams);
+        aerodromeV1Exposed.decodeParams(invalidParams);
     }
 
     function testGetTransferData() public {
-        bytes memory params =
-            abi.encodePacked(address(pool), address(token0), address(token1));
+        bytes memory params = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN0, AERODROME_V1_TOKEN1
+        );
 
         (
             TransferManager.TransferType transferType,
@@ -111,63 +72,102 @@ contract AerodromeV1ExecutorTest is Test {
             address tokenIn,
             address tokenOut,
             bool outputToRouter
-        ) = executor.getTransferData(params);
+        ) = aerodromeV1Exposed.getTransferData(params);
 
-        assertEq(uint8(transferType), uint8(TransferManager.TransferType.Transfer));
-        assertEq(receiver, address(pool));
-        assertEq(tokenIn, address(token0));
-        assertEq(tokenOut, address(token1));
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
+        assertEq(receiver, AERODROME_V1_POOL);
+        assertEq(tokenIn, AERODROME_V1_TOKEN0);
+        assertEq(tokenOut, AERODROME_V1_TOKEN1);
         assertEq(outputToRouter, false);
     }
 
     function testFundsExpectedAddress() public view {
-        bytes memory params =
-            abi.encodePacked(address(pool), address(token0), address(token1));
-        address receiver = executor.fundsExpectedAddress(params);
-        assertEq(receiver, address(pool));
+        bytes memory params = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN0, AERODROME_V1_TOKEN1
+        );
+        address receiver = aerodromeV1Exposed.fundsExpectedAddress(params);
+        assertEq(receiver, AERODROME_V1_POOL);
     }
 
     function testSwapZeroForOne() public {
-        uint256 amountIn = 10e18;
-        uint256 expectedAmountOut = 20e18;
-        bytes memory protocolData =
-            abi.encodePacked(address(pool), address(token0), address(token1));
+        uint256 amountIn = 0.01 ether;
+        uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_POOL)
+            .getAmountOut(amountIn, AERODROME_V1_TOKEN0);
+        bytes memory protocolData = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN0, AERODROME_V1_TOKEN1
+        );
 
-        token0.mint(address(executor), amountIn);
-        vm.prank(address(executor));
-        token0.transfer(address(pool), amountIn);
+        deal(AERODROME_V1_TOKEN0, address(aerodromeV1Exposed), amountIn);
+        vm.prank(address(aerodromeV1Exposed));
+        token0.transfer(AERODROME_V1_POOL, amountIn);
 
-        uint256 balanceBefore = token1.balanceOf(address(this));
-        executor.swap(amountIn, protocolData, address(this));
-        uint256 balanceAfter = token1.balanceOf(address(this));
+        uint256 balanceBefore = token1.balanceOf(BOB);
+        aerodromeV1Exposed.swap(amountIn, protocolData, BOB);
+        uint256 balanceAfter = token1.balanceOf(BOB);
 
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-        assertEq(token0.balanceOf(address(executor)), 0);
+        assertEq(token0.balanceOf(address(aerodromeV1Exposed)), 0);
     }
 
     function testSwapOneForZero() public {
-        uint256 amountIn = 3e18;
-        uint256 expectedAmountOut = 6e18;
-        bytes memory protocolData =
-            abi.encodePacked(address(pool), address(token1), address(token0));
+        uint256 amountIn = 10e6;
+        uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_POOL)
+            .getAmountOut(amountIn, AERODROME_V1_TOKEN1);
+        bytes memory protocolData = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN1, AERODROME_V1_TOKEN0
+        );
 
-        token1.mint(address(executor), amountIn);
-        vm.prank(address(executor));
-        token1.transfer(address(pool), amountIn);
+        deal(AERODROME_V1_TOKEN1, address(aerodromeV1Exposed), amountIn);
+        vm.prank(address(aerodromeV1Exposed));
+        token1.transfer(AERODROME_V1_POOL, amountIn);
 
-        uint256 balanceBefore = token0.balanceOf(address(this));
-        executor.swap(amountIn, protocolData, address(this));
-        uint256 balanceAfter = token0.balanceOf(address(this));
+        uint256 balanceBefore = token0.balanceOf(BOB);
+        aerodromeV1Exposed.swap(amountIn, protocolData, BOB);
+        uint256 balanceAfter = token0.balanceOf(BOB);
 
         assertEq(balanceAfter - balanceBefore, expectedAmountOut);
-        assertEq(token1.balanceOf(address(executor)), 0);
+        assertEq(token1.balanceOf(address(aerodromeV1Exposed)), 0);
+    }
+
+    function testDecodeIntegration() public view {
+        bytes memory protocolData =
+            loadCallDataFromFile("test_encode_aerodrome_v1");
+
+        (address target, address tokenIn, address tokenOut) =
+            aerodromeV1Exposed.decodeParams(protocolData);
+
+        assertEq(target, AERODROME_V1_POOL);
+        assertEq(tokenIn, AERODROME_V1_TOKEN0);
+        assertEq(tokenOut, AERODROME_V1_TOKEN1);
+    }
+
+    function testSwapIntegration() public {
+        bytes memory protocolData =
+            loadCallDataFromFile("test_encode_aerodrome_v1");
+        uint256 amountIn = 0.01 ether;
+        uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_POOL)
+            .getAmountOut(amountIn, AERODROME_V1_TOKEN0);
+
+        deal(AERODROME_V1_TOKEN0, address(aerodromeV1Exposed), amountIn);
+        vm.prank(address(aerodromeV1Exposed));
+        token0.transfer(AERODROME_V1_POOL, amountIn);
+
+        uint256 balanceBefore = token1.balanceOf(BOB);
+        aerodromeV1Exposed.swap(amountIn, protocolData, BOB);
+        uint256 balanceAfter = token1.balanceOf(BOB);
+
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
+        assertEq(token0.balanceOf(address(aerodromeV1Exposed)), 0);
     }
 
     function testSwapRevertOnInvalidPair() public {
-        bytes memory protocolData =
-            abi.encodePacked(address(pool), address(token0), address(0x1234));
+        bytes memory protocolData = abi.encodePacked(
+            AERODROME_V1_POOL, AERODROME_V1_TOKEN0, address(0x1234)
+        );
 
         vm.expectRevert(AerodromeV1Executor__InvalidTokenPair.selector);
-        executor.swap(1e18, protocolData, address(this));
+        aerodromeV1Exposed.swap(1 ether, protocolData, address(this));
     }
 }

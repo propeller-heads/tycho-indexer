@@ -36,21 +36,34 @@ contract AerodromeV1Executor is IExecutor {
         external
         payable
     {
-        (address target, address tokenIn, address tokenOut) = _decodeData(data);
+        address target;
+        address tokenIn;
+        address tokenOut;
+
+        (target, tokenIn, tokenOut) = _decodeData(data);
 
         IAerodromeV1Pool pool = IAerodromeV1Pool(target);
         address token0 = pool.token0();
         address token1 = pool.token1();
 
-        bool zeroForOne;
-        if (tokenIn == token0 && tokenOut == token1) {
-            zeroForOne = true;
-        } else if (tokenIn == token1 && tokenOut == token0) {
-            zeroForOne = false;
-        } else {
+        bool zeroForOne = (tokenIn == token0);
+        if (
+            (zeroForOne && tokenOut != token1)
+                || (!zeroForOne && (tokenIn != token1 || tokenOut != token0))
+        ) {
             revert AerodromeV1Executor__InvalidTokenPair();
         }
 
+        _swap(pool, amountIn, tokenIn, zeroForOne, receiver);
+    }
+
+    function _swap(
+        IAerodromeV1Pool pool,
+        uint256 amountIn,
+        address tokenIn,
+        bool zeroForOne,
+        address receiver
+    ) internal {
         uint256 amountOut = pool.getAmountOut(amountIn, tokenIn);
         if (zeroForOne) {
             pool.swap(0, amountOut, receiver, "");

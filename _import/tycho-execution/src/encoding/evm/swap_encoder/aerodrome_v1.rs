@@ -64,12 +64,12 @@ mod tests {
     #[test]
     fn test_encode_aerodrome_v1() {
         let pool = ProtocolComponent {
-            id: String::from("0x168ddF44Df9e1d7A8b5BdF4f9e8A8dB6f6e95D15"),
+            id: String::from("0x723aef6543aece026a15662be4d3fb3424d502a9"),
             ..Default::default()
         };
 
-        let token_in = Bytes::from("0x4200000000000000000000000000000000000006");
-        let token_out = Bytes::from("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+        let token_in = Bytes::from("0x236aa50979d5f3de3bd1eeb40e81137f22ab794b");
+        let token_out = Bytes::from("0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca");
         let swap = Swap::new(pool, token_in.clone(), token_out.clone());
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
@@ -92,9 +92,9 @@ mod tests {
         assert_eq!(
             hex_swap,
             String::from(concat!(
-                "168ddf44df9e1d7a8b5bdf4f9e8a8db6f6e95d15",
-                "4200000000000000000000000000000000000006",
-                "833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+                "723aef6543aece026a15662be4d3fb3424d502a9",
+                "236aa50979d5f3de3bd1eeb40e81137f22ab794b",
+                "d9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca",
             ))
         );
 
