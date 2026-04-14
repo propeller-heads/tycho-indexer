@@ -8,7 +8,6 @@ use tycho_common::{
 use crate::encoding::{
     errors::EncodingError,
     evm::{
-        constants::GROUPABLE_PROTOCOLS,
         group_swaps::group_swaps,
         strategy_encoder::strategy_encoders::{
             SequentialSwapStrategyEncoder, SingleSwapStrategyEncoder, SplitSwapStrategyEncoder,
@@ -64,15 +63,9 @@ impl TychoRouterEncoder {
         self.validate_solution(solution)?;
         let solution = self.add_weth_swaps(solution, &self.chain);
 
-        let protocols: HashSet<String> = solution
-            .swaps()
-            .iter()
-            .map(|swap| swap.component().protocol_system.clone())
-            .collect();
-
         let groups = group_swaps(solution.swaps());
 
-        let encoded_solution = if (groups.len() == 1) {
+        let encoded_solution = if groups.len() == 1 {
             self.single_swap_strategy
                 .encode_strategy(&solution)?
         } else if solution

@@ -669,4 +669,35 @@ contract TychoRouterUSV4FeeTokenTest is TychoRouterTestSetup {
         assertTrue(success, "TychoRouter swap failed");
         assertGt(twifReceived, 0, "Should receive TWIF");
     }
+
+    function testTwoHopTWIFIntermediaryViaV4() public {
+        // UniswapV4 cyclical swaps encoded as two separate hops with TWIF (6%
+        // fee-on-transfer) as intermediary. Same pool used in both directions to
+        // isolate the effect of the transfer tax on the intermediate hop.
+        //
+        //   USDC ──(USV4)──> TWIF ──(USV4)──> USDC
+
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(PERMIT2_ADDRESS, type(uint256).max);
+
+        bytes memory callData =
+            loadCallDataFromFile("test_two_hop_usv4_twif_intermediary");
+        (bool success, bytes memory returnData) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 usdcReceived = IERC20(USDC_ADDR).balanceOf(ALICE);
+        uint256 reportedAmountOut = abi.decode(returnData, (uint256));
+
+        assertTrue(success, "TychoRouter grouped TWIF swap failed");
+        assertGt(usdcReceived, 0, "Should receive USDC back");
+        assertEq(
+            reportedAmountOut,
+            usdcReceived,
+            "Reported amountOut should match actual balance received"
+        );
+    }
 }
