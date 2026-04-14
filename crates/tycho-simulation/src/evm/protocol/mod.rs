@@ -12,7 +12,6 @@ pub mod fluid;
 pub mod pancakeswap_v2;
 pub mod rocketpool;
 pub mod safe_math;
-mod solidly_stable;
 pub mod u256_num;
 pub mod uniswap_v2;
 pub mod uniswap_v3;

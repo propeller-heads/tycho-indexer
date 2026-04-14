@@ -17,12 +17,12 @@ use tycho_common::{
     Bytes,
 };
 
+use super::solidly_stable::{
+    get_amount_out as solidly_stable_get_amount_out, get_limits as solidly_stable_get_limits,
+};
 use crate::evm::protocol::{
     cpmm::protocol::{cpmm_fee, cpmm_get_limits, cpmm_spot_price, cpmm_swap_to_price, ProtocolFee},
     safe_math::{safe_add_u256, safe_div_u256, safe_mul_u256, safe_sub_u256},
-    solidly_stable::protocol::{
-        get_amount_out as solidly_stable_get_amount_out, get_limits as solidly_stable_get_limits,
-    },
     u256_num::{biguint_to_u256, u256_to_biguint},
     utils::add_fee_markup,
 };

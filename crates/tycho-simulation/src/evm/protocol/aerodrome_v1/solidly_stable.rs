@@ -264,9 +264,9 @@ mod tests {
 
     #[test]
     fn test_get_amount_out_with_different_decimals() {
-        let reserve0 = U256::from_str("1000000000000000000000000").unwrap(); // 1e6 token0, 18 dec
-        let reserve1 = U256::from(1_000_000_000_000u64); // 1e6 token1, 6 dec
-        let amount_in = U256::from_str("1000000000000000000").unwrap(); // 1 token0
+        let reserve0 = U256::from_str("1000000000000000000000000").unwrap();
+        let reserve1 = U256::from(1_000_000_000_000u64);
+        let amount_in = U256::from_str("1000000000000000000").unwrap();
 
         let out = get_amount_out(amount_in, true, reserve0, reserve1, 5, 18, 6).unwrap();
 

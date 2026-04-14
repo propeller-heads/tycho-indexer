@@ -53,9 +53,9 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for AerodromeV1State {
             .map(|fee| u32::from(fee.clone()))
             .unwrap_or(0);
 
-        if fee > 10_000 && fee != 420 {
+        if fee > 10_000 {
             return Err(InvalidSnapshotError::ValueError(format!(
-                "Invalid fee value {fee}, expected <= 10000 bps or ZERO_FEE_INDICATOR"
+                "Invalid fee value {fee}, expected <= 10000 bps"
             )));
         }
 
