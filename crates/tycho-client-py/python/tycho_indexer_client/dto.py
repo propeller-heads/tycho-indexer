@@ -45,6 +45,7 @@ class Chain(str, Enum):
     bsc = "bsc"
     zksync = "zksync"
     unichain = "unichain"
+    polygon = "polygon"
 
 
 class ChangeType(str, Enum):
