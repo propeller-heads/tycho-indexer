@@ -1,3 +1,10 @@
+## [0.175.1](https://github.com/propeller-heads/tycho-execution/compare/0.175.0...0.175.1) (2026-04-14)
+
+
+### Bug Fixes
+
+* Disallow tokenIn callback encoding ([be766ca](https://github.com/propeller-heads/tycho-execution/commit/be766cad984223c57142c8370905450bf7868516))
+
 ## [0.175.0](https://github.com/propeller-heads/tycho-execution/compare/0.174.0...0.175.0) (2026-04-14)
 
 
