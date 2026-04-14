@@ -69,6 +69,7 @@ pub struct TychoStreamBuilder {
     include_tvl: bool,
     compression: bool,
     partial_blocks: bool,
+    max_messages: Option<usize>,
 }
 
 impl TychoStreamBuilder {
@@ -99,6 +100,7 @@ impl TychoStreamBuilder {
             include_tvl: false,
             compression: true,
             partial_blocks: false,
+            max_messages: None,
         }
     }
 
@@ -213,6 +215,23 @@ impl TychoStreamBuilder {
         self
     }
 
+    /// Stops the stream after emitting this many messages. Useful for testing or
+    /// triggering a periodic restart after a fixed number of blocks.
+    pub fn max_messages(mut self, n: usize) -> Self {
+        self.max_messages = Some(n);
+        self
+    }
+
+    /// Overrides the maximum number of retry attempts for state synchronizer startup.
+    /// The retry cooldown is derived from the chain's block time and is not affected.
+    pub fn max_retries(mut self, max_retries: u64) -> Self {
+        let cooldown = match &self.state_sync_retry_config {
+            RetryConfiguration::Constant(c) => c.cooldown,
+        };
+        self.state_sync_retry_config = RetryConfiguration::constant(max_retries, cooldown);
+        self
+    }
+
     /// Blocklist specific component IDs across all registered exchanges.
     ///
     /// Blocklisted components are never tracked, regardless of TVL or other
@@ -285,6 +304,9 @@ impl TychoStreamBuilder {
             Duration::from_secs(self.timeout),
             self.max_missed_blocks,
         );
+        if let Some(n) = self.max_messages {
+            block_sync.max_messages(n);
+        }
 
         let requested: HashSet<_> = self.exchanges.keys().cloned().collect();
         let info = ProtocolSystemsInfo::fetch(&rpc_client, self.chain, &requested).await;
