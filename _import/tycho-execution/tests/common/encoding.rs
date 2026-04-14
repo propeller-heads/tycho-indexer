@@ -125,6 +125,11 @@ pub fn encode_tycho_router_call(
             client_fee_receiver,
             max_client_contribution,
             deadline,
+            given_amount,
+            given_token,
+            checked_token,
+            min_amount_out,
+            receiver,
         )?;
         (client_fee_receiver, sig)
     };
@@ -242,6 +247,7 @@ pub fn encode_tycho_router_call(
 /// `clientFeeReceiver` field passed in.
 ///
 /// Uses `deadline = U256::MAX` so signatures never expire in fork tests.
+#[allow(clippy::too_many_arguments)]
 fn sign_client_fee(
     chain_id: u64,
     router_address: Address,
@@ -249,6 +255,11 @@ fn sign_client_fee(
     client_fee_receiver: Address,
     max_client_contribution: U256,
     deadline: U256,
+    amount_in: U256,
+    token_in: Address,
+    token_out: Address,
+    min_amount_out: U256,
+    receiver: Address,
 ) -> Result<Vec<u8>, EncodingError> {
     let signer = PrivateKeySigner::from_str(CLIENT_FEE_RECEIVER_PK)
         .map_err(|e| EncodingError::FatalError(format!("Invalid CLIENT_FEE_RECEIVER_PK: {e}")))?;
@@ -257,7 +268,9 @@ fn sign_client_fee(
     // Must match CLIENT_FEE_TYPEHASH in TychoRouter.sol.
     let type_hash: B256 = keccak256(
         b"ClientFee(uint16 clientFeeBps,address clientFeeReceiver,\
-uint256 maxClientContribution,uint256 deadline)",
+uint256 maxClientContribution,uint256 deadline,\
+uint256 amountIn,address tokenIn,address tokenOut,\
+uint256 minAmountOut,address receiver)",
     );
 
     // EIP-712 domain separator for TychoRouter ("TychoRouter", "1")
@@ -282,6 +295,11 @@ uint256 maxClientContribution,uint256 deadline)",
             client_fee_receiver,
             max_client_contribution,
             deadline,
+            amount_in,
+            token_in,
+            token_out,
+            min_amount_out,
+            receiver,
         )
             .abi_encode(),
     );

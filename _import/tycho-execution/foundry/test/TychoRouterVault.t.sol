@@ -373,8 +373,17 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(address(usv3Executor), usdcWethV3Data);
         swaps[1] = encodeSequentialSwap(address(usv2Executor), wethUsdcV2Data);
 
-        ClientFeeParams memory feeParams =
-            makeClientFeeParams(0, amountIn / 10, tychoRouterAddr, ALICE_PK);
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            0,
+            amountIn / 10,
+            amountIn,
+            USDC_ADDR,
+            USDC_ADDR,
+            amountIn,
+            tychoRouterAddr,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -423,8 +432,17 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         );
 
         // Client contributes up to amountIn to cover the break-even shortfall.
-        ClientFeeParams memory feeParams =
-            makeClientFeeParams(0, inputAmount, tychoRouterAddr, ALICE_PK);
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            0,
+            inputAmount,
+            inputAmount,
+            WETH_ADDR,
+            WETH_ADDR,
+            2 * inputAmount,
+            tychoRouterAddr,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         tychoRouter.sequentialSwapUsingVault(
             inputAmount,

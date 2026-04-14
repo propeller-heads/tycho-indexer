@@ -7,7 +7,9 @@ import {Constants} from "./Constants.sol";
 contract ClientFeeTestHelper is Test, Constants {
     bytes32 private constant _CLIENT_FEE_TYPEHASH = keccak256(
         "ClientFee(uint16 clientFeeBps,address clientFeeReceiver,"
-        "uint256 maxClientContribution,uint256 deadline)"
+        "uint256 maxClientContribution,uint256 deadline,"
+        "uint256 amountIn,address tokenIn,address tokenOut,"
+        "uint256 minAmountOut,address receiver)"
     );
 
     /**
@@ -16,7 +18,40 @@ contract ClientFeeTestHelper is Test, Constants {
      */
     function signClientFee(
         ClientFeeParams memory params,
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver,
         address routerAddress,
+        uint256 privateKey
+    ) internal view returns (bytes memory signature) {
+        return signClientFeeForChain(
+            params,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            receiver,
+            routerAddress,
+            block.chainid,
+            privateKey
+        );
+    }
+
+    /**
+     * @dev Signs a ClientFeeParams struct for a specific chain ID.
+     *      Used to test that signatures from a different chain are rejected.
+     */
+    function signClientFeeForChain(
+        ClientFeeParams memory params,
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver,
+        address routerAddress,
+        uint256 chainId,
         uint256 privateKey
     ) internal view returns (bytes memory signature) {
         bytes32 domainSeparator = keccak256(
@@ -27,7 +62,7 @@ contract ClientFeeTestHelper is Test, Constants {
                 ),
                 keccak256("TychoRouter"),
                 keccak256("1"),
-                block.chainid,
+                chainId,
                 routerAddress
             )
         );
@@ -37,7 +72,12 @@ contract ClientFeeTestHelper is Test, Constants {
                 params.clientFeeBps,
                 params.clientFeeReceiver,
                 params.maxClientContribution,
-                params.deadline
+                params.deadline,
+                amountIn,
+                tokenIn,
+                tokenOut,
+                minAmountOut,
+                receiver
             )
         );
         bytes32 digest = keccak256(
@@ -71,18 +111,31 @@ contract ClientFeeTestHelper is Test, Constants {
     function makeClientFeeParams(
         uint16 clientFeeBps,
         uint256 maxClientContribution,
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver,
         address routerAddress,
         uint256 privateKey
     ) internal view returns (ClientFeeParams memory params) {
-        address receiver = vm.addr(privateKey);
+        address feeReceiver = vm.addr(privateKey);
         params = ClientFeeParams({
             clientFeeBps: clientFeeBps,
-            clientFeeReceiver: receiver,
+            clientFeeReceiver: feeReceiver,
             maxClientContribution: maxClientContribution,
             deadline: block.timestamp + 1 hours,
             clientSignature: new bytes(0)
         });
-        params.clientSignature =
-            signClientFee(params, routerAddress, privateKey);
+        params.clientSignature = signClientFee(
+            params,
+            amountIn,
+            tokenIn,
+            tokenOut,
+            minAmountOut,
+            receiver,
+            routerAddress,
+            privateKey
+        );
     }
 }

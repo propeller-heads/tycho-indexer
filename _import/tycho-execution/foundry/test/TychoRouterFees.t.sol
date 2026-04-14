@@ -59,7 +59,15 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         uint256 expectedAmountOut = 1958252915450472406531;
 
         ClientFeeParams memory feeParams = makeClientFeeParams(
-            200, 0, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK
+            200,
+            0,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
         );
         FeeRecipient[] memory expectedFees = new FeeRecipient[](2);
         expectedFees[0] = FeeRecipient({
@@ -252,8 +260,16 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             deadline: block.timestamp - 1,
             clientSignature: new bytes(0)
         });
-        feeParams.clientSignature =
-            signClientFee(feeParams, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+        feeParams.clientSignature = signClientFee(
+            feeParams,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            1,
+            ALICE,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
+        );
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -287,8 +303,16 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             clientSignature: new bytes(0)
         });
         // Sign with ALICE's key instead of the clientFeeReceiver's key
-        feeParams.clientSignature =
-            signClientFee(feeParams, tychoRouterAddr, ALICE_PK);
+        feeParams.clientSignature = signClientFee(
+            feeParams,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            1,
+            ALICE,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         vm.expectRevert(TychoRouter__InvalidClientSignature.selector);
         tychoRouter.singleSwap(
@@ -316,10 +340,56 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             deadline: block.timestamp + 1 hours,
             clientSignature: new bytes(0)
         });
-        feeParams.clientSignature =
-            signClientFee(feeParams, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+        feeParams.clientSignature = signClientFee(
+            feeParams,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            1,
+            ALICE,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
+        );
         // Manipulate: bump fee from 100 to 200 bps after signing
         feeParams.clientFeeBps = 200;
+
+        vm.expectRevert(TychoRouter__InvalidClientSignature.selector);
+        tychoRouter.singleSwap(
+            amountIn, WETH_ADDR, DAI_ADDR, 1, ALICE, feeParams, swap
+        );
+        vm.stopPrank();
+    }
+
+    function testWrongChainSignature() public {
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory protocolData =
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR);
+        bytes memory swap =
+            encodeSingleSwap(address(usv2Executor), protocolData);
+
+        ClientFeeParams memory feeParams = ClientFeeParams({
+            clientFeeBps: 100,
+            clientFeeReceiver: vm.addr(CLIENT_FEE_RECEIVER_PK),
+            maxClientContribution: 0,
+            deadline: block.timestamp + 1 hours,
+            clientSignature: new bytes(0)
+        });
+        // Sign for a different chain — should not verify on the current chain
+        feeParams.clientSignature = signClientFeeForChain(
+            feeParams,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            1,
+            ALICE,
+            tychoRouterAddr,
+            block.chainid + 1,
+            CLIENT_FEE_RECEIVER_PK
+        );
 
         vm.expectRevert(TychoRouter__InvalidClientSignature.selector);
         tychoRouter.singleSwap(
@@ -388,8 +458,17 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         bytes memory swap =
             encodeSingleSwap(address(usv2Executor), protocolData);
 
-        ClientFeeParams memory feeParams =
-            makeClientFeeParams(1, 20, tychoRouterAddr, CLIENT_FEE_RECEIVER_PK);
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            1,
+            20,
+            amountIn,
+            WETH_ADDR,
+            STA_ADDR,
+            1,
+            ALICE,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
+        );
 
         uint256 amountOut = tychoRouter.singleSwap(
             amountIn, WETH_ADDR, STA_ADDR, 1, ALICE, feeParams, swap
