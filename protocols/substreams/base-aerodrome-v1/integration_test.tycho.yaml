@@ -2,7 +2,7 @@ substreams_yaml_path: ./base-aerodrome-v1.yaml
 protocol_system: "aerodrome_v1"
 protocol_type_names:
   - "aerodrome_v1_pool"
-module_name: "map_pool_events"
+module_name: "map_protocol_changes"
 skip_balance_check: false
 initialized_accounts:
 tests:
@@ -17,4 +17,16 @@ tests:
         static_attributes:
           is_stable: "0x00"
         creation_tx: "0xbad5d593d1f2828cae52bd9126815ec0c1e720292f1d7c0523bbdee4322fff96"
+        skip_simulation: false
+  - name: test_first_stable_pool
+    start_block: 3204806
+    stop_block: 3204808
+    expected_components:
+      - id: "0x0b25c51637c43decd6cc1c1e3da4518d54ddb528"
+        tokens:
+          - "0x4621b7a9c75199271f773ebd9a499dbd165c3191"
+          - "0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca"
+        static_attributes:
+          is_stable: "0x01"
+        creation_tx: "0xf2221ededa146d962c36ba00c74f38ed3e4e0d2d15789883557e47c1da1563ac"
         skip_simulation: false

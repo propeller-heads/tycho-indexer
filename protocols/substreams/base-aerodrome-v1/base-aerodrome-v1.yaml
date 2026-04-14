@@ -7,9 +7,7 @@ package:
 protobuf:
   files:
     - tycho/protocols/adapter-integration/evm/v1/common.proto
-    - aerodrome.proto
   importPaths:
-    - ./proto/v1
     - ../../proto/
 
 binaries:
@@ -31,7 +29,7 @@ modules:
     kind: store
     initialBlock: 3200559
     updatePolicy: set_if_not_exists
-    valueType: proto:tycho.evm.aerodrome.v1.Pool
+    valueType: proto:tycho.evm.v1.ProtocolComponent
     inputs:
       - map: map_pools_created
 

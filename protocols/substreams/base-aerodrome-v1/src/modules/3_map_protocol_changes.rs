@@ -11,7 +11,6 @@ use substreams_helper::{event_handler::EventHandler, hex::Hexable};
 
 use crate::{
     abi::{factory::events::SetCustomFee, pool::events::Sync},
-    store_key::StoreKey,
     traits::PoolAddresser,
 };
 use tycho_substreams::prelude::*;
@@ -80,8 +79,7 @@ fn handle_sync(
     let mut on_sync = |event: Sync, _tx: &eth::TransactionTrace, _log: &eth::Log| {
         let pool_address_hex = _log.address.to_hex();
 
-        let pool =
-            store.must_get_last(StoreKey::Pool.get_unique_pool_key(pool_address_hex.as_str()));
+        let pool = store.must_get_last(&pool_address_hex);
         let reserves_bytes = [event.reserve0, event.reserve1];
 
         let tx_change = tx_changes

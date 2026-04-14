@@ -15,6 +15,10 @@ struct Params {
     factory_address: String,
 }
 
+fn bool_to_bytes(value: bool) -> Vec<u8> {
+    vec![u8::from(value)]
+}
+
 #[substreams::handlers::map]
 pub fn map_pools_created(
     params: String,
@@ -66,7 +70,7 @@ fn get_pools(block: &eth::Block, new_pools: &mut Vec<TransactionChanges>, params
                 static_att: vec![
                     Attribute {
                         name: "is_stable".to_string(),
-                        value: BigInt::from(i32::from(event.stable)).to_signed_bytes_be(),
+                        value: bool_to_bytes(event.stable),
                         change: ChangeType::Creation.into(),
                     },
                     Attribute {
