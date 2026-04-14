@@ -135,6 +135,10 @@ struct Cli {
     /// provided)
     #[arg(long)]
     max_days_since_last_trade: Option<u64>,
+
+    /// Enable partial block updates (flashblocks) on the tycho stream for lower latency
+    #[arg(long, default_value_t = false)]
+    partial_blocks: bool,
 }
 
 impl Debug for Cli {
@@ -262,6 +266,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             cli.tvl_threshold,
             cli.tvl_buffer_ratio,
             cli.protocols.clone(),
+            cli.partial_blocks,
         ) {
             protocol_handle = Some(
                 protocol_stream_processor
