@@ -1,3 +1,10 @@
+## [0.175.0](https://github.com/propeller-heads/tycho-execution/compare/0.174.0...0.175.0) (2026-04-14)
+
+
+### Features
+
+* Remove single-hop arb support ([d5fbae0](https://github.com/propeller-heads/tycho-execution/commit/d5fbae0a6379a3521160c12f4e59fced28828291))
+
 ## [0.174.0](https://github.com/propeller-heads/tycho-execution/compare/0.173.0...0.174.0) (2026-04-13)
 
 
