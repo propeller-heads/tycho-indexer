@@ -23,10 +23,11 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
         int256 amount1Delta,
         bytes calldata /* data */
     ) external {
-        // tokenIn is the first 20 bytes of the protocol data embedded in msg.data
-        // layout: selector(4) + amount0(32) + amount1(32) + offset(32) + length(32) + protocolData
-        // protocolData starts at byte 132: tokenIn(20), tokenOut(20), fee(3)
-        address tokenIn = address(bytes20(msg.data[132:152]));
+        // tokenIn is determined by which delta is positive (the token being sold).
+        // Callback data no longer encodes tokenIn; the Dispatcher passes it directly.
+        address tokenIn = amount0Delta > 0
+            ? IUniswapV3Pool(msg.sender).token0()
+            : IUniswapV3Pool(msg.sender).token1();
 
         // Use delegatecall to preserve msg.sender
         bytes memory callData = abi.encodeWithSignature(

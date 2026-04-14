@@ -13,7 +13,7 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
     function decodeData(bytes calldata data)
         external
         pure
-        returns (address target, bool zeroForOne, address tokenIn)
+        returns (address target, bool zeroForOne)
     {
         return _decodeData(data);
     }
@@ -23,10 +23,11 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
         int256 amount1Delta,
         bytes calldata /* data */
     ) external {
-        // tokenIn is the first 20 bytes of the protocol data embedded in msg.data
-        // layout: selector(4) + amount0(32) + amount1(32) + offset(32) + length(32) + protocolData
-        // protocolData starts at byte 132: tokenIn(20), tokenOut(20), tickSpacing(3)
-        address tokenIn = address(bytes20(msg.data[132:152]));
+        // tokenIn is determined by which delta is positive (the token being sold).
+        // Callback data no longer encodes tokenIn; the Dispatcher passes it directly.
+        address tokenIn = amount0Delta > 0
+            ? IUniswapV3Pool(msg.sender).token0()
+            : IUniswapV3Pool(msg.sender).token1();
 
         // Use delegatecall to preserve msg.sender
         bytes memory callData = abi.encodeWithSignature(
@@ -64,10 +65,8 @@ contract SlipstreamsExecutorTest is Test, TestUtils, Constants {
             BASE_WETH, BASE_USDC, expectedTickSpacing, address(3), false
         );
 
-        (address target, bool zeroForOne, address tokenIn) =
-            slipstreamsExposed.decodeData(data);
+        (address target, bool zeroForOne) = slipstreamsExposed.decodeData(data);
 
-        assertEq(tokenIn, BASE_WETH);
         assertEq(target, address(3));
         assertEq(zeroForOne, false);
     }

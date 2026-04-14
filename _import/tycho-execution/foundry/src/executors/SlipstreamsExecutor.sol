@@ -40,12 +40,11 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
     {
         address target;
         bool zeroForOne;
-        address tokenIn;
-        (target, zeroForOne, tokenIn) = _decodeData(data);
+        (target, zeroForOne) = _decodeData(data);
 
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = data[0:43];
+        bytes memory callbackData = "";
 
         // slither-disable-next-line unused-return
         pool.swap(
@@ -58,39 +57,25 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
         );
     }
 
-    function handleCallback(bytes calldata msgData)
+    function handleCallback(
+        bytes calldata /* msgData */
+    )
         public
         pure
-        returns (bytes memory result)
+        returns (bytes memory)
     {
-        // The data has the following layout:
-        // - selector (4 bytes)
-        // - amount0Delta (32 bytes)
-        // - amount1Delta (32 bytes)
-        // - dataOffset (32 bytes)
-        // - dataLength (32 bytes)
-        // - protocolData (variable length)
-
-        (int256 amount0Delta, int256 amount1Delta) =
-            abi.decode(msgData[4:68], (int256, int256));
-
-        address tokenIn = address(bytes20(msgData[132:152]));
-
-        uint256 amountOwed =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
-
-        return abi.encode(amountOwed, tokenIn);
+        // All transfers are done in the dispatcher - nothing to do here.
+        return "";
     }
 
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, bool zeroForOne, address tokenIn)
+        returns (address target, bool zeroForOne)
     {
         if (data.length != 64) {
             revert SlipstreamsExecutor__InvalidDataLength();
         }
-        tokenIn = address(bytes20(data[0:20]));
         target = address(bytes20(data[43:63]));
         zeroForOne = uint8(data[63]) > 0;
     }

@@ -271,7 +271,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         return abi.encode(_unlockCallback(stripped));
     }
 
-    function verifyCallback(bytes calldata data) public view poolManagerOnly {}
+    function verifyCallback(bytes calldata) public view poolManagerOnly {}
 
     /**
      * @dev Internal function to handle the unlock callback.
