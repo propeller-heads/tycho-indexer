@@ -144,19 +144,14 @@ contract EkuboV3Executor is IExecutor, ICallback {
         }
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata, /* data */
+        address tokenIn
+    )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        // data[36:] skips the 4-byte selector and 32-byte locker id
-        bytes calldata payData = data[36:];
-
-        tokenIn = address(bytes20(payData[36:56]));
         receiver = CORE_ADDRESS;
 
         if (tokenIn == NATIVE_TOKEN_ADDRESS) {

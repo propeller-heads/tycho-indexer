@@ -44,8 +44,6 @@ contract UniswapV3Executor is IExecutor, ICallback {
 
         IUniswapV3Pool pool = IUniswapV3Pool(target);
 
-        bytes memory callbackData = _extractV3CallbackData(data);
-
         // slither-disable-next-line unused-return
         pool.swap(
             receiver,
@@ -53,32 +51,19 @@ contract UniswapV3Executor is IExecutor, ICallback {
             // positive means exactIn
             int256(amountIn),
             zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
-            callbackData
+            ""
         );
     }
 
-    function handleCallback(bytes calldata msgData)
+    function handleCallback(
+        bytes calldata /* msgData */
+    )
         public
         pure
-        returns (bytes memory result)
+        returns (bytes memory)
     {
-        // The data has the following layout:
-        // - selector (4 bytes)
-        // - amount0Delta (32 bytes)
-        // - amount1Delta (32 bytes)
-        // - dataOffset (32 bytes)
-        // - dataLength (32 bytes)
-        // - protocolData (variable length)
-
-        (int256 amount0Delta, int256 amount1Delta) =
-            abi.decode(msgData[4:68], (int256, int256));
-
-        address tokenIn = address(bytes20(msgData[132:152]));
-
-        uint256 amountOwed =
-            amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
-
-        return abi.encode(amountOwed, tokenIn);
+        // All transfers are done in the dispatcher - nothing to do here.
+        return "";
     }
 
     function _decodeData(bytes calldata data)
@@ -91,17 +76,6 @@ contract UniswapV3Executor is IExecutor, ICallback {
         }
         target = address(bytes20(data[43:63]));
         zeroForOne = uint8(data[63]) > 0;
-    }
-
-    // This function will extract the first 43 bytes of the data,
-    // which contains the necessary Uniswap V3 callback data:
-    // tokenIn (20 bytes), tokenOut (20 bytes), fee (3 bytes)
-    function _extractV3CallbackData(bytes calldata data)
-        internal
-        pure
-        returns (bytes calldata)
-    {
-        return data[0:43];
     }
 
     function getTransferData(bytes calldata data)
@@ -128,16 +102,14 @@ contract UniswapV3Executor is IExecutor, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata, /* data */
+        address /* tokenIn */
+    )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        tokenIn = address(bytes20(data[132:152]));
         transferType = TransferManager.TransferType.Transfer;
         receiver = msg.sender;
     }

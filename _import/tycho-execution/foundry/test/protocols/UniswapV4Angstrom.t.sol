@@ -28,10 +28,19 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         external
         returns (bytes memory)
     {
-        (, address receiver, address tokenIn) =
-            this.getCallbackTransferData(msg.data);
         bytes calldata stripped = msg.data[68:];
         bytes4 sel = bytes4(stripped[:4]);
+        address tokenIn;
+        if (sel == this.swapExactInput.selector) {
+            tokenIn = address(bytes20(stripped[16:36]));
+        } else {
+            address currency0 = address(bytes20(stripped[16:36]));
+            address currency1 = address(bytes20(stripped[48:68]));
+            bool zeroForOne = stripped[195] != 0;
+            tokenIn = zeroForOne ? currency0 : currency1;
+        }
+
+        (, address receiver) = this.getCallbackTransferData(msg.data, tokenIn);
         uint256 amount;
         if (sel == this.swapExactInputSingle.selector) {
             amount = uint128(bytes16(stripped[212:228]));

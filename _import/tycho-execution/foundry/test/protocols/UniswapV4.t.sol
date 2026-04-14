@@ -35,14 +35,28 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
         external
         returns (bytes memory)
     {
-        (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        ) = this.getCallbackTransferData(msg.data);
+        // Extract tokenIn from the unlock callback data (msg.data[68:] = swapData).
+        // swapExactInputSingle ABI layout: selector(4) | currency0(32) | currency1(32) | ...
+        //   | zeroForOne(32) | ...  → tokenIn = zeroForOne ? currency0 : currency1
+        // swapExactInput ABI layout: selector(4) | currencyIn(32) | ...
+        //   → tokenIn = currencyIn (address occupies last 20 bytes of the 32-byte slot)
+        bytes calldata stripped = msg.data[68:];
+        bytes4 sel = bytes4(stripped[:4]);
+        address tokenIn;
+        if (sel == this.swapExactInput.selector) {
+            tokenIn = address(bytes20(stripped[16:36]));
+        } else {
+            // swapExactInputSingle: PoolKey is static, currency0 at [4:36], currency1 at [36:68]
+            // zeroForOne is at stripped[164:196], bool value at the last byte [195]
+            address currency0 = address(bytes20(stripped[16:36]));
+            address currency1 = address(bytes20(stripped[48:68]));
+            bool zeroForOne = stripped[195] != 0;
+            tokenIn = zeroForOne ? currency0 : currency1;
+        }
+
+        (TransferManager.TransferType transferType, address receiver) =
+            this.getCallbackTransferData(msg.data, tokenIn);
         if (transferType == TransferManager.TransferType.Transfer) {
-            bytes calldata stripped = msg.data[68:];
-            bytes4 sel = bytes4(stripped[:4]);
             uint256 amount;
             if (sel == this.swapExactInputSingle.selector) {
                 // amountIn occupies stripped[196:228]; value in last 16 bytes
@@ -53,7 +67,6 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             }
             IERC20(tokenIn).safeTransfer(receiver, amount);
         }
-        bytes calldata stripped = msg.data[68:];
         return abi.encode(_unlockCallback(stripped));
     }
 }

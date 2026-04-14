@@ -272,34 +272,26 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(bytes calldata data, address tokenIn)
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
         bytes4 selector = bytes4(data[:4]);
-        bytes calldata payData = data[36:];
         if (selector == _PAY_CALLBACK_SELECTOR) {
-            tokenIn = address(bytes20(payData[12:32]));
             transferType = TransferManager.TransferType.Transfer;
             receiver = address(_core);
         } else {
             // _LOCKED_SELECTOR
-            address tokenInFromCallback = address(bytes20(payData[36:56]));
-            if (tokenInFromCallback == address(0)) {
-                // ETH transfers are handled in the Executor, so we need to set the transferType to
-                // TransferNativeInExecutor to update the delta accounting accordingly.
-                tokenIn = address(0);
+            if (tokenIn == address(0)) {
+                // ETH transfers are handled in the Executor, so we need to set the
+                // transferType to TransferNativeInExecutor to update delta accounting.
                 transferType =
                 TransferManager.TransferType.TransferNativeInExecutor;
             } else {
+                // Locked callback: no transfer needed for ERC20 tokens. This is
+                // done in the Pay callback.
                 transferType = TransferManager.TransferType.None;
-                receiver = address(0);
-                tokenIn = address(0);
             }
         }
     }

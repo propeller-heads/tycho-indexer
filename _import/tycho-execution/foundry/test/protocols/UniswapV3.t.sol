@@ -23,15 +23,21 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
         int256 amount1Delta,
         bytes calldata /* data */
     ) external {
+        // tokenIn is determined by which delta is positive (the token being sold).
+        // Callback data no longer encodes tokenIn; the Dispatcher passes it directly.
+        address tokenIn = amount0Delta > 0
+            ? IUniswapV3Pool(msg.sender).token0()
+            : IUniswapV3Pool(msg.sender).token1();
+
         // Use delegatecall to preserve msg.sender
-        bytes memory callData =
-            abi.encodeWithSignature("getCallbackTransferData(bytes)", msg.data);
+        bytes memory callData = abi.encodeWithSignature(
+            "getCallbackTransferData(bytes,address)", msg.data, tokenIn
+        );
         (bool success, bytes memory result) =
             address(this).delegatecall(callData);
         require(success, "Delegatecall failed");
 
-        (, address receiver, address tokenIn) =
-            abi.decode(result, (uint8, address, address));
+        (, address receiver) = abi.decode(result, (uint8, address));
 
         uint256 amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -102,11 +108,13 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (, address receiver, address tokenIn) =
-            uniswapV3Exposed.getCallbackTransferData(callbackData);
+        (TransferManager.TransferType transferType, address receiver) =
+            uniswapV3Exposed.getCallbackTransferData(callbackData, WETH_ADDR);
 
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, address(this));
-        assertEq(tokenIn, WETH_ADDR);
     }
 
     function testSwapIntegration() public {

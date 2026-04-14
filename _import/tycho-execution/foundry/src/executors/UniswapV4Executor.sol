@@ -540,48 +540,19 @@ contract UniswapV4Executor is IExecutor, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata, /* data */
+        address tokenIn
+    )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        bytes calldata stripped = data[68:];
-        bytes4 selector = bytes4(stripped[:4]);
         receiver = address(poolManager);
-        if (selector == _swapExactInputSingleSelector) {
-            // swapExactInputSingle(PoolKey, bool zeroForOne, uint128 amountIn, address receiver, bytes hookData)
-            // PoolKey: currency0[4:36] currency1[36:68] fee[68:100] tickSpacing[100:132] hooks[132:164]
-            // zeroForOne[164:196] amountIn[196:228] receiver[228:260]
-
-            bool zeroForOne = uint8(stripped[195]) != 0;
-            if (zeroForOne) {
-                tokenIn = address(bytes20(stripped[16:36]));
-            } else {
-                tokenIn = address(bytes20(stripped[48:68]));
-            }
-            if (tokenIn == address(0)) {
-                transferType =
-                TransferManager.TransferType.TransferNativeInExecutor;
-            } else {
-                transferType = TransferManager.TransferType.Transfer;
-            }
-        } else if (selector == _swapExactInputSelector) {
-            // swapExactInput(Currency, uint128 amountIn, address receiver, PathKey[])
-            // Currency[4:36] amountIn[36:68] receiver[68:100]
-
-            tokenIn = address(bytes20(stripped[16:36]));
-            if (tokenIn == address(0)) {
-                transferType =
-                TransferManager.TransferType.TransferNativeInExecutor;
-            } else {
-                transferType = TransferManager.TransferType.Transfer;
-            }
+        if (tokenIn == address(0)) {
+            transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
-            revert UniswapV4Executor__UnknownCallback(selector);
+            transferType = TransferManager.TransferType.Transfer;
         }
     }
 }

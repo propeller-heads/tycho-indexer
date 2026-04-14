@@ -101,15 +101,16 @@ contract FluidV1Executor is IExecutor, ICallback {
         // ---------------------
         // 0  | dex address
         // 20 | zero2one
-        // 21 | tokenOut (parsed in getTransferData)
-        // 41 | is_native
-        // 42 | EOF
-        if (data.length != 42) {
+        // 21 | tokenIn  (parsed in getTransferData)
+        // 41 | tokenOut (parsed in getTransferData)
+        // 61 | is_native
+        // 62 | EOF
+        if (data.length != 62) {
             revert FluidV1Executor__InvalidDataLength();
         }
         dex = IFluidV1Dex(address(bytes20(data[0:20])));
         zero2one = uint8(data[20]) > 0;
-        isNativeSell = uint8(data[41]) > 0;
+        isNativeSell = uint8(data[61]) > 0;
     }
 
     function handleCallback(bytes calldata data)
@@ -140,35 +141,32 @@ contract FluidV1Executor is IExecutor, ICallback {
             bool outputToRouter
         )
     {
-        tokenOut = address(bytes20(data[21:41]));
-        bool isNativeSell = uint8(data[41]) > 0;
+        bool isNativeSell = uint8(data[61]) > 0;
+        tokenOut = address(bytes20(data[41:61]));
         // ETH transfers are handled before the callback by calling dex.swapIn
         // instead of dex.swapInWithCallback.
         if (isNativeSell) {
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
+            tokenIn = address(0);
         } else {
             transferType = TransferManager.TransferType.None;
+            tokenIn = address(bytes20(data[21:41]));
         }
-        return (transferType, address(0), address(0), tokenOut, false);
+        return (transferType, address(0), tokenIn, tokenOut, false);
     }
 
-    function getCallbackTransferData(bytes calldata data)
+    function getCallbackTransferData(
+        bytes calldata, /* data */
+        address /* tokenIn */
+    )
         external
         payable
-        returns (
-            TransferManager.TransferType transferType,
-            address receiver,
-            address tokenIn
-        )
+        returns (TransferManager.TransferType transferType, address receiver)
     {
-        tokenIn = abi.decode(data[4:36], (address));
-        if (tokenIn == address(0)) {
-            // ETH transfers are handled before the callback by calling dex.swapIn
-            // instead of dex.swapInWithCallback.
-            transferType = TransferManager.TransferType.TransferNativeInExecutor;
-        } else {
-            transferType = TransferManager.TransferType.Transfer;
-        }
+        // This is only called for ERC20 swaps. Native sells use swapIn() (no
+        // callback) rather than swapInWithCallback(), so this path is never
+        // reached for native tokens.
+        transferType = TransferManager.TransferType.Transfer;
         receiver = liquidity;
     }
 }
