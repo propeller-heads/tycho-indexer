@@ -91,8 +91,11 @@ contract BalancerV3ExecutorTest is Constants, TestUtils {
         uint256 amountOwed = 1 ether;
         bytes memory params =
             abi.encodePacked(amountOwed, WBTC_ADDR, address(0), address(0));
-        (, address receiver) =
+        (TransferManager.TransferType transferType, address receiver) =
             balancerV3Exposed.getCallbackTransferData(params, WBTC_ADDR);
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, 0xbA1333333333a1BA1108E8412f11850A5C319bA9);
     }
 

@@ -67,8 +67,6 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             revert EkuboExecutor__InvalidDataLength();
         }
 
-        address tokenIn = address(bytes20(data[0:20]));
-
         // amountIn must be at most type(int128).MAX
         _lock(
             abi.encodePacked(

@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 import "../TestUtils.sol";
 import "../TychoRouterTestSetup.sol";
 import "@src/executors/EkuboExecutor.sol";
+import {TransferManager} from "@src/TransferManager.sol";
 import {Constants} from "../Constants.sol";
 import {ICore} from "@ekubo/interfaces/ICore.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -16,6 +17,11 @@ contract EkuboExecutorTest is Constants, TestUtils {
 
     IERC20 USDC = IERC20(USDC_ADDR);
     IERC20 USDT = IERC20(USDT_ADDR);
+
+    // payCallback(uint256,address) selector
+    bytes4 constant PAY_CALLBACK_SELECTOR = 0x599d0714;
+    // locked(uint256) selector
+    bytes4 constant LOCKED_SELECTOR = 0xb45a3c0e;
 
     address constant CORE_ADDRESS = 0xe0e0e08A6A4b9Dc7bD67BCB7aadE5cF48157d444;
     address constant MEV_RESIST_ADDRESS =
@@ -93,6 +99,41 @@ contract EkuboExecutorTest is Constants, TestUtils {
         assertEq(
             USDT.balanceOf(CORE_ADDRESS), usdtBalanceBeforeCore - amountOut
         );
+    }
+
+    function testGetCallbackTransferDataPayCallback() internal {
+        bytes memory data = abi.encodePacked(PAY_CALLBACK_SELECTOR);
+
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(data, USDC_ADDR);
+
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
+        assertEq(receiver, CORE_ADDRESS);
+    }
+
+    function testGetCallbackTransferDataLockedERC20() internal {
+        bytes memory data = abi.encodePacked(LOCKED_SELECTOR);
+
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(data, USDC_ADDR);
+
+        assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
+        assertEq(receiver, address(0));
+    }
+
+    function testGetCallbackTransferDataLockedNative() internal {
+        bytes memory data = abi.encodePacked(LOCKED_SELECTOR);
+
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(data, address(0));
+
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.TransferNativeInExecutor)
+        );
+        assertEq(receiver, address(0));
     }
 
     // Same test case as in swap_encoder::tests::ekubo::test_encode_swap_multi

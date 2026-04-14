@@ -93,8 +93,12 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
-        (, address receiver) = executor.getCallbackTransferData(data, DAI_ADDR);
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(data, DAI_ADDR);
 
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, FLUIDV1_LIQUIDITY);
     }
 
@@ -105,9 +109,12 @@ contract FluidV1ExecutorTest is Test, Constants {
         address dexAddress = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
-        (, address receiver) =
+        (TransferManager.TransferType transferType, address receiver) =
             executor.getCallbackTransferData(data, address(0));
 
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, FLUIDV1_LIQUIDITY);
     }
 

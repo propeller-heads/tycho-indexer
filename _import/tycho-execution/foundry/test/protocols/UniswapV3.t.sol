@@ -108,9 +108,12 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (, address receiver) =
+        (TransferManager.TransferType transferType, address receiver) =
             uniswapV3Exposed.getCallbackTransferData(callbackData, WETH_ADDR);
 
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, address(this));
     }
 
