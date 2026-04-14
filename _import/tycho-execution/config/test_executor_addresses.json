@@ -22,6 +22,7 @@
     "rfq:liquorice": "0x3381cD18e2Fb4dB236BF0525938AB6E43Db0440f"
   },
   "base": {
-    "aerodrome_slipstreams": "0x2a07706473244BC757E10F2a9E86fB532828afe3"
+    "aerodrome_slipstreams": "0x2a07706473244BC757E10F2a9E86fB532828afe3",
+    "aerodrome_v1": "0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6"
   }
 }
