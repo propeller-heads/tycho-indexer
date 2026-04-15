@@ -1,3 +1,18 @@
+## [0.158.0](https://github.com/propeller-heads/tycho-indexer/compare/0.157.4...0.158.0) (2026-04-15)
+
+
+### Features
+
+* change version of github actions/checkout to v5 ([#654](https://github.com/propeller-heads/tycho-indexer/issues/654)) ([12348bc](https://github.com/propeller-heads/tycho-indexer/commit/12348bc05a4f9e272f6c0baaa9a7abc822c234f1))
+* **partial blocks:** defer fetching snapshots of newly created component ([3603594](https://github.com/propeller-heads/tycho-indexer/commit/36035945541a524694ed87323af77d2402ee2e21))
+* **tycho-client:** handle partial reverts ([64a50b5](https://github.com/propeller-heads/tycho-indexer/commit/64a50b52eee57f7a6c48c205a1292c0f0ac68f5e))
+
+
+### Bug Fixes
+
+* **tycho-client:** fetch snapshots on full blocks only ([84beb19](https://github.com/propeller-heads/tycho-indexer/commit/84beb1981c56084d66646f87f57df5df97f138a1))
+* **tycho-client:** fetch snapshots on full blocks only ([#855](https://github.com/propeller-heads/tycho-indexer/issues/855)) ([7ee7d97](https://github.com/propeller-heads/tycho-indexer/commit/7ee7d978c050334aba96de24e3060154a1065da7))
+
 ## [0.157.4](https://github.com/propeller-heads/tycho-indexer/compare/0.157.3...0.157.4) (2026-04-14)
 
 ## [0.157.3](https://github.com/propeller-heads/tycho-indexer/compare/0.157.2...0.157.3) (2026-04-09)
