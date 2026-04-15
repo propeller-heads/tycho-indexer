@@ -1,3 +1,10 @@
+## [0.175.2](https://github.com/propeller-heads/tycho-execution/compare/0.175.1...0.175.2) (2026-04-15)
+
+
+### Bug Fixes
+
+* bump rustls-webpki to 0.103.12 ([b3d6b1f](https://github.com/propeller-heads/tycho-execution/commit/b3d6b1f627385d0e61e475de3c696caf8fe1f8a9))
+
 ## [0.175.1](https://github.com/propeller-heads/tycho-execution/compare/0.175.0...0.175.1) (2026-04-14)
 
 
