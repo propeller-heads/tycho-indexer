@@ -66,6 +66,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
+            swap,
             tychoRouterAddr,
             CLIENT_FEE_RECEIVER_PK
         );
@@ -267,6 +268,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             1,
             ALICE,
+            swap,
             tychoRouterAddr,
             CLIENT_FEE_RECEIVER_PK
         );
@@ -310,6 +312,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             1,
             ALICE,
+            swap,
             tychoRouterAddr,
             ALICE_PK
         );
@@ -347,6 +350,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             1,
             ALICE,
+            swap,
             tychoRouterAddr,
             CLIENT_FEE_RECEIVER_PK
         );
@@ -386,6 +390,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             DAI_ADDR,
             1,
             ALICE,
+            swap,
             tychoRouterAddr,
             block.chainid + 1,
             CLIENT_FEE_RECEIVER_PK
@@ -466,6 +471,7 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
             STA_ADDR,
             1,
             ALICE,
+            swap,
             tychoRouterAddr,
             CLIENT_FEE_RECEIVER_PK
         );

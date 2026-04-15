@@ -130,6 +130,7 @@ pub fn encode_tycho_router_call(
             checked_token,
             min_amount_out,
             receiver,
+            encoded_solution.swaps(),
         )?;
         (client_fee_receiver, sig)
     };
@@ -260,6 +261,7 @@ fn sign_client_fee(
     token_out: Address,
     min_amount_out: U256,
     receiver: Address,
+    swaps: &[u8],
 ) -> Result<Vec<u8>, EncodingError> {
     let signer = PrivateKeySigner::from_str(CLIENT_FEE_RECEIVER_PK)
         .map_err(|e| EncodingError::FatalError(format!("Invalid CLIENT_FEE_RECEIVER_PK: {e}")))?;
@@ -270,7 +272,7 @@ fn sign_client_fee(
         b"ClientFee(uint16 clientFeeBps,address clientFeeReceiver,\
 uint256 maxClientContribution,uint256 deadline,\
 uint256 amountIn,address tokenIn,address tokenOut,\
-uint256 minAmountOut,address receiver)",
+uint256 minAmountOut,address receiver,bytes swaps)",
     );
 
     // EIP-712 domain separator for TychoRouter ("TychoRouter", "1")
@@ -288,6 +290,7 @@ uint256 minAmountOut,address receiver)",
             .abi_encode(),
     );
 
+    let swaps_hash: B256 = keccak256(swaps);
     let struct_hash: B256 = keccak256(
         (
             type_hash,
@@ -300,6 +303,7 @@ uint256 minAmountOut,address receiver)",
             token_out,
             min_amount_out,
             receiver,
+            swaps_hash,
         )
             .abi_encode(),
     );
