@@ -1,3 +1,10 @@
+## [0.176.0](https://github.com/propeller-heads/tycho-execution/compare/0.175.2...0.176.0) (2026-04-15)
+
+
+### Features
+
+* Tie client signature to all input params ([411dbda](https://github.com/propeller-heads/tycho-execution/commit/411dbda6c93231c56d4db1bfc211486761b4dc6a))
+
 ## [0.175.2](https://github.com/propeller-heads/tycho-execution/compare/0.175.1...0.175.2) (2026-04-15)
 
 
