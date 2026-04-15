@@ -1,3 +1,16 @@
+## [0.177.0](https://github.com/propeller-heads/tycho-execution/compare/0.176.0...0.177.0) (2026-04-15)
+
+
+### Features
+
+* init aerodrome_v1 execution ([c2e019f](https://github.com/propeller-heads/tycho-execution/commit/c2e019f403e8fa02d73477fba83d66bba350097e))
+
+
+### Bug Fixes
+
+* add Aerodrome V1 executor tests ([b7558f8](https://github.com/propeller-heads/tycho-execution/commit/b7558f8045330113cf5093162a8fb8316f9c8876))
+* encode aerodrome v1 zeroForOne in calldata ([d90a28b](https://github.com/propeller-heads/tycho-execution/commit/d90a28b42e97f9f6be92dd1d3fb3e5feb7f64134))
+
 ## [0.176.0](https://github.com/propeller-heads/tycho-execution/compare/0.175.2...0.176.0) (2026-04-15)
 
 
