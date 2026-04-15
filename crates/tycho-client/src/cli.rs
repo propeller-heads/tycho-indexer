@@ -238,18 +238,16 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     let builder = builder.no_tls(args.no_tls);
 
     // Timing: use CLI overrides when provided, otherwise the builder keeps chain defaults.
-    let builder = match args.block_time {
-        Some(bt) => builder.block_time(bt),
-        None => builder,
-    };
-    let builder = match args.timeout {
-        Some(to) => builder.timeout(to),
-        None => builder,
-    };
-    let builder = match args.max_missed_blocks {
-        Some(mmb) => builder.max_missed_blocks(mmb),
-        None => builder,
-    };
+    let mut builder = builder;
+    if let Some(bt) = args.block_time {
+        builder = builder.block_time(bt);
+    }
+    if let Some(to) = args.timeout {
+        builder = builder.timeout(to);
+    }
+    if let Some(mmb) = args.max_missed_blocks {
+        builder = builder.max_missed_blocks(mmb);
+    }
 
     // Feature flags
     let builder = builder
