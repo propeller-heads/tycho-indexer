@@ -34,11 +34,12 @@ impl SwapEncoder for AerodromeV1SwapEncoder {
     ) -> Result<Vec<u8>, EncodingError> {
         let token_in_address = bytes_to_address(swap.token_in())?;
         let token_out_address = bytes_to_address(swap.token_out())?;
+        let zero_for_one = token_in_address < token_out_address;
         let component_id = Address::from_str(&swap.component().id).map_err(|_| {
             EncodingError::FatalError("Invalid aerodrome_v1 component id".to_string())
         })?;
 
-        Ok((component_id, token_in_address, token_out_address).abi_encode_packed())
+        Ok((component_id, token_in_address, token_out_address, zero_for_one).abi_encode_packed())
     }
 
     fn executor_address(&self) -> &Bytes {
@@ -95,6 +96,7 @@ mod tests {
                 "723aef6543aece026a15662be4d3fb3424d502a9",
                 "236aa50979d5f3de3bd1eeb40e81137f22ab794b",
                 "d9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca",
+                "01",
             ))
         );
 

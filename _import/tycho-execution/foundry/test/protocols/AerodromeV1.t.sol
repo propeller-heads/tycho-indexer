@@ -5,7 +5,6 @@ import {TestUtils} from "../TestUtils.sol";
 import {
     AerodromeV1Executor,
     AerodromeV1Executor__InvalidDataLength,
-    AerodromeV1Executor__InvalidTokenPair,
     IAerodromeV1Pool
 } from "@src/executors/AerodromeV1Executor.sol";
 import {Constants} from "../Constants.sol";
@@ -29,7 +28,12 @@ contract AerodromeV1ExecutorExposed is AerodromeV1Executor {
     function decodeParams(bytes calldata data)
         external
         pure
-        returns (address target, address tokenIn, address tokenOut)
+        returns (
+            address target,
+            address tokenIn,
+            address tokenOut,
+            bool zeroForOne
+        )
     {
         return _decodeData(data);
     }
@@ -49,15 +53,19 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
 
     function testDecodeParams() public view {
         bytes memory params = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_TBTC, AERODROME_V1_USDBC
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_TBTC,
+            AERODROME_V1_USDBC,
+            true
         );
 
-        (address target, address tokenIn, address tokenOut) =
+        (address target, address tokenIn, address tokenOut, bool zeroForOne) =
             aerodromeV1Exposed.decodeParams(params);
 
         assertEq(target, AERODROME_V1_VOLATILE_POOL);
         assertEq(tokenIn, AERODROME_V1_TBTC);
         assertEq(tokenOut, AERODROME_V1_USDBC);
+        assertEq(zeroForOne, true);
     }
 
     function testDecodeParamsInvalidDataLength() public {
@@ -70,7 +78,10 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
 
     function testGetTransferData() public {
         bytes memory params = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_TBTC, AERODROME_V1_USDBC
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_TBTC,
+            AERODROME_V1_USDBC,
+            true
         );
 
         (
@@ -92,7 +103,10 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
 
     function testFundsExpectedAddress() public view {
         bytes memory params = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_TBTC, AERODROME_V1_USDBC
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_TBTC,
+            AERODROME_V1_USDBC,
+            true
         );
         address receiver = aerodromeV1Exposed.fundsExpectedAddress(params);
         assertEq(receiver, AERODROME_V1_VOLATILE_POOL);
@@ -103,7 +117,10 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
         uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_VOLATILE_POOL)
             .getAmountOut(amountIn, AERODROME_V1_TBTC);
         bytes memory protocolData = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_TBTC, AERODROME_V1_USDBC
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_TBTC,
+            AERODROME_V1_USDBC,
+            true
         );
 
         deal(AERODROME_V1_TBTC, address(aerodromeV1Exposed), amountIn);
@@ -123,7 +140,10 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
         uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_VOLATILE_POOL)
             .getAmountOut(amountIn, AERODROME_V1_USDBC);
         bytes memory protocolData = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_USDBC, AERODROME_V1_TBTC
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_USDBC,
+            AERODROME_V1_TBTC,
+            false
         );
 
         deal(AERODROME_V1_USDBC, address(aerodromeV1Exposed), amountIn);
@@ -142,12 +162,13 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
         bytes memory protocolData =
             loadCallDataFromFile("test_encode_aerodrome_v1");
 
-        (address target, address tokenIn, address tokenOut) =
+        (address target, address tokenIn, address tokenOut, bool zeroForOne) =
             aerodromeV1Exposed.decodeParams(protocolData);
 
         assertEq(target, AERODROME_V1_VOLATILE_POOL);
         assertEq(tokenIn, AERODROME_V1_TBTC);
         assertEq(tokenOut, AERODROME_V1_USDBC);
+        assertEq(zeroForOne, true);
     }
 
     function testSwapIntegration() public {
@@ -169,13 +190,21 @@ contract AerodromeV1ExecutorTest is Constants, TestUtils, AerodromeV1TestBase {
         assertEq(token0.balanceOf(address(aerodromeV1Exposed)), 0);
     }
 
-    function testSwapRevertOnInvalidPair() public {
-        bytes memory protocolData = abi.encodePacked(
-            AERODROME_V1_VOLATILE_POOL, AERODROME_V1_TBTC, address(0x1234)
+    function testDecodeParamsOneForZero() public view {
+        bytes memory params = abi.encodePacked(
+            AERODROME_V1_VOLATILE_POOL,
+            AERODROME_V1_USDBC,
+            AERODROME_V1_TBTC,
+            false
         );
 
-        vm.expectRevert(AerodromeV1Executor__InvalidTokenPair.selector);
-        aerodromeV1Exposed.swap(1 ether, protocolData, address(this));
+        (address target, address tokenIn, address tokenOut, bool zeroForOne) =
+            aerodromeV1Exposed.decodeParams(params);
+
+        assertEq(target, AERODROME_V1_VOLATILE_POOL);
+        assertEq(tokenIn, AERODROME_V1_USDBC);
+        assertEq(tokenOut, AERODROME_V1_TBTC);
+        assertEq(zeroForOne, false);
     }
 }
 
@@ -193,6 +222,8 @@ contract TychoRouterForAerodromeV1Test is
 
     function testSingleAerodromeV1Integration() public {
         uint256 amountIn = 0.01 ether;
+        uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_VOLATILE_POOL)
+            .getAmountOut(amountIn, AERODROME_V1_TBTC);
         deal(AERODROME_V1_TBTC, ALICE, amountIn);
         uint256 balanceBefore = IERC20(AERODROME_V1_USDBC).balanceOf(ALICE);
 
@@ -208,11 +239,16 @@ contract TychoRouterForAerodromeV1Test is
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(AERODROME_V1_TBTC).balanceOf(tychoRouterAddr), 0);
-        assertGt(balanceAfter, balanceBefore);
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
     }
 
     function testSequentialAerodromeV1Integration() public {
         uint256 amountIn = 10 ether;
+        uint256 intermediateAmountOut = IAerodromeV1Pool(
+                AERODROME_V1_STABLE_POOL
+            ).getAmountOut(amountIn, AERODROME_V1_DOLA);
+        uint256 expectedAmountOut = IAerodromeV1Pool(AERODROME_V1_VOLATILE_POOL)
+            .getAmountOut(intermediateAmountOut, AERODROME_V1_USDBC);
         deal(AERODROME_V1_DOLA, ALICE, amountIn);
         uint256 balanceBefore = IERC20(AERODROME_V1_TBTC).balanceOf(ALICE);
 
@@ -229,6 +265,6 @@ contract TychoRouterForAerodromeV1Test is
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(AERODROME_V1_DOLA).balanceOf(tychoRouterAddr), 0);
-        assertGt(balanceAfter, balanceBefore);
+        assertEq(balanceAfter - balanceBefore, expectedAmountOut);
     }
 }

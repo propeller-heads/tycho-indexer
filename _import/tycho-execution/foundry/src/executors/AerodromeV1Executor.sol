@@ -5,8 +5,6 @@ import {IExecutor} from "@interfaces/IExecutor.sol";
 import {TransferManager} from "../TransferManager.sol";
 
 interface IAerodromeV1Pool {
-    function token0() external view returns (address);
-    function token1() external view returns (address);
     function getAmountOut(uint256 amountIn, address tokenIn)
         external
         view
@@ -20,7 +18,6 @@ interface IAerodromeV1Pool {
 }
 
 error AerodromeV1Executor__InvalidDataLength();
-error AerodromeV1Executor__InvalidTokenPair();
 
 contract AerodromeV1Executor is IExecutor {
     function fundsExpectedAddress(bytes calldata data)
@@ -38,22 +35,11 @@ contract AerodromeV1Executor is IExecutor {
     {
         address target;
         address tokenIn;
-        address tokenOut;
+        bool zeroForOne;
 
-        (target, tokenIn, tokenOut) = _decodeData(data);
+        (target, tokenIn,, zeroForOne) = _decodeData(data);
 
         IAerodromeV1Pool pool = IAerodromeV1Pool(target);
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-
-        bool zeroForOne = (tokenIn == token0);
-        if (
-            (zeroForOne && tokenOut != token1)
-                || (!zeroForOne && (tokenIn != token1 || tokenOut != token0))
-        ) {
-            revert AerodromeV1Executor__InvalidTokenPair();
-        }
-
         _swap(pool, amountIn, tokenIn, zeroForOne, receiver);
     }
 
@@ -75,14 +61,20 @@ contract AerodromeV1Executor is IExecutor {
     function _decodeData(bytes calldata data)
         internal
         pure
-        returns (address target, address tokenIn, address tokenOut)
+        returns (
+            address target,
+            address tokenIn,
+            address tokenOut,
+            bool zeroForOne
+        )
     {
-        if (data.length != 60) {
+        if (data.length != 61) {
             revert AerodromeV1Executor__InvalidDataLength();
         }
         target = address(bytes20(data[0:20]));
         tokenIn = address(bytes20(data[20:40]));
         tokenOut = address(bytes20(data[40:60]));
+        zeroForOne = uint8(data[60]) > 0;
     }
 
     function getTransferData(bytes calldata data)
@@ -96,7 +88,11 @@ contract AerodromeV1Executor is IExecutor {
             bool outputToRouter
         )
     {
-        (address target, address decodedTokenIn, address decodedTokenOut) =
+        address target;
+        address decodedTokenIn;
+        address decodedTokenOut;
+        bool ignoredZeroForOne;
+        (target, decodedTokenIn, decodedTokenOut, ignoredZeroForOne) =
             _decodeData(data);
         return (
             TransferManager.TransferType.Transfer,
