@@ -108,7 +108,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
 
     bytes32 public constant CLIENT_FEE_TYPEHASH = keccak256(
         "ClientFee(uint16 clientFeeBps,address clientFeeReceiver,"
-        "uint256 maxClientContribution,uint256 deadline)"
+        "uint256 maxClientContribution,uint256 deadline,"
+        "uint256 amountIn,address tokenIn,address tokenOut,"
+        "uint256 minAmountOut,address receiver)"
     );
 
     event Withdrawal(
@@ -189,7 +191,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _updateNativeDeltaAccounting(amountIn);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
@@ -235,7 +239,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _splitSwapChecked(
@@ -284,7 +290,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata signature,
         bytes calldata swaps
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -331,7 +339,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _updateNativeDeltaAccounting(amountIn);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
@@ -374,7 +384,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swaps
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _sequentialSwapChecked(
@@ -419,7 +431,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata signature,
         bytes calldata swaps
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -465,7 +479,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swapData
     ) public payable whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _updateNativeDeltaAccounting(amountIn);
         _tstoreTransferFromInfo(tokenIn, amountIn, false, false);
 
@@ -507,7 +523,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         ClientFeeParams calldata clientFeeParams,
         bytes calldata swapData
     ) public whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         _tstoreTransferFromInfo(tokenIn, amountIn, false, true);
 
         return _singleSwap(
@@ -552,7 +570,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         bytes calldata signature,
         bytes calldata swapData
     ) external whenNotPaused nonReentrant returns (uint256 amountOut) {
-        _verifyClientSignature(clientFeeParams);
+        _verifyClientSignature(
+            clientFeeParams, amountIn, tokenIn, tokenOut, minAmountOut, receiver
+        );
         // For native ETH, assume funds already in our router. Else, handle approval.
         if (tokenIn != address(0)) {
             permit2.permit(msg.sender, permitSingle, signature);
@@ -1154,11 +1174,24 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     }
 
     /**
-     * @dev Verifies the client's EIP-712 signature over the fee parameters.
-     *      When clientFeeReceiver is address(0), no signature is required.
+     * @dev Verifies the client's EIP-712 signature over the fee parameters and
+     *      the core swap parameters. When clientFeeReceiver is address(0), no
+     *      signature is required.
      * @param p The client fee parameters including the signature to verify.
+     * @param amountIn The input token amount.
+     * @param tokenIn The input token address.
+     * @param tokenOut The output token address.
+     * @param minAmountOut The minimum acceptable output amount.
+     * @param receiver The address to receive the output tokens.
      */
-    function _verifyClientSignature(ClientFeeParams calldata p) internal view {
+    function _verifyClientSignature(
+        ClientFeeParams calldata p,
+        uint256 amountIn,
+        address tokenIn,
+        address tokenOut,
+        uint256 minAmountOut,
+        address receiver
+    ) internal view {
         if (p.clientFeeReceiver == address(0)) {
             if (p.maxClientContribution > 0 || p.clientFeeBps > 0) {
                 revert TychoRouter__AddressZero();
@@ -1178,7 +1211,12 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                     p.clientFeeBps,
                     p.clientFeeReceiver,
                     p.maxClientContribution,
-                    p.deadline
+                    p.deadline,
+                    amountIn,
+                    tokenIn,
+                    tokenOut,
+                    minAmountOut,
+                    receiver
                 )
             )
         );

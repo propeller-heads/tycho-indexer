@@ -286,8 +286,16 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             deadline: block.timestamp + 1 hours,
             clientSignature: new bytes(0)
         });
-        feeParams.clientSignature =
-            signClientFee(feeParams, tychoRouterAddr, ALICE_PK);
+        feeParams.clientSignature = signClientFee(
+            feeParams,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         uint256 amountOut = tychoRouter.singleSwap(
             amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
@@ -374,8 +382,17 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             )
         );
 
-        ClientFeeParams memory feeParams =
-            makeClientFeeParams(0, 20 * 1e18, tychoRouterAddr, ALICE_PK);
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            0,
+            20 * 1e18,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         tychoRouter.singleSwap(
             amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
@@ -409,8 +426,17 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             encodeSingleSwap(address(usv2Executor), protocolData);
 
         uint256 minAmountOut = 2020 * 1e18;
-        ClientFeeParams memory feeParams =
-            makeClientFeeParams(0, maxContribution, tychoRouterAddr, ALICE_PK);
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            0,
+            maxContribution,
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            minAmountOut,
+            ALICE,
+            tychoRouterAddr,
+            ALICE_PK
+        );
 
         uint256 amountOut = tychoRouter.singleSwap(
             amountIn, WETH_ADDR, DAI_ADDR, minAmountOut, ALICE, feeParams, swap
