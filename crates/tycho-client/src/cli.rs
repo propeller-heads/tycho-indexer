@@ -227,18 +227,14 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     let chain = Chain::from_str(&args.chain)
         .map_err(|_| format!("Unknown chain: {chain}", chain = &args.chain))?;
 
-    // Start with chain-appropriate defaults; override only what the user explicitly provided.
-    let builder = TychoStreamBuilder::new(&args.tycho_url, chain);
+    let mut builder = TychoStreamBuilder::new(&args.tycho_url, chain)
+        .auth_key(args.auth_key)
+        .no_tls(args.no_tls)
+        .no_state(args.no_state)
+        .include_tvl(args.include_tvl)
+        .max_retries(args.max_retries)
+        .blocklisted_ids(blocklist);
 
-    // Auth key is optional; TLS is on by default and disabled only via --no-tls.
-    let builder = match args.auth_key {
-        Some(key) => builder.auth_key(Some(key)),
-        None => builder,
-    };
-    let builder = builder.no_tls(args.no_tls);
-
-    // Timing: use CLI overrides when provided, otherwise the builder keeps chain defaults.
-    let mut builder = builder;
     if let Some(bt) = args.block_time {
         builder = builder.block_time(bt);
     }
@@ -248,19 +244,15 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     if let Some(mmb) = args.max_missed_blocks {
         builder = builder.max_missed_blocks(mmb);
     }
-
-    // Feature flags
-    let builder = builder
-        .no_state(args.no_state)
-        .include_tvl(args.include_tvl)
-        .max_retries(args.max_retries)
-        .blocklisted_ids(blocklist);
-    let builder = if args.disable_compression { builder.disable_compression() } else { builder };
-    let builder = if args.partial_blocks { builder.enable_partial_blocks() } else { builder };
-    let builder = match args.max_messages {
-        Some(n) => builder.max_messages(n),
-        None => builder,
-    };
+    if args.disable_compression {
+        builder = builder.disable_compression();
+    }
+    if args.partial_blocks {
+        builder = builder.enable_partial_blocks();
+    }
+    if let Some(n) = args.max_messages {
+        builder = builder.max_messages(n);
+    }
 
     // Register exchanges
     let builder = exchanges
