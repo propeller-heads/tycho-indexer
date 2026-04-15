@@ -7,9 +7,9 @@ use crate::encoding::{
     evm::{
         constants::{DEFAULT_EXECUTORS_JSON, PROTOCOL_SPECIFIC_CONFIG},
         swap_encoder::{
-            balancer_v2::BalancerV2SwapEncoder, balancer_v3::BalancerV3SwapEncoder,
-            bebop::BebopSwapEncoder, curve::CurveSwapEncoder, ekubo::EkuboSwapEncoder,
-            ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
+            aerodrome_v1::AerodromeV1SwapEncoder, balancer_v2::BalancerV2SwapEncoder,
+            balancer_v3::BalancerV3SwapEncoder, bebop::BebopSwapEncoder, curve::CurveSwapEncoder,
+            ekubo::EkuboSwapEncoder, ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
             etherfi::EtherfiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
             hashflow::HashflowSwapEncoder, liquidity_party::LiquidityPartySwapEncoder,
             liquorice::LiquoriceSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
@@ -103,6 +103,9 @@ impl SwapEncoderRegistry {
             }
             "pancakeswap_v2" => {
                 Ok(Box::new(UniswapV2SwapEncoder::new(executor_address, self.chain, config)?))
+            }
+            "aerodrome_v1" => {
+                Ok(Box::new(AerodromeV1SwapEncoder::new(executor_address, self.chain, config)?))
             }
             "vm:balancer_v2" => {
                 Ok(Box::new(BalancerV2SwapEncoder::new(executor_address, self.chain, config)?))

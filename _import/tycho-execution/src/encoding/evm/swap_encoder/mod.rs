@@ -1,3 +1,4 @@
+mod aerodrome_v1;
 mod balancer_v2;
 mod balancer_v3;
 mod bebop;
