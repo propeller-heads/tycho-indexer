@@ -1,3 +1,0 @@
-[build]
-# this flag is used to build tokio-console correctly.
-rustflags = ["--cfg", "tokio_unstable"]
