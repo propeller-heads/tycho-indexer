@@ -1,0 +1,43 @@
+[submodule "crates/tycho-execution/contracts/lib/balancer-v2-monorepo"]
+    path = crates/tycho-execution/contracts/lib/balancer-v2-monorepo
+    url = https://github.com/balancer/balancer-v2-monorepo
+
+[submodule "crates/tycho-execution/contracts/lib/balancer-v3-monorepo"]
+    path = crates/tycho-execution/contracts/lib/balancer-v3-monorepo
+    url = https://github.com/balancer/balancer-v3-monorepo
+
+[submodule "crates/tycho-execution/contracts/lib/ekubo-v3"]
+    path = crates/tycho-execution/contracts/lib/ekubo-v3
+    url = https://github.com/EkuboProtocol/evm-contracts
+
+[submodule "crates/tycho-execution/contracts/lib/openzeppelin-contracts"]
+    path = crates/tycho-execution/contracts/lib/openzeppelin-contracts
+    url = https://github.com/OpenZeppelin/openzeppelin-contracts
+
+[submodule "crates/tycho-execution/contracts/lib/permit2"]
+    path = crates/tycho-execution/contracts/lib/permit2
+    url = https://github.com/uniswap/permit2
+
+[submodule "crates/tycho-execution/contracts/lib/solady"]
+    path = crates/tycho-execution/contracts/lib/solady
+    url = https://github.com/vectorized/solady
+
+[submodule "crates/tycho-execution/contracts/lib/v2-core"]
+    path = crates/tycho-execution/contracts/lib/v2-core
+    url = https://github.com/uniswap/v2-core
+
+[submodule "crates/tycho-execution/contracts/lib/v3-core"]
+    path = crates/tycho-execution/contracts/lib/v3-core
+    url = https://github.com/Uniswap/v3-core
+
+[submodule "crates/tycho-execution/contracts/lib/v4-core"]
+    path = crates/tycho-execution/contracts/lib/v4-core
+    url = https://github.com/Uniswap/v4-core
+
+[submodule "crates/tycho-execution/contracts/lib/v4-periphery"]
+    path = crates/tycho-execution/contracts/lib/v4-periphery
+    url = https://github.com/Uniswap/v4-periphery
+
+[submodule "crates/tycho-simulation/token-proxy-contracts/lib/forge-std"]
+    path = crates/tycho-simulation/token-proxy-contracts/lib/forge-std
+    url = https://github.com/foundry-rs/forge-std
