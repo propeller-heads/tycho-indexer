@@ -112,5 +112,5 @@ pub fn create_router_overwrites_data(
 
     let executor_bytecode = load_executor_bytecode(protocol_system)?;
 
-    Ok(RouterOverwritesData { router_bytecode, executor_bytecode })
+    Ok(RouterOverwritesData { router_bytecode, executor_bytecode, fee_calculator_bytecode: vec![] })
 }
