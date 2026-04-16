@@ -1,0 +1,59 @@
+name: Release Python Wheel
+
+on:
+  release:
+    types:
+      - prereleased
+      - released
+  workflow_dispatch: { }
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  tests-and-lints:
+    uses: ./.github/workflows/tests-and-lints-template.yaml
+    secrets:
+      eth_rpc_url: ${{ secrets.ETH_RPC_URL }}
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  build_python_wheel_linux:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
+    needs:
+      - tests-and-lints
+    permissions:
+      id-token: write
+      contents: read
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
+    with:
+      runs_on: 'ubuntu-latest'
+      yum_packages: "pkgconfig openssl-devel"
+      package_root: "tycho_simulation_py"
+      use_maturin: true
+  build_python_wheel_macos:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-python-package.yaml@main
+    needs:
+      - tests-and-lints
+    permissions:
+      id-token: write
+      contents: read
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+      aws_region: ${{ secrets.AWS_REGION }}
+    with:
+      runs_on: 'macos-latest'
+      package_root: "tycho_simulation_py"
+      use_maturin: true
