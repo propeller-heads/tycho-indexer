@@ -1,3 +1,10 @@
+## [0.177.1](https://github.com/propeller-heads/tycho-execution/compare/0.177.0...0.177.1) (2026-04-16)
+
+
+### Bug Fixes
+
+* Also sign client sig to swap data ([c945a01](https://github.com/propeller-heads/tycho-execution/commit/c945a01b9ea302284eba61ccc038db4f439c6a13))
+
 ## [0.177.0](https://github.com/propeller-heads/tycho-execution/compare/0.176.0...0.177.0) (2026-04-15)
 
 
