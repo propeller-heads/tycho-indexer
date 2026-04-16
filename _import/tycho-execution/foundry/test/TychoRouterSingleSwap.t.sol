@@ -293,6 +293,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
+            swap,
             tychoRouterAddr,
             ALICE_PK
         );
@@ -390,6 +391,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
+            swap,
             tychoRouterAddr,
             ALICE_PK
         );
@@ -434,6 +436,7 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
             DAI_ADDR,
             minAmountOut,
             ALICE,
+            swap,
             tychoRouterAddr,
             ALICE_PK
         );

@@ -373,6 +373,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         swaps[0] = encodeSequentialSwap(address(usv3Executor), usdcWethV3Data);
         swaps[1] = encodeSequentialSwap(address(usv2Executor), wethUsdcV2Data);
 
+        bytes memory encodedSwaps = pleEncode(swaps);
         ClientFeeParams memory feeParams = makeClientFeeParams(
             0,
             amountIn / 10,
@@ -381,6 +382,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             USDC_ADDR,
             amountIn,
             tychoRouterAddr,
+            encodedSwaps,
             tychoRouterAddr,
             ALICE_PK
         );
@@ -397,7 +399,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             amountIn,
             tychoRouterAddr,
             feeParams,
-            pleEncode(swaps)
+            encodedSwaps
         );
         vm.stopPrank();
     }
@@ -432,6 +434,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         );
 
         // Client contributes up to amountIn to cover the break-even shortfall.
+        bytes memory encodedSwaps = pleEncode(swaps);
         ClientFeeParams memory feeParams = makeClientFeeParams(
             0,
             inputAmount,
@@ -440,6 +443,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             WETH_ADDR,
             2 * inputAmount,
             tychoRouterAddr,
+            encodedSwaps,
             tychoRouterAddr,
             ALICE_PK
         );
@@ -451,7 +455,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
             2 * inputAmount,
             tychoRouterAddr,
             feeParams,
-            pleEncode(swaps)
+            encodedSwaps
         );
         vm.stopPrank();
 
