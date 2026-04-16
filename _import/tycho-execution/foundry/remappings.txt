@@ -1,0 +1,14 @@
+@openzeppelin/=lib/openzeppelin-contracts/
+@interfaces/=interfaces/
+@permit2/=lib/permit2/
+@src/=src/
+@uniswap-v2/=lib/v2-core/
+@balancer-labs/v2-interfaces=lib/balancer-v2-monorepo/pkg/interfaces
+@balancer-labs/v3-interfaces=lib/balancer-v3-monorepo/pkg/interfaces
+@uniswap/v3-updated/=lib/v3-updated/
+@uniswap/v3-core/=lib/v3-core/
+@uniswap/v4-core/=lib/v4-core/
+@uniswap/v4-periphery/=lib/v4-periphery/
+@solady=lib/solady/src/
+@ekubo=lib/ekubo/
+@ekubo-v3=lib/ekubo-v3/src/

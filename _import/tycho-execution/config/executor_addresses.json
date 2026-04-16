@@ -1,0 +1,40 @@
+{
+  "ethereum": {
+    "uniswap_v2": "0x79087ADB525a6D4e20799AE68Ac06dE0a15c278E",
+    "sushiswap_v2": "0x79087ADB525a6D4e20799AE68Ac06dE0a15c278E",
+    "pancakeswap_v2": "0x3201ea6B93731F30e55Cb87660eEd70B369fadC7",
+    "uniswap_v3": "0xc7d47F3C3f755ed977f3C19F4C1f007CbEd109b0",
+    "pancakeswap_v3": "0xc7d47F3C3f755ed977f3C19F4C1f007CbEd109b0",
+    "uniswap_v4": "0xA942c54f2E58153eCdD4DD24B9bF98F57c9D7d55",
+    "vm:balancer_v2": "0x9D517d5a3A3266fbD75b1Ad4fe6CfC40087Cfdc0",
+    "ekubo_v2": "0x25b670A94a376254Bac2B5f16B0Dc040Df44d1EC",
+    "vm:curve": "0xAF0E1ac9EA1A81120bf4f285340ac70e41c9D65f",
+    "vm:maverick_v2": "0x95E8D6E3997D98170ab7243DFeCF93B5f5e25BED",
+    "vm:balancer_v3": "0x8594ac3486B6c68DF5Bf5F9aDd25FdcaC69F2588",
+    "rfq:bebop": "0xD74644F4ed013DC5f63fe2a576e5fBF6070AEC00",
+    "rfq:hashflow": "0x93Fc40cD88B54f2CBCbF182fa1c78522805B213A",
+    "fluid_v1": "0xAE3ceee21CB9Be4C6C70dE0912947B537bC00b61",
+    "rocketpool": "0x6Ad86dec4c9b897640730eaEdF8ff4659A3be8BE",
+    "erc4626": "0x11C1951e404e1a2A18a046F22501019a02C23D0B",
+    "ekubo_v3": "0x128BA676f1426D0260f7f1EEDD799777dbe12fdb",
+    "weth": "0x8b2042d7be0be18303464362d39d667ca5e74d42",
+    "rfq:liquorice": "0xAC51c531555b7154Fe1BCB7cF4508E93A3BEDa75"
+  },
+  "base": {
+    "uniswap_v2": "0xD689b184C250E543eB3938D524733Ff6B4cfC296",
+    "uniswap_v3": "0x6e644B877c1247c8ab8613fE0787a7B444768d23",
+    "pancakeswap_v3": "0x6e644B877c1247c8ab8613fE0787a7B444768d23",
+    "uniswap_v4": "0x711EA5D03541AB0ee84711D1ED92B5De0bB178c1",
+    "rfq:bebop": "0xbfb5fBfD4C4182D3A1df91CEd45335C543BED3f0",
+    "aerodrome_slipstreams": "0x8fccDb466b71B715355919b3Db0f6B14bfba9dD7",
+    "weth": "0xa2f2d75F08cdf36AdD125Da906D42737527E4E30"
+  },
+  "unichain": {
+    "uniswap_v2": "0x6794ce07fddc3bb5f747b4510d0ebb0d11a03f2c",
+    "uniswap_v3": "0x7270991eb529c7e45a3ec98de542b01e4da32d82",
+    "uniswap_v4": "0x45356073646354f162982bed83c71ef0f310e201",
+    "velodrome_slipstreams": "0xb208092276fde05cff20341049f1e384b1b31112",
+    "vm:curve": "0xbc4d9e944ad40480a34ebaf38cd2acf6e1dc0def",
+    "weth": "0x13AcF9532C173753484ed1Bef86C98cBfe83Ba90"
+  }
+}

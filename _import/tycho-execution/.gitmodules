@@ -1,0 +1,30 @@
+[submodule "foundry/lib/openzeppelin-contracts"]
+	path = foundry/lib/openzeppelin-contracts
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts
+[submodule "foundry/lib/permit2"]
+	path = foundry/lib/permit2
+	url = https://github.com/uniswap/permit2
+[submodule "foundry/lib/v2-core"]
+	path = foundry/lib/v2-core
+	url = https://github.com/uniswap/v2-core
+[submodule "foundry/lib/balancer-v2-monorepo"]
+	path = foundry/lib/balancer-v2-monorepo
+	url = https://github.com/balancer/balancer-v2-monorepo
+[submodule "foundry/lib/v3-core"]
+	path = foundry/lib/v3-core
+	url = https://github.com/Uniswap/v3-core
+[submodule "foundry/lib/v4-core"]
+	path = foundry/lib/v4-core
+	url = https://github.com/Uniswap/v4-core
+[submodule "foundry/lib/v4-periphery"]
+	path = foundry/lib/v4-periphery
+	url = https://github.com/Uniswap/v4-periphery
+[submodule "foundry/lib/solady"]
+	path = foundry/lib/solady
+	url = https://github.com/vectorized/solady
+[submodule "foundry/lib/balancer-v3-monorepo"]
+	path = foundry/lib/balancer-v3-monorepo
+	url = https://github.com/balancer/balancer-v3-monorepo
+[submodule "foundry/lib/ekubo-v3"]
+	path = foundry/lib/ekubo-v3
+	url = https://github.com/EkuboProtocol/evm-contracts
