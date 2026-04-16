@@ -1,3 +1,14 @@
 [build]
-# this flag is used to build tokio-console correctly.
+# Required for tokio-console instrumentation
 rustflags = ["--cfg", "tokio_unstable"]
+
+[env]
+# Use Apple's clang instead of whatever 'cc' resolves to in the shell PATH (e.g. conda GCC).
+# Required for aarch64-apple-darwin because aws-lc-sys checks __ARM_FEATURE_AES /
+# __ARM_FEATURE_SHA2, which Apple clang defines unconditionally but GCC does not.
+CC_aarch64-apple-darwin = "clang"
+# aws-lc-sys jitterentropy includes CoreServices/CoreServices.h on macOS, which in the
+# macOS 26 SDK pulls in Metadata.h -> MDItem.h containing Objective-C block pointer syntax
+# (void(^)(...)).  Pre-defining Metadata.h's include guard skips the entire subtree
+# without affecting anything else.  Ignored on non-Apple platforms.
+CFLAGS_aarch64-apple-darwin = "-D__METADATA_METADATA__=1"

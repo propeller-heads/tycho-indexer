@@ -1,85 +1,113 @@
 [workspace]
-members = [
-    "tycho-indexer",
-    "tycho-client",
-    "tycho-client-py",
-    "tycho-common",
-    "tycho-storage",
-    "tycho-ethereum",
-]
 resolver = "2"
+members = [
+    "crates/tycho",
+    "crates/tycho-common",
+    "crates/tycho-client",
+    "crates/tycho-storage",
+    "crates/tycho-ethereum",
+    "crates/tycho-indexer",
+    "crates/tycho-simulation",
+    "crates/tycho-test",
+    "crates/tycho-integration-test",
+    "crates/tycho-execution",
+    "protocol-testing",
+]
+# substreams/ is intentionally excluded — separate WASM workspace, different toolchain
 
 [workspace.package]
-version = "0.158.0"
-repository = "https://github.com/propeller-heads/tycho-indexer"
+version = "0.255.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/propeller-heads/tycho"
 homepage = "https://www.propellerheads.xyz/tycho"
 documentation = "https://docs.propellerheads.xyz/tycho"
 keywords = ["propellerheads", "solver", "defi", "dex", "mev"]
-license = "MIT"
-categories = ["finance"]
+categories = ["finance", "cryptography::cryptocurrencies"]
 readme = "README.md"
 
-# profile for building substreams crates
+[workspace.dependencies]
+# --- Internal crates (path deps) ---
+tycho                  = { path = "crates/tycho",                  version = "0.255.0" }
+tycho-common           = { path = "crates/tycho-common",           version = "0.255.0" }
+tycho-client           = { path = "crates/tycho-client",           version = "0.255.0" }
+tycho-storage          = { path = "crates/tycho-storage",          version = "0.255.0" }
+tycho-ethereum         = { path = "crates/tycho-ethereum",         version = "0.255.0" }
+tycho-indexer          = { path = "crates/tycho-indexer",          version = "0.255.0" }
+tycho-simulation       = { path = "crates/tycho-simulation",       version = "0.255.0" }
+tycho-test             = { path = "crates/tycho-test",             version = "0.255.0" }
+tycho-integration-test = { path = "crates/tycho-integration-test", version = "0.255.0" }
+tycho-execution        = { path = "crates/tycho-execution",        version = "0.255.0" }
+
+# --- Serialization/Deserialization ---
+serde      = { version = "1.0.204", features = ["rc", "derive"] }
+serde_json = "1.0.120"
+toml       = "0.8"
+typetag    = "0.2.21"
+uuid       = { version = "1.4.1", features = ["serde", "v4", "fast-rng", "macro-diagnostics"] }
+
+# --- Async & concurrency ---
+tokio             = { version = "1.47.1", features = ["full"] }
+futures           = "0.3.31"
+futures03         = { package = "futures", version = "0.3.31", features = ["compat"] }
+async-trait       = "0.1.88"
+async-stream      = "0.3.6"
+# Pinned at 0.20 for tycho-client; simulation's rfq feature uses 0.28 directly (separate semver)
+tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
+tokio-stream      = { version = "0.1", features = ["sync"] }
+
+# --- Logging & tracing ---
+tracing            = "0.1.41"
+tracing-appender   = "0.2"
+tracing-subscriber = { version = "0.3.17", default-features = false }
+console-subscriber = "0.2.0"
+
+# --- Error handling ---
+thiserror = "1"
+anyhow    = "1.0.76"
+
+# --- EVM / Blockchain ---
+alloy         = { version = "1.0.41", default-features = false }
+alloy-dyn-abi = ">=1.4.1"
+ethabi        = "18.0.0"
+
+# --- Utility ---
+chrono               = { version = "0.4.26", features = ["serde"] }
+hex                  = "0.4.3"
+hex-literal          = "0.4.1"
+rand                 = "0.8.5"
+strum                = "0.25.0"
+strum_macros         = "0.25.2"
+num-traits           = "0.2.17"
+num-bigint           = { version = "0.4.6", features = ["serde"] }
+ruint                = { version = "1.17.1", features = ["num-traits"] }
+itertools            = "0.13.0"
+lru                  = "0.16.3"
+dotenv               = "0.15.0"
+deepsize             = "0.2.0"
+unicode-segmentation = "1.12.0"
+clap                 = "4.5.48"
+reqwest              = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+
+# --- Storage ---
+diesel       = { version = "2.3.6", features = ["postgres", "chrono", "serde_json"] }
+diesel-async = { version = "0.7.4", features = ["postgres", "deadpool"] }
+
+# --- OpenAPI ---
+utoipa = { version = "4.2.0", features = ["chrono"] }
+
+# --- Testing ---
+mockall           = "0.13"
+mockito           = "1.1.1"
+pretty_assertions = "1.4.0"
+rstest            = "0.24.0"
+
 [profile.substreams]
 inherits = "release"
-lto = true
 opt-level = 'z'
 strip = "debuginfo"
+lto = true
+codegen-units = 1
 
 [profile.dev]
-# Disabling debug info speeds up builds a bunch,
-# and we don't rely on it for debugging that much.
 debug = 0
-
-[workspace.dependencies]
-chrono = { version = "0.4.26", features = ["serde"] }
-serde_json = "1.0.120"
-serde = { version = "1.0.204", features = ["rc"] }
-strum = "0.25.0"
-strum_macros = "0.25.2"
-alloy = { version = "1.0.41", default-features = false }
-uuid = { version = "1.4.1", features = [
-    "serde",
-    "v4",
-    "fast-rng",
-    "macro-diagnostics",
-] }
-hex = "0.4.3"
-tycho-common = { path = "./tycho-common", version = "0.158.0" }
-tycho-storage = { path = "./tycho-storage", version = "0.158.0" }
-tycho-ethereum = { path = "./tycho-ethereum", version = "0.158.0" }
-tycho-client = { path = "./tycho-client", version = "0.158.0" }
-futures03 = { version = "0.3.1", package = "futures", features = ["compat"] }
-toml = "0.8"
-thiserror = "1"
-tracing = "0.1.37"
-deepsize = "0.2.0"
-async-trait = "0.1.73"
-tokio = { version = "1.27", features = [
-    "time",
-    "sync",
-    "macros",
-    "test-util",
-    "rt-multi-thread",
-    "parking_lot",
-    "tracing",
-] }
-console-subscriber = "0.2.0"
-tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
-utoipa = { version = "4.2.0", features = ["chrono"] }
-diesel = { version = "2.3.6", features = ["postgres", "chrono", "serde_json"] }
-diesel-async = { version = "0.7.4", features = ["postgres", "deadpool"] }
-ethabi = "18.0.0"
-anyhow = "1.0.76"
-unicode-segmentation = "1.12.0"
-clap = "4.4.2"
-tracing-appender = "0.2"
-reqwest = "0.11"
-lru = "0.16.3"
-typetag = "0.2.16"
-rand = "0.8.5"
-# test dependencies
-pretty_assertions = "1.4.0"
-rstest = "0.18.2"
-mockall = "0.11.4"
-mockito = "1.1.1"

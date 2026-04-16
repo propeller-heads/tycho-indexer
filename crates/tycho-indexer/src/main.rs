@@ -1,4 +1,4 @@
-#![doc = include_str!("../../README.md")]
+#![doc = include_str!("../README.md")]
 
 // TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
 #[cfg(test)]

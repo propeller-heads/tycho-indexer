@@ -4,7 +4,7 @@ version.workspace = true
 edition = "2021"
 
 [dependencies]
-alloy = { workspace = true, features = ["rpc-types-eth", "sol-types"] }
+alloy = { workspace = true, features = ["rpc-types-eth", "sol-types", "contract"] }
 alloy-chains = "0.2.6"
 alloy-rpc-types-trace = "1.0.38"
 async-trait = { workspace = true }
@@ -28,6 +28,6 @@ tracing-subscriber = { workspace = true }
 tycho-client = { workspace = true }
 tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
-tycho-execution = ">=0.169.0"
-tycho-simulation = { path = "..", features = ["evm"] }
+tycho-execution  = { workspace = true }
+tycho-simulation = { workspace = true, features = ["evm"] }
 urlencoding = "2.1.3"

@@ -8,26 +8,19 @@ use std::{collections::HashMap, sync::LazyLock};
 
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tycho_test::execution::models::RouterOverwritesData;
-pub const ROUTER_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/router/TychoRouter.runtime.json");
+pub const ROUTER_BYTECODE_JSON: &str = include_str!("../fixtures/TychoRouter.runtime.json");
 
 // Include all executor bytecode files at compile time
-const UNISWAP_V2_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/UniswapV2.runtime.json");
-const UNISWAP_V3_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/UniswapV3.runtime.json");
-const UNISWAP_V4_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/UniswapV4.runtime.json");
+const UNISWAP_V2_BYTECODE_JSON: &str = include_str!("../fixtures/UniswapV2.runtime.json");
+const UNISWAP_V3_BYTECODE_JSON: &str = include_str!("../fixtures/UniswapV3.runtime.json");
+const UNISWAP_V4_BYTECODE_JSON: &str = include_str!("../fixtures/UniswapV4.runtime.json");
 const UNISWAP_V4_ANGSTROM_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/UniswapV4Angstrom.runtime.json");
-const BALANCER_V2_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/BalancerV2.runtime.json");
-const BALANCER_V3_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/BalancerV3.runtime.json");
-const CURVE_BYTECODE_JSON: &str = include_str!("../../evm/test/executors/Curve.runtime.json");
-const MAVERICK_V2_BYTECODE_JSON: &str =
-    include_str!("../../evm/test/executors/MaverickV2.runtime.json");
-const EKUBO_BYTECODE_JSON: &str = include_str!("../../evm/test/executors/Ekubo.runtime.json");
+    include_str!("../fixtures/UniswapV4Angstrom.runtime.json");
+const BALANCER_V2_BYTECODE_JSON: &str = include_str!("../fixtures/BalancerV2.runtime.json");
+const BALANCER_V3_BYTECODE_JSON: &str = include_str!("../fixtures/BalancerV3.runtime.json");
+const CURVE_BYTECODE_JSON: &str = include_str!("../fixtures/Curve.runtime.json");
+const MAVERICK_V2_BYTECODE_JSON: &str = include_str!("../fixtures/MaverickV2.runtime.json");
+const EKUBO_BYTECODE_JSON: &str = include_str!("../fixtures/Ekubo.runtime.json");
 
 /// Mapping from protocol component patterns to executor bytecode JSON strings
 static EXECUTOR_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {

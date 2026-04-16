@@ -1,12 +1,16 @@
-.vscode/
-target
-**/target
-*/target/
-.github
-venv
-*/venv
-.idea
-.git
-**/*.spkg
-Dockerfile
+# Rust build artifacts — by far the largest contributor to build context size
+target/
+**/target/
+
+# Git history and local tooling
+.git/
+.claude/
+.idea/
+
+# Substreams workspace builds (separate toolchain, not needed for main images)
+substreams/
+
+# Local dev files
 .env
+docker-compose*.yml
+*.swp

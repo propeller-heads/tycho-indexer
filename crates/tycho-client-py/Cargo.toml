@@ -1,8 +1,12 @@
 [package]
 name = "tycho-client-cli"
-version = "0.30.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "tycho-client-cli"
+path = "src/main.rs"
 
 [dependencies]
-tycho-client.workspace = true
-tokio.workspace = true
+tycho-client = { workspace = true }
+tokio = { workspace = true }

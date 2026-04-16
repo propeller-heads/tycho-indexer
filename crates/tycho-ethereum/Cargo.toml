@@ -32,10 +32,8 @@ alloy = { workspace = true, default-features = false, features = [
     "rpc-client",
     "json-rpc",
     "sol-types",
-    "rpc-types",
     "rpc-types-trace",
     "rpc-types-debug",
-    "providers",
 ] }
 
 [dev-dependencies]

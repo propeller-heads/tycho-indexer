@@ -24,6 +24,6 @@ metrics-exporter-prometheus = "0.17.2"
 actix-web = "4.11.0"
 tycho-client = { workspace = true }
 tycho-common = { workspace = true }
-tycho-simulation = { path = "..", features = ["evm"] }
-tycho-test = { path = "../tycho-test" }
+tycho-simulation = { workspace = true, features = ["evm"] }
+tycho-test       = { workspace = true }
 tracing-subscriber = { workspace = true }

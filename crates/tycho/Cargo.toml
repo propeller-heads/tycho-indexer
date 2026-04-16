@@ -1,0 +1,26 @@
+[package]
+name = "tycho"
+version.workspace = true
+edition.workspace = true
+description = "Meta-crate providing a compatible, versioned set of Tycho ecosystem crates."
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+keywords.workspace = true
+license.workspace = true
+categories.workspace = true
+readme = "README.md"
+
+[dependencies]
+tycho-client     = { workspace = true }
+tycho-common     = { workspace = true }
+tycho-simulation = { workspace = true, optional = true }
+tycho-execution  = { workspace = true, optional = true }
+
+[features]
+default = ["evm"]
+evm = ["dep:tycho-simulation", "dep:tycho-execution", "tycho-simulation/evm", "tycho-execution/evm"]
+rfq = ["evm", "tycho-simulation/rfq"]
+
+[dev-dependencies]
+tokio = { workspace = true }
