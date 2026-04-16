@@ -1,0 +1,24 @@
+# information about the author helps us reach out in case of issues.
+author:
+  name: Alan
+  email: alan@propellerheads.xyz
+
+# Protocol Constants
+constants:
+  protocol_gas: 30000
+  # minimum capabilities we can expect, individual pools may extend these
+  capabilities:
+    - SellSide
+    - BuySide
+    - PriceFunction
+
+# The file containing the adapter contract
+contract: UniswapV2SwapAdapter.sol
+
+# Deployment instances used to generate chain specific bytecode.
+instances:
+  - chain:
+      name: mainnet
+      id: 1
+    arguments:
+      - "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"

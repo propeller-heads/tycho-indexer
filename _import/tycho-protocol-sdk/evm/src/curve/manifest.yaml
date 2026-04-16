@@ -1,0 +1,35 @@
+# information about the author helps us reach out in case of issues.
+author:
+  name: shadowycoders.dev
+  email: hello@shadowycreators.com
+
+# Protocol Constants
+constants:
+  protocol_gas: 30000
+  # minimum capabilities we can expect, individual pools may extend these
+  capabilities:
+    - SellSide
+    - PriceFunction
+
+# The file containing the adapter contract
+contract: CurveAdapter.sol
+
+# Deployment instances used to generate chain specific bytecode.
+instances:
+  - chain:
+      name: mainnet
+      id: 1
+    arguments:
+      - none
+
+# Specify some automatic test cases in case getPoolIds and
+# getTokens are not implemented.
+tests:
+  instances:
+    - pool_id: "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"
+      sell_token: "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+      buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      block: 19719570
+      chain:
+        id: 1
+        name: mainnet

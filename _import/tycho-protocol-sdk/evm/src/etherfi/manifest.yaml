@@ -1,0 +1,36 @@
+# information about the author helps us reach out in case of issues.
+author:
+  name: shadowycoders.dev
+  email: hello@shadowycreators.com
+
+# Protocol Constants
+constants:
+  protocol_gas: 30000
+  # minimum capabilities we can expect, individual pools may extend these
+  capabilities:
+    - SellSide
+    - BuySide
+    - PriceFunction
+
+# The file containing the adapter contract
+contract: EtherfiAdapter.sol
+
+# Deployment instances used to generate chain specific bytecode.
+instances:
+  - chain:
+      name: mainnet
+      id: 0
+    arguments:
+      - "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"
+
+# Specify some automatic test cases in case getPoolIds and
+# getTokens are not implemented.
+tests:
+  instances:
+    - pool_id: "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
+      sell_token: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"
+      buy_token: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+      block: 17000000
+      chain:
+        id: 0
+        name: mainnet

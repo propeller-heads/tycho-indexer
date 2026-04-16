@@ -1,0 +1,39 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    image: protocol-testing-db:latest
+    restart: "always"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+    environment:
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_USER: postgres
+      POSTGRES_DB: tycho_indexer_0
+    command: postgres -c shared_preload_libraries=pg_partman_bgw,pg_cron -c cron.database_name=tycho_indexer_0
+    ports:
+      - "5431:5432"
+    shm_size: "1gb"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  test-runner:
+    image: protocol-testing-test-runner:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      RUST_LOG: "${RUST_LOG:-protocol_testing=info}"
+      DATABASE_URL: postgres://postgres:mypassword@db:5432/tycho_indexer_0
+      RPC_URL: "${RPC_URL}"
+      SUBSTREAMS_API_TOKEN: "${SUBSTREAMS_API_TOKEN}"
+    # PROTOCOLS to test separated by space and with optional filter
+    # e.g. "ethereum-balancer-v2=weighted_legacy_creation ethereum-ekubo-v2"
+    entrypoint: [ "/entrypoint.sh", "${PROTOCOLS}" ]
+
+volumes:
+  postgres_data:

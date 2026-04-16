@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package uniswap.v4.angstrom;
+
+message  AngstromConfig {
+  bytes bundle_fee = 1;
+  bytes unlocked_fee = 2;
+  bytes protocol_unlocked_fee = 3;
+  bool pool_removed = 4;
+}

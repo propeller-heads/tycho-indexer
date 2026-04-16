@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package eth.factory.v1;
+
+message Pools {
+  repeated Pool pools = 1;
+}
+
+message Pool {
+  bytes pool_id = 1;
+  fixed64 log_ordinal = 2;
+}
+
+message Transfer {
+  bytes from = 1;
+  bytes to = 2;
+  string token = 3;
+  string amount = 4;
+}

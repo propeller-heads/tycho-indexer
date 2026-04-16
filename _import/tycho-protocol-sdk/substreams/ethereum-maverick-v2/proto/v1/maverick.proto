@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package maverick.v2;
+
+message Pool {
+  bytes address = 1;
+  bytes tokenA = 2;
+  bytes tokenB = 3;
+  bytes created_tx_hash = 4;
+}

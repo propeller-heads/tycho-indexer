@@ -1,0 +1,37 @@
+# information about the author helps us reach out in case of issues.
+author:
+  name: Propellerheads.xyz
+  email: alan@propellerheads.xyz
+
+# Protocol Constants
+constants:
+  protocol_gas: 30000
+  # minimum capabilities we can expect, individual pools may extend these
+  capabilities:
+    - SellSide
+    - BuySide
+    - PriceFunction
+
+# The file containing the adapter contract
+contract: FraxV3SFraxAdapter.sol
+
+# Deployment instances used to generate chain specific bytecode.
+instances:
+  - chain:
+      name: mainnet
+      id: 0
+    arguments:
+      - "0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32"
+      - "0x853d955aCEf822Db058eb8505911ED77F175b99e"
+
+# Specify some automatic test cases in case getPoolIds and
+# getTokens are not implemented.
+tests:
+  instances:
+    - pool_id: "0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32" # sFrax Vault
+      sell_token: "0x853d955aCEf822Db058eb8505911ED77F175b99e" # Frax
+      buy_token: "0xA663B02CF0a4b149d2aD41910CB81e23e1c41c32" # sFrax
+      block: 19270612
+      chain:
+        id: 0
+        name: mainnet

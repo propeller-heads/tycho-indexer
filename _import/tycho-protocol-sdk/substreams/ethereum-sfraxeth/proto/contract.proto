@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package contract.v1;
+
+message RewardCycle {
+    uint64 ord = 1;
+    bytes next_reward_amount = 2;
+    bytes vault_address = 3;
+}
+
+message BlockRewardCycles {
+    repeated RewardCycle reward_cycles = 1;
+}

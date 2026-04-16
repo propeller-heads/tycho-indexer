@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package uniswap.v4;
+
+message Pool {
+  //  // The pool address.
+  bytes id = 1;
+  // The token0 address.
+  bytes currency0 = 2;
+  // The token1 address.
+  bytes currency1 = 3;
+  // The transaction where the pool was created.
+  bytes created_tx_hash = 4;
+}
+
+// A struct describing a transaction.
+message Transaction {
+  // The transaction hash.
+  bytes hash = 1;
+  // The sender of the transaction.
+  bytes from = 2;
+  // The receiver of the transaction.
+  bytes to = 3;
+  // The transactions index within the block.
+  uint64 index = 4;
+}
+
+// A change to a pool's tick.
+message TickDelta {
+  // The address of the pool.
+  bytes pool_address = 1;
+  // The index of the tick.
+  int32 tick_index = 2;
+  // The liquidity net delta of this tick. Bigint encoded as signed little endian bytes.
+  bytes liquidity_net_delta = 3;
+  // Used to determine the order of the balance changes. Necessary for the balance store.
+  uint64 ordinal = 4;
+  Transaction transaction = 5;
+}
+
+// A group of TickDelta
+message TickDeltas {
+  repeated TickDelta deltas = 1;
+}
+
+// A change to a pool's liquidity.
+message LiquidityChange {
+  // The address of the pool.
+  bytes pool_address = 1;
+  // The liquidity changed amount. Bigint encoded as signed little endian bytes.
+  bytes value = 2;
+  // The type of update, can be absolute or delta.
+  LiquidityChangeType change_type = 3;
+  // Used to determine the order of the balance changes. Necessary for the balance store.
+  uint64 ordinal = 4;
+  Transaction transaction = 5;
+}
+
+// A group of LiquidityChange
+message LiquidityChanges {
+  repeated LiquidityChange changes = 1;
+}
+
+
+enum LiquidityChangeType {
+  DELTA = 0;
+  ABSOLUTE = 1;
+}
+
+message Events {
+  repeated PoolEvent pool_events = 3;
+
+  message PoolEvent {
+    oneof type {
+      Initialize initialize = 1;
+      ModifyLiquidity modify_liquidity = 2;
+      Swap swap = 3;
+      Donate donate = 4;
+      ProtocolFeeUpdated protocol_fee_updated = 5;
+    }
+    uint64 log_ordinal = 100;
+    string pool_id = 102; // Changed from pool_address to pool_id as V4 uses PoolId
+    string currency0 = 103; // Changed from token0 to currency0
+    string currency1 = 104; // Changed from token1 to currency1
+    Transaction transaction = 105;
+
+    message Initialize {
+      string sqrt_price_x96 = 1;
+      int32 tick = 2;
+      uint32 fee = 3;
+      int32 tick_spacing = 4;
+      string hooks = 5; // Address of the hooks contract
+    }
+
+    message ModifyLiquidity {
+      string sender = 1;
+      int32 tick_lower = 2;
+      int32 tick_upper = 3;
+      string liquidity_delta = 4; // Changed to support signed integers
+      string salt = 5; // Added salt field
+    }
+
+    message Swap {
+      string sender = 1;
+      string amount0 = 2; // Signed int128
+      string amount1 = 3; // Signed int128
+      string sqrt_price_x96 = 4;
+      string liquidity = 5;
+      int32 tick = 6;
+      uint32 fee = 7; // Added fee field
+    }
+
+    message Donate {
+      string sender = 1;
+      string amount0 = 2;
+      string amount1 = 3;
+    }
+
+    message ProtocolFeeUpdated {
+      string pool_id = 1;
+      uint32 protocol_fee = 2;
+    }
+  }
+}

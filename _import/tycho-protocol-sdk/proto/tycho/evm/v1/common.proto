@@ -1,0 +1,239 @@
+syntax = "proto3";
+
+package tycho.evm.v1;
+
+// This file contains the proto definitions for Substreams common to all integrations.
+
+// A struct describing a block.
+message Block {
+  // The blocks hash.
+  bytes hash = 1;
+  // The parent blocks hash.
+  bytes parent_hash = 2;
+  // The block number.
+  uint64 number = 3;
+  // The block timestamp.
+  uint64 ts = 4;
+}
+
+// A struct describing a transaction.
+message Transaction {
+  // The transaction hash.
+  bytes hash = 1;
+  // The sender of the transaction.
+  bytes from = 2;
+  // The receiver of the transaction.
+  bytes to = 3;
+  // The transactions index within the block.
+  // TODO: should this be uint32? to match the type from the native substream type?
+  uint64 index = 4;
+}
+
+// Enum to specify the type of a change.
+enum ChangeType {
+  CHANGE_TYPE_UNSPECIFIED = 0;
+  CHANGE_TYPE_UPDATE = 1;
+  CHANGE_TYPE_CREATION = 2;
+  CHANGE_TYPE_DELETION = 3;
+}
+
+// A custom struct representing an arbitrary attribute of a protocol component.
+// This is mainly used by the native integration to track the necessary information about the protocol.
+message Attribute {
+  // The name of the attribute.
+  string name = 1;
+  // The value of the attribute.
+  bytes value = 2;
+  // The type of change the attribute underwent.
+  ChangeType change = 3;
+}
+
+enum FinancialType{
+  SWAP = 0;
+  LEND = 1;
+  LEVERAGE = 2;
+  PSM = 3;
+}
+
+enum ImplementationType {
+  VM = 0;
+  CUSTOM = 1;
+}
+
+message ProtocolType{
+  string name = 1;
+  FinancialType financial_type = 2;
+  repeated Attribute attribute_schema = 3;
+  ImplementationType implementation_type = 4;
+}
+
+// A struct describing a part of the protocol.
+// Note: For example this can be a UniswapV2 pair, that tracks the two ERC20 tokens used by the pair, 
+// the component would represent a single contract. In case of VM integration, such component would 
+// not need any attributes, because all the relevant info would be tracked via storage slots and balance changes.
+// It can also be a wrapping contract, like WETH, that has a constant price, but it allows swapping tokens. 
+// This is why the name ProtocolComponent is used instead of "Pool" or "Pair".
+message ProtocolComponent {
+  // A unique identifier for the component within the protocol.
+  // Can be e.g. a stringified address or a string describing the trading pair.
+  string id = 1;
+  // Addresses of the ERC20 tokens used by the component.
+  repeated bytes tokens = 2;
+  // Addresses of the contracts used by the component.
+  // Usually it is a single contract, but some protocols use multiple contracts.
+  repeated bytes contracts = 3;
+  // Static attributes of the component.
+  // These attributes MUST be immutable. If it can ever change, it should be given as an EntityChanges for this component id.
+  // The inner ChangeType of the attribute has to match the ChangeType of the ProtocolComponent.
+  repeated Attribute static_att = 4;
+  // Type of change the component underwent.
+  ChangeType change = 5;
+  /// Represents the functionality of the component.
+  ProtocolType protocol_type = 6;
+}
+
+// A struct for following the changes of Total Value Locked (TVL) of a protocol component.
+// Note that if a ProtocolComponent contains multiple contracts, the TVL is tracked for the component as a whole.
+// E.g. for UniswapV2 pair WETH/USDC, this tracks the USDC and WETH balance of the pair contract.
+message BalanceChange {
+  // The address of the ERC20 token whose balance changed.
+  bytes token = 1;
+  // The new balance of the token. Note: it must be a big endian encoded int.
+  bytes balance = 2;
+  // The id of the component whose TVL is tracked.  Note: This MUST be utf8 encoded.
+  // If the protocol component includes multiple contracts, the balance change must be aggregated to reflect how much tokens can be traded.
+  bytes component_id = 3;
+}
+
+// Native entities
+
+// A component is a set of attributes that are associated with a custom entity.
+message EntityChanges {
+  // A unique identifier of the entity within the protocol.
+  string component_id = 1;
+  // The set of attributes that are associated with the entity.
+  repeated Attribute attributes = 2;
+}
+
+// VM entities
+
+// A key value entry into contract storage.
+message ContractSlot {
+  // A contract's storage slot.
+  bytes slot = 2;
+  // The new value for this storage slot.
+  bytes value = 3;
+  // The old value of this storage slot
+  bytes previous_value = 4;
+}
+
+// A struct for following the token balance changes for a contract.
+message AccountBalanceChange {
+  // The address of the ERC20 token whose balance changed.
+  bytes token = 1;
+  // The new balance of the token. Note: it must be a big endian encoded int.
+  bytes balance = 2;
+}
+
+// Changes made to a single contract's state.
+message ContractChange {
+  // The contract's address
+  bytes address = 1;
+  // The new balance of the contract, empty bytes indicates no change.
+  bytes balance = 2;
+  // The new code of the contract, empty bytes indicates no change.
+  bytes code = 3;
+  // The changes to this contract's slots, empty sequence indicates no change.
+  repeated ContractSlot slots = 4;
+  // Whether this is an update, a creation or a deletion.
+  ChangeType change = 5;
+  // The new ERC20 balances of the contract.
+  repeated AccountBalanceChange token_balances = 6;
+}
+
+// DCI entities
+
+// An entrypoint to be used for DCI analysis
+message EntryPoint {
+  // The entrypoint id. Recommended to use 'target:signature'.
+  string id = 1;
+  // The target contract to analyse this entrypoint on.
+  bytes target = 2;
+  // The signature of the function to analyse.
+  string signature = 3;
+  // The id of the component that uses this entrypoint.
+  string component_id = 4;
+}
+
+// Parameters to trace the entrypoint
+message EntryPointParams {
+  // The entrypoint id.
+  string entrypoint_id = 1;
+  // The component that uses these entrypoint parameters. This field is now required (optional support is deprecated).
+  optional string component_id = 2;
+  // The strategy and its corresponding data.
+  oneof trace_data {
+    RPCTraceData rpc = 3;
+    // Add more strategies here
+  }
+}
+
+// RPC tracing strategy with its data
+message RPCTraceData {
+  // [optional] The caller to be used for the trace. If none is provided a chain default will be used.
+  optional bytes caller = 1;
+  // The calldata to be used for the trace.
+  bytes calldata = 2;
+}
+
+// A contract and associated storage changes
+message StorageChanges {
+  // The contract's address.
+  bytes address = 1;
+  // The contract's storage changes.
+  repeated ContractSlot slots = 2;
+  // [optional] The contract's balance change.
+  optional bytes native_balance = 3;
+}
+
+// Aggregate entities
+
+// A set of changes aggregated by transaction.
+message TransactionChanges {
+  // The transaction instance that results in the changes.
+  Transaction tx = 1;
+  // Contains the changes induced by the above transaction, aggregated on a per-contract basis.
+  // Contains the contract changes induced by the above transaction, usually for tracking VM components.
+  repeated ContractChange contract_changes = 2;
+  // Contains the entity changes induced by the above transaction.
+  // Usually for tracking native components or used for VM extensions (plugins).
+  repeated EntityChanges entity_changes = 3;
+  // An array of newly added components.
+  repeated ProtocolComponent component_changes = 4;
+  // An array of balance changes to components.
+  repeated BalanceChange balance_changes = 5;
+  // An array of newly added entrypoints. Used for DCI enabled protocols.
+  repeated EntryPoint entrypoints = 6;
+  // An array of entrypoint tracing parameteres. Used for DCI enabled protocols.
+  repeated EntryPointParams entrypoint_params = 7;
+}
+
+// A set of storage changes aggregated by transaction.
+message TransactionStorageChanges {
+  // The transaction instance that results in the changes.
+  Transaction tx = 1;
+  // Contains the storage changes induced by the above transaction.
+  repeated StorageChanges storage_changes = 2;
+}
+
+// A set of transaction changes within a single block.
+// This message must be the output of your substreams module.
+message BlockChanges {
+  // The block for which these changes are collectively computed.
+  Block block = 1;
+  // The set of transaction changes observed in the specified block.
+  repeated TransactionChanges changes = 2;
+  // The set of all storage changes from the specified block. Intended as input for the Dynamic Contract Indexer.
+  // Should be left empty for protocols that do not use the DCI.
+  repeated TransactionStorageChanges storage_changes = 3;
+}

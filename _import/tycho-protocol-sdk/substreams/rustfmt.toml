@@ -1,0 +1,27 @@
+reorder_imports = true
+imports_granularity = "Crate"
+use_small_heuristics = "Max"
+comment_width = 100
+wrap_comments = true
+binop_separator = "Back"
+trailing_comma = "Vertical"
+trailing_semicolon = false
+use_field_init_shorthand = true
+chain_width = 40
+ignore = [
+    "crates/tycho-substreams/src/pb",
+    "crates/tycho-substreams/src/abi",
+    "ethereum-balancer-v2/src/abi",
+    "ethereum-sfraxeth/src/abi",
+    "ethereum-sfrax/src/abi",
+    "ethereum-curve/src/abi",
+    "ethereum-uniswap-v2/src/abi",
+    "ethereum-uniswap-v3/src/abi",
+    "ethereum-uniswap-v3-logs-only/src/abi",
+    "ethereum-pancakeswap-v3/src/abi",
+    "ethereum-uniswap-v4/shared/src/abi",
+    "ethereum-maverick-v2/src/abi",
+    "ethereum-balancer-v3/src/abi",
+    "base-aerodrome-slipstreams/src/abi",
+    "ethereum-erc4626/src/abi",
+]

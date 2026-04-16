@@ -1,0 +1,635 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "coins",
+                "type": "address[2]"
+            },
+            {
+                "indexed": false,
+                "name": "A",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "gamma",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "mid_fee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "out_fee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "allowed_extra_profit",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "fee_gamma",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "adjustment_step",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "admin_fee",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "ma_half_time",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "initial_price",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "name": "deployer",
+                "type": "address"
+            }
+        ],
+        "name": "CryptoPoolDeployed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "pool",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "token",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "gauge",
+                "type": "address"
+            }
+        ],
+        "name": "LiquidityGaugeDeployed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "_old_fee_receiver",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_new_fee_receiver",
+                "type": "address"
+            }
+        ],
+        "name": "UpdateFeeReceiver",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "_old_pool_implementation",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_new_pool_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "UpdatePoolImplementation",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "_old_token_implementation",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_new_token_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "UpdateTokenImplementation",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "_old_gauge_implementation",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_new_gauge_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "UpdateGaugeImplementation",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": false,
+                "name": "_old_owner",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "name": "_new_owner",
+                "type": "address"
+            }
+        ],
+        "name": "TransferOwnership",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_fee_receiver",
+                "type": "address"
+            },
+            {
+                "name": "_pool_implementation",
+                "type": "address"
+            },
+            {
+                "name": "_token_implementation",
+                "type": "address"
+            },
+            {
+                "name": "_gauge_implementation",
+                "type": "address"
+            },
+            {
+                "name": "_weth",
+                "type": "address"
+            }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "constructor"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_name",
+                "type": "string"
+            },
+            {
+                "name": "_symbol",
+                "type": "string"
+            },
+            {
+                "name": "_coins",
+                "type": "address[2]"
+            },
+            {
+                "name": "A",
+                "type": "uint256"
+            },
+            {
+                "name": "gamma",
+                "type": "uint256"
+            },
+            {
+                "name": "mid_fee",
+                "type": "uint256"
+            },
+            {
+                "name": "out_fee",
+                "type": "uint256"
+            },
+            {
+                "name": "allowed_extra_profit",
+                "type": "uint256"
+            },
+            {
+                "name": "fee_gamma",
+                "type": "uint256"
+            },
+            {
+                "name": "adjustment_step",
+                "type": "uint256"
+            },
+            {
+                "name": "admin_fee",
+                "type": "uint256"
+            },
+            {
+                "name": "ma_half_time",
+                "type": "uint256"
+            },
+            {
+                "name": "initial_price",
+                "type": "uint256"
+            }
+        ],
+        "name": "deploy_pool",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "deploy_gauge",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_fee_receiver",
+                "type": "address"
+            }
+        ],
+        "name": "set_fee_receiver",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "set_pool_implementation",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_token_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "set_token_implementation",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_gauge_implementation",
+                "type": "address"
+            }
+        ],
+        "name": "set_gauge_implementation",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_addr",
+                "type": "address"
+            }
+        ],
+        "name": "commit_transfer_ownership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "accept_transfer_ownership",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            }
+        ],
+        "name": "find_pool_for_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            },
+            {
+                "name": "i",
+                "type": "uint256"
+            }
+        ],
+        "name": "find_pool_for_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_coins",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address[2]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_decimals",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[2]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_balances",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256[2]"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            },
+            {
+                "name": "_from",
+                "type": "address"
+            },
+            {
+                "name": "_to",
+                "type": "address"
+            }
+        ],
+        "name": "get_coin_indices",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            },
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_gauge",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_eth_index",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "_pool",
+                "type": "address"
+            }
+        ],
+        "name": "get_token",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "admin",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "future_admin",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "fee_receiver",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pool_implementation",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "token_implementation",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "gauge_implementation",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "pool_count",
+        "outputs": [
+            {
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "name": "arg0",
+                "type": "uint256"
+            }
+        ],
+        "name": "pool_list",
+        "outputs": [
+            {
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    }
+]

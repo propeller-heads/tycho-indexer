@@ -1,0 +1,6 @@
+*/.venv
+**/.venv
+*/target/
+**/target/
+protocol-testing/*.Dockerfile
+protocol-testing/docker-compose.yaml

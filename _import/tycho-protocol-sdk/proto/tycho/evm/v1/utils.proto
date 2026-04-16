@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package tycho.evm.v1;
+
+import "tycho/evm/v1/common.proto";
+
+// A message containing relative balance changes.
+//
+// Used to track token balances of protocol components in case they are only
+// available as relative values within a block.
+message BalanceDelta {
+  // The ordinal of the balance change. Must be unique & deterministic over all balances
+  // changes within a block.
+  uint64 ord = 1;
+  // The tx hash of the transaction that caused the balance change.
+  Transaction tx = 2;
+  // The address of the ERC20 token whose balance changed.
+  bytes token = 3;
+  // The delta balance of the token.
+  bytes delta = 4;
+  // The id of the component whose TVL is tracked.
+  // If the protocol component includes multiple contracts, the balance change must be
+  // aggregated to reflect how much tokens can be traded.
+  bytes component_id = 5;
+}
+
+// A set of balances deltas, usually a group of changes within a single block.
+message BlockBalanceDeltas {
+  repeated BalanceDelta balance_deltas = 1;
+}
+
+// A message containing protocol components that were created by a single tx.
+message TransactionProtocolComponents {
+  Transaction tx = 1;
+  repeated ProtocolComponent components = 2;
+}
+
+// All protocol components that were created within a block with their corresponding tx.
+message BlockTransactionProtocolComponents {
+  repeated TransactionProtocolComponents tx_components = 1;
+}
