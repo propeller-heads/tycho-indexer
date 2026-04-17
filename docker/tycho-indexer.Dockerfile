@@ -6,15 +6,8 @@
 
 # ── Stage 1: chef (rust + tools layer, cached) ─────────────────────────────
 FROM rust:bookworm AS chef
-ARG TARGETPLATFORM=linux/amd64
 WORKDIR /build
-RUN apt-get update && apt-get install -y libpq-dev jq curl && rm -rf /var/lib/apt/lists/*
-# Install substreams CLI for the indexer runtime
-RUN ARCH=$(echo "$TARGETPLATFORM" | sed -e 's|/|_|g') && \
-    if [ "$ARCH" = "linux_amd64" ]; then ARCH="linux_x86_64"; fi && \
-    LINK=$(curl -s https://api.github.com/repos/streamingfast/substreams/releases/latest | \
-      jq -r ".assets[] | select(.name | contains(\"$ARCH\")) | .browser_download_url") && \
-    curl -L "$LINK" | tar zxf - -C /usr/local/bin/
+RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-chef
 COPY rust-toolchain.toml .
 RUN rustup set profile minimal && rustup show

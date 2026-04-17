@@ -68,7 +68,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           persist-credentials: false
-          submodules: recursive
+          fetch-depth: 1
+          submodules: false
+      - name: Checkout submodules (shallow, project-scoped)
+        run: |
+          git config --file .gitmodules --get-regexp path \
+            | awk '{print $2}' \
+            | grep "^${{ matrix.project.path }}/" \
+            | xargs -r git submodule update --init --depth 1 --recursive --
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@de808b1eea699e761c404bda44ba8f21aba30b2c  # v1
@@ -119,7 +126,14 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           persist-credentials: false
-          submodules: recursive
+          fetch-depth: 1
+          submodules: false
+      - name: Checkout submodules (shallow)
+        run: |
+          git config --file .gitmodules --get-regexp path \
+            | awk '{print $2}' \
+            | grep "^crates/tycho-execution/contracts/" \
+            | xargs -r git submodule update --init --depth 1 --recursive --
 
       - uses: crytic/slither-action@f197989dea5b53e986d0f88c60a034ddd77ec9a8  # v0.4.1
         with:
