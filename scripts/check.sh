@@ -8,7 +8,7 @@ cargo nextest run --workspace --all-targets --all-features -E 'test(serial_db)'
 
 (cd crates/tycho-execution/contracts && forge fmt --check)
 (cd crates/tycho-execution/contracts && forge test)
-(cd adapters/evm && forge fmt --check)
-(cd adapters/evm && forge test)
+(cd protocols/adapter-integration/evm && forge fmt --check)
+(cd protocols/adapter-integration/evm && forge test)
 (cd crates/tycho-simulation/token-proxy-contracts && forge fmt --check)
 (cd crates/tycho-simulation/token-proxy-contracts && forge test)

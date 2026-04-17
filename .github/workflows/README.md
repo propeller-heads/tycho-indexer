@@ -14,7 +14,7 @@ Reusable build/deploy steps are delegated to [propeller-heads/ci-cd-templates](h
 | `ci-rust.yaml` | PR (Rust paths), push to `main`, `workflow_call` | Rust lint, test, and doc checks |
 | `ci-foundry.yaml` | PR/push (`foundry/`), manual | Solidity fmt, tests, gas snapshot, static analysis |
 | `ci-substreams.yaml` | PR (`substreams/`), manual | Lint and unit tests for changed substreams packages |
-| `ci-substreams-integration.yaml` | PR (`substreams/`, `protocol-testing/`), manual | Full protocol integration tests against a live DB |
+| `ci-substreams-integration.yaml` | PR (`protocols/substreams/`, `protocols/testing/`), manual | Full protocol integration tests against a live DB |
 | `cd-deploy-dev.yaml` | Manual | Build a branch image and deploy it to dev |
 | `promote-to-prod.yaml` | Manual | Promote a tagged dev image to production |
 | `release.yaml` | GitHub Release published, manual | Upload binaries to GitHub + S3, publish crates to crates.io |
@@ -42,7 +42,7 @@ Steps 4 and 5 are gated on `release` completing, so no image is built on dry-run
 
 ### `ci-rust.yaml` — Rust CI
 
-Covers all Rust crates under `crates/` and `protocol-testing/`. Triggered on PRs touching Rust paths and on every push to `main`. Also callable as a reusable workflow (used by `main-workflow.yaml`).
+Covers all Rust crates under `crates/` and `protocols/testing/`. Triggered on PRs touching Rust paths and on every push to `main`. Also callable as a reusable workflow (used by `main-workflow.yaml`).
 
 **Jobs (all run in parallel):**
 
@@ -59,7 +59,7 @@ All jobs use `cargo nextest` and `--locked` to enforce lockfile consistency.
 
 ### `ci-foundry.yaml` — Foundry CI
 
-Covers Solidity contracts under `crates/tycho-execution/contracts/` and `adapters/evm/`. Triggered on PRs and pushes touching those paths.
+Covers Solidity contracts under `crates/tycho-execution/contracts/` and `protocols/adapter-integration/evm/`. Triggered on PRs and pushes touching those paths.
 
 **Jobs:**
 
@@ -70,7 +70,7 @@ Covers Solidity contracts under `crates/tycho-execution/contracts/` and `adapter
 
 ### `ci-substreams.yaml` — Substreams CI
 
-Covers Rust-based Substreams packages under `substreams/`. Only processes packages whose files actually changed in the PR.
+Covers Rust-based Substreams packages under `protocols/substreams/`. Only processes packages whose files actually changed in the PR.
 
 **Jobs:**
 
@@ -81,11 +81,11 @@ Covers Rust-based Substreams packages under `substreams/`. Only processes packag
 
 ### `ci-substreams-integration.yaml` — Substreams Integration Tests
 
-Full end-to-end protocol tests. Triggered on PRs touching `substreams/` or `protocol-testing/`, and can be run manually against specific protocols.
+Full end-to-end protocol tests. Triggered on PRs touching `protocols/substreams/` or `protocols/testing/`, and can be run manually against specific protocols.
 
 **Jobs:**
 
-1. **`detect-changes`** — Computes the list of protocols to test. If `protocol-testing/run.Dockerfile` or `Cargo.toml` changed, all protocols are tested; otherwise only the ones with changed substreams files. Manual runs accept an explicit space-separated list.
+1. **`detect-changes`** — Computes the list of protocols to test. If `protocols/testing/run.Dockerfile` or `Cargo.toml` changed, all protocols are tested; otherwise only the ones with changed substreams files. Manual runs accept an explicit space-separated list.
 2. **`build-images`** — Builds the Postgres and test-runner Docker images and uploads them as artifacts (retained 1 day).
 3. **`test-protocols`** — Fan-out matrix job (max 4 parallel). Each protocol gets its own isolated database instance via `docker compose`.
 4. **`skip-tests`** — No-op job that runs when no protocols need testing, to satisfy required status checks.
@@ -125,7 +125,7 @@ Triggered automatically when a GitHub Release is published (by `main-workflow.ya
 
 ### `release-substreams.yaml` — Substreams release
 
-Triggered on `substreams/v*` tags or manually.
+Triggered on `protocols/substreams/v*` tags or manually.
 
 **Jobs:**
 

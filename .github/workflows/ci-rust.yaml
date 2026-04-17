@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - 'crates/**'
-      - 'protocol-testing/**'
+      - 'protocols/testing/**'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - 'rust-toolchain.toml'

@@ -16,8 +16,8 @@ on:
         type: string
   pull_request_target:
     paths:
-      - 'substreams/**'
-      - 'protocol-testing/**'
+      - 'protocols/substreams/**'
+      - 'protocols/testing/**'
 
 permissions:
   contents: read
@@ -42,30 +42,30 @@ jobs:
         id: protocol-testing-files-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: protocol-testing/**
+          files: protocols/testing/**
 
       - name: Check if any files changed under substreams
         id: substreams-files-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: substreams/**
+          files: protocols/substreams/**
 
       - name: Check if Dockerfile changed
         id: dockerfile-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: protocol-testing/run.Dockerfile
+          files: protocols/testing/run.Dockerfile
 
       - name: Check if Cargo.toml changed
         id: cargo-toml-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: protocol-testing/Cargo.toml
+          files: protocols/testing/Cargo.toml
 
       - name: Get all substreams folders
         id: all_substreams
         run: |
-          FOLDERS=$(find substreams -mindepth 1 -maxdepth 1 -type d \
+          FOLDERS=$(find protocols/substreams -mindepth 1 -maxdepth 1 -type d \
             -exec basename {} \; | sort | \
             grep -v -E "^(${EXCLUDED_SUBSTREAMS})$" | \
             tr '\n' ' ')
@@ -78,7 +78,7 @@ jobs:
         run: |
           VALID="${{ steps.all_substreams.outputs.all_substreams }}"
           CHANGED=$(git diff --name-only --diff-filter=d origin/main ${{ github.sha }} | \
-            grep '^substreams/' | awk -F'/' '{print $2}' | sort -u | \
+            grep '^protocols/substreams/' | awk -F'/' '{print $3}' | sort -u | \
             grep -Fx "$(printf '%s\n' ${VALID})" | \
             tr '\n' ' ' | sed 's/ *$//')
           echo "changed_substreams=$CHANGED" >> "$GITHUB_OUTPUT"
@@ -141,7 +141,7 @@ jobs:
       - name: Generate cache key
         id: cache-key
         run: |
-          KEY="docker-images-${{ hashFiles('protocol-testing/postgres.Dockerfile', 'protocol-testing/run.Dockerfile') }}-${{ github.sha }}"
+          KEY="docker-images-${{ hashFiles('protocols/testing/postgres.Dockerfile', 'protocols/testing/run.Dockerfile') }}-${{ github.sha }}"
           echo "key=$KEY" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
@@ -160,7 +160,7 @@ jobs:
           docker buildx build \
             --cache-from type=local,src=/tmp/.buildx-cache \
             --cache-to type=local,dest=/tmp/.buildx-cache \
-            -f protocol-testing/postgres.Dockerfile \
+            -f protocols/testing/postgres.Dockerfile \
             -t protocol-testing-db:latest \
             --load .
           docker save protocol-testing-db:latest -o /tmp/db-image.tar
@@ -171,7 +171,7 @@ jobs:
             --cache-from type=local,src=/tmp/.buildx-cache \
             --cache-to type=local,dest=/tmp/.buildx-cache \
             --build-arg PROTOCOLS="${{ needs.detect-changes.outputs.target-protocols }}" \
-            -f protocol-testing/run.Dockerfile \
+            -f protocols/testing/run.Dockerfile \
             -t protocol-testing-test-runner:latest \
             --load .
           docker save protocol-testing-test-runner:latest -o /tmp/test-runner-image.tar

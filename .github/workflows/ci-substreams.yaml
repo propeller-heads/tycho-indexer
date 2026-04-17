@@ -3,7 +3,7 @@ name: Substreams CI
 on:
   pull_request:
     paths:
-      - 'substreams/**'
+      - 'protocols/substreams/**'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +25,7 @@ jobs:
         id: substreams-files-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: substreams/**
+          files: protocols/substreams/**
 
       - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # nightly
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
@@ -49,7 +49,7 @@ jobs:
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
         shell: bash
         run: |
-          cd substreams
+          cd protocols/substreams
           if [ -n "${{ steps.changed_packages.outputs.package_names }}" ]; then
             for package in ${{ steps.changed_packages.outputs.package_names }}; do
               echo "Running checks for package: $package"
@@ -79,7 +79,7 @@ jobs:
         id: substreams-files-changed
         uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
         with:
-          files: substreams/**
+          files: protocols/substreams/**
 
       - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
@@ -103,7 +103,7 @@ jobs:
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
         shell: bash
         run: |
-          cd substreams
+          cd protocols/substreams
           if [ -n "${{ steps.changed_packages.outputs.package_names }}" ]; then
             for package in ${{ steps.changed_packages.outputs.package_names }}; do
               echo "Running tests for package: $package"

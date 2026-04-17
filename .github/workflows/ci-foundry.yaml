@@ -4,14 +4,14 @@ on:
   pull_request:
     paths:
       - 'crates/tycho-execution/contracts/**'
-      - 'adapters/evm/**'
+      - 'protocols/adapter-integration/evm/**'
       - 'crates/tycho-simulation/token-proxy-contracts/**'
       - '.github/workflows/ci-foundry.yaml'
   push:
     branches: [main]
     paths:
       - 'crates/tycho-execution/contracts/**'
-      - 'adapters/evm/**'
+      - 'protocols/adapter-integration/evm/**'
       - 'crates/tycho-simulation/token-proxy-contracts/**'
   workflow_dispatch:
 
@@ -27,7 +27,7 @@ jobs:
       matrix:
         project:
           - path: crates/tycho-execution/contracts
-          - path: adapters/evm
+          - path: protocols/adapter-integration/evm
           - path: crates/tycho-simulation/token-proxy-contracts
     defaults:
       run:

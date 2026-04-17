@@ -3,7 +3,7 @@ name: Release Substreams
 on:
   push:
     tags:
-      - 'substreams/v*'
+      - 'protocols/substreams/v*'
   workflow_dispatch:
     inputs:
       package:
@@ -41,14 +41,14 @@ jobs:
           cache-on-failure: true
 
       - name: Publish substreams-helper
-        working-directory: substreams
+        working-directory: protocols/substreams
         run: cargo publish -p substreams-helper --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
 
       - name: Wait for crates.io to index substreams-helper
         run: sleep 30
 
       - name: Publish tycho-substreams
-        working-directory: substreams
+        working-directory: protocols/substreams
         run: cargo publish -p tycho-substreams --locked --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
 
   release-substreams-package:
@@ -80,5 +80,5 @@ jobs:
           substreams --version
 
       - name: Build and release substreams package
-        working-directory: substreams
+        working-directory: protocols/substreams
         run: ./release.sh ${{ inputs.package }} ${{ inputs.config_file }}
