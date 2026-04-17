@@ -1,0 +1,71 @@
+name: Foundry CI
+
+on:
+  pull_request:
+    paths:
+      - 'crates/tycho-execution/contracts/**'
+      - 'adapters/evm/**'
+      - 'crates/tycho-simulation/token-proxy-contracts/**'
+      - '.github/workflows/ci-foundry.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/tycho-execution/contracts/**'
+      - 'adapters/evm/**'
+      - 'crates/tycho-simulation/token-proxy-contracts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  forge-test:
+    name: Forge build, fmt, test (${{ matrix.project.path }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      matrix:
+        project:
+          - path: crates/tycho-execution/contracts
+          - path: adapters/evm
+          - path: crates/tycho-simulation/token-proxy-contracts
+    defaults:
+      run:
+        working-directory: ${{ matrix.project.path }}
+    env:
+      ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+      BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+      RPC_URL: ${{ secrets.ETH_RPC_URL }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@de808b1eea699e761c404bda44ba8f21aba30b2c  # v1
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Run tests
+        run: forge test -vvv
+
+      - name: Gas snapshot
+        run: NO_COLOR=1 forge snapshot >> "$GITHUB_STEP_SUMMARY"
+        if: matrix.project.path == 'crates/tycho-execution/contracts'
+
+  slither:
+    name: Slither static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - uses: crytic/slither-action@f197989dea5b53e986d0f88c60a034ddd77ec9a8  # v0.4.1
+        with:
+          target: 'crates/tycho-execution/contracts/'
+          slither-args: '--filter-paths crates/tycho-execution/contracts/lib/ --exclude unindexed-event-address'

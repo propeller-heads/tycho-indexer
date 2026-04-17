@@ -1,0 +1,107 @@
+name: Main workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci-rust.yaml
+    secrets: inherit
+
+  check-release:
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    with:
+      args: --dry-run --no-ci
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  release:
+    needs:
+      - ci
+      - check-release
+    if: needs.check-release.outputs.verify_release_version != ''
+    uses: propeller-heads/ci-cd-templates/.github/workflows/release-v2.yaml@main
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  # ── tycho-indexer: build image and promote to dev ─────────────────────────
+  build-and-push-tycho-indexer:
+    needs: release
+    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.release.outputs.next_release_version }}
+      image_name: tycho-indexer
+      dockerfile: docker/tycho-indexer.Dockerfile
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      repository_url: ${{ secrets.REPOSITORY_URL }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+
+  promote-tycho-indexer-to-dev:
+    needs:
+      - release
+      - build-and-push-tycho-indexer
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.release.outputs.next_release_version }}
+      image_name: tycho-indexer
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  # ── tycho-integration-test: build image and promote to dev ────────────────
+  build-and-push-tycho-integration-test:
+    needs: release
+    uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.release.outputs.next_release_version }}
+      image_name: tycho-integration-test
+      dockerfile: docker/tycho-integration-test.Dockerfile
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+      role_to_assume: ${{ secrets.ROLE_TO_ASSUME }}
+      aws_region: ${{ secrets.AWS_REGION }}
+      repository_url: ${{ secrets.REPOSITORY_URL }}
+      domain_owner: ${{ secrets.DOMAIN_OWNER }}
+
+  promote-tycho-integration-test-to-dev:
+    needs:
+      - release
+      - build-and-push-tycho-integration-test
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-dev.yaml@main
+    permissions:
+      id-token: write
+      contents: read
+    with:
+      image_tag: ${{ needs.release.outputs.next_release_version }}
+      image_name: tycho-integration-test
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}

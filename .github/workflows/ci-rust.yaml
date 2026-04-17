@@ -1,0 +1,255 @@
+name: Rust CI
+
+on:
+  pull_request:
+    paths:
+      - 'crates/**'
+      - 'protocol-testing/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - '.github/workflows/ci-rust.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'crates/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9  # nightly
+        id: toolchain
+        with:
+          toolchain: nightly
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - name: fmt
+        run: cargo +${{ steps.toolchain.outputs.name }} fmt --all --check
+
+      - name: clippy
+        run: cargo +${{ steps.toolchain.outputs.name }} clippy --workspace --all-targets --all-features -- -D warnings
+
+  test-unit:
+    name: Unit tests (no external deps)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@aba36d755ec7ca22d38b12111787c26115943952  # v2.68.12
+        with:
+          tool: cargo-nextest
+
+      - name: Run unit tests (excluding DB and EVM tests)
+        # Exclusions:
+        # - test(serial_db), test(db_): explicit DB test naming conventions
+        # - package(tycho-storage): all tests in tycho-storage require a live DB connection
+        # - test(evm), test(fork): require RPC/anvil
+        # - protocol-testing rpc/test_token_balance_validation: require ETH_RPC_URL
+        run: |
+          cargo nextest run --workspace --all-features --locked \
+            -E 'not (test(serial_db) | test(db_) | package(tycho-storage) | test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation))))'
+
+  test-db:
+    name: DB tests (postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgres://postgres:mypassword@localhost:5432/tycho_indexer_0
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Calculate Dockerfile hash
+        id: dockerfile_hash
+        run: echo "hash=$(md5sum docker/postgres.Dockerfile | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Postgres Docker image
+        id: cache-docker
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4
+        with:
+          path: /tmp/extended_postgres.tar
+          key: ${{ runner.os }}-postgres-${{ steps.dockerfile_hash.outputs.hash }}
+
+      - name: Set up Docker Buildx
+        if: steps.cache-docker.outputs.cache-hit != 'true'
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Build Postgres Docker image
+        if: steps.cache-docker.outputs.cache-hit != 'true'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6
+        with:
+          context: .
+          file: docker/postgres.Dockerfile
+          tags: extended_postgres:latest
+          outputs: type=docker,dest=/tmp/extended_postgres.tar
+
+      - name: Load Postgres image
+        run: docker load --input /tmp/extended_postgres.tar
+
+      - name: Start Postgres container
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRESQL_PASSWORD=mypassword \
+            -e POSTGRESQL_DATABASE=tycho_indexer_0 \
+            -e POSTGRESQL_USERNAME=postgres \
+            -e POSTGRESQL_SHARED_PRELOAD_LIBRARIES=pg_cron \
+            -p 5432:5432 \
+            extended_postgres:latest
+
+      - name: Wait for Postgres
+        run: |
+          until docker exec postgres pg_isready -U postgres; do
+            echo "Waiting for Postgres..."
+            sleep 1
+          done
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - name: Install libsqlite3-dev
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Install diesel_cli
+        uses: baptiste0928/cargo-install@c7dafcfd8a0035d58dfc65d0fbaf71a9ac347715  # v2
+        with:
+          crate: diesel_cli
+          features: postgres
+
+      - name: Run migrations
+        run: diesel migration run --migration-dir ./crates/tycho-storage/migrations
+
+      - uses: taiki-e/install-action@aba36d755ec7ca22d38b12111787c26115943952  # v2.68.12
+        with:
+          tool: cargo-nextest
+
+      - name: Run DB tests (parallel)
+        run: |
+          cargo nextest run --workspace --all-features --locked \
+            -E 'not (test(serial_db) | test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation))))'
+        env:
+          RUSTFLAGS: -Dwarnings
+
+      - name: Run DB tests (serial)
+        run: |
+          cargo nextest run --workspace --all-features --locked \
+            --test-threads 1 \
+            -E 'test(serial_db) and not (test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation))))'
+        env:
+          RUSTFLAGS: -Dwarnings
+
+  test-evm:
+    name: EVM tests (requires RPC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - uses: taiki-e/install-action@aba36d755ec7ca22d38b12111787c26115943952  # v2.68.12
+        with:
+          tool: cargo-nextest
+
+      - name: Run EVM / fork tests
+        # Exclusions:
+        # - test_permit: requires a local anvil fork; enabled by --all-features via fork-tests feature
+        # - tycho-simulation evm tests: require pre-recorded JSON snapshots not committed to the repo
+        run: |
+          cargo nextest run --workspace --all-features --locked \
+            -E '(test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation)))) and not (package(tycho-execution) and test(test_permit)) and not package(tycho-simulation)'
+        env:
+          ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
+          RPC_URL: ${{ secrets.ETH_RPC_URL }}
+          RUSTFLAGS: -Dwarnings
+
+  doc:
+    name: Rustdoc
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps --all-features --locked
+        env:
+          RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links
+
+  check-no-default-features:
+    name: Check (no default features)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      - name: cargo check --no-default-features
+        run: cargo check --workspace --no-default-features --locked
+        env:
+          RUSTFLAGS: -Dwarnings

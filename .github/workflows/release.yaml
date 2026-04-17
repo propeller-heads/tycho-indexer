@@ -1,17 +1,26 @@
 name: Release
 
+# Triggered when a GitHub Release is published by semantic-release (via main-workflow.yaml).
+# Also supports manual runs.
 on:
-  workflow_dispatch:
-    inputs: { }
   release:
-    types: [ created, prereleased ]
+    types: [published, prereleased]
+  workflow_dispatch:
+    inputs: {}
 
 permissions:
-  id-token: write
   contents: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
 
 jobs:
+  # ── Binary uploads (tycho-client and tycho-indexer) ──────────────────────────
+  # Migrated from tycho-indexer's release.yaml
   upload-assets:
+    name: Upload ${{ matrix.package }} (${{ matrix.target }})
     strategy:
       matrix:
         include:
@@ -29,12 +38,16 @@ jobs:
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
       - name: Install PostgreSQL Client on macOS
         if: runner.os == 'macOS'
         run: |
           brew install libpq
           brew link --force libpq
+
       - uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: ${{ matrix.package }}
@@ -43,33 +56,93 @@ jobs:
           tar: all
           zip: none
           token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.3.1
         with:
           role-to-assume: ${{ secrets.ROLE_TO_ASSUME }}
           audience: sts.amazonaws.com
           aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Upload binary to S3
         run: |
           FILE_NAME=${{ matrix.package }}-${{ matrix.target }}-${{ github.event.release.tag_name }}.tar.gz
           BUCKET_NAME=repo.propellerheads-propellerheads/tycho-client
           aws s3 cp $FILE_NAME s3://$BUCKET_NAME/$FILE_NAME
-  publish-crate:
+
+  # ── Crate publishing (all workspace crates in dependency order) ───────────────
+  # Merged from tycho-indexer, tycho-simulation, and tycho-execution release.yamls.
+  # NOTE: --dry-run is set for the test migration. Remove it at real cutover.
+  publish:
+    name: Publish crates to crates.io
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
         with:
           toolchain: stable
-          override: true
-      - name: Push to crates.io
-        run: |
-          cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-common
-          cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-client
-          cargo publish --locked --verbose --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }} --package tycho-ethereum
-# we can't use the action because it errors on github dependencies in any workspace crate
-#      - uses: katyo/publish-crates@v2
-#        with:
-#          path: "./tycho-common"
-#          registry-token: ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
 
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+
+      # Wave 1: foundation crate
+      - name: Publish tycho-common
+        run: >
+          cargo publish -p tycho-common --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index wave 1
+        run: sleep 30
+
+      # Wave 2: crates that depend only on tycho-common
+      - name: Publish tycho-ethereum
+        run: >
+          cargo publish -p tycho-ethereum --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Publish tycho-client
+        run: >
+          cargo publish -p tycho-client --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index wave 2
+        run: sleep 30
+
+      # Wave 3: crates that depend on wave 1+2
+      - name: Publish tycho-storage
+        run: >
+          cargo publish -p tycho-storage --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Publish tycho-simulation
+        run: >
+          cargo publish -p tycho-simulation --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Publish tycho-execution
+        run: >
+          cargo publish -p tycho-execution --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index wave 3
+        run: sleep 30
+
+      # Wave 4: indexer (depends on storage, common, client, ethereum)
+      - name: Publish tycho-indexer
+        run: >
+          cargo publish -p tycho-indexer --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io to index wave 4
+        run: sleep 30
+
+      # Wave 5: metacrate
+      - name: Publish tycho (metacrate)
+        run: >
+          cargo publish -p tycho --locked --dry-run
+          --token ${{ secrets.CRATESIO_REGISTRY_TOKEN }}

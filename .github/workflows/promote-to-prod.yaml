@@ -1,0 +1,39 @@
+name: Promote to production
+
+# Manually promote a tagged image for any application to production.
+# Run this after verifying the image in dev.
+on:
+  workflow_dispatch:
+    inputs:
+      application:
+        description: Application to promote
+        required: true
+        type: choice
+        options:
+          - tycho-indexer
+          - tycho-integration-test
+      image_tag:
+        description: Image tag to promote (e.g. v0.255.1)
+        required: true
+        type: string
+
+jobs:
+  promote-tycho-indexer:
+    if: inputs.application == 'tycho-indexer'
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-production.yaml@main
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      image_name: tycho-indexer
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
+  promote-tycho-integration-test:
+    if: inputs.application == 'tycho-integration-test'
+    uses: propeller-heads/ci-cd-templates/.github/workflows/promote-to-production.yaml@main
+    with:
+      image_tag: ${{ inputs.image_tag }}
+      image_name: tycho-integration-test
+    secrets:
+      app_id: ${{ secrets.APP_ID }}
+      app_private_key: ${{ secrets.APP_PRIVATE_KEY }}

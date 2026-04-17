@@ -1,0 +1,30 @@
+name: Run Single Protocol Test
+description: Run tests for a single protocol with isolated database
+inputs:
+  protocol:
+    required: true
+    description: Single protocol to test
+runs:
+  using: "composite"
+  steps:
+    - name: Run protocol test with isolated database
+      env:
+        PROTOCOL: ${{ inputs.protocol }}
+        RPC_URL: ${{ env.RPC_URL }}
+        SUBSTREAMS_API_TOKEN: ${{ env.SUBSTREAMS_API_TOKEN }}
+        AUTH_API_KEY: ${{ env.AUTH_API_KEY }}
+      run: |
+        # Create unique database name for this protocol
+        DB_NAME="tycho_indexer_$(echo $PROTOCOL | tr '-' '_')_$(date +%s)_$$"
+        echo "Using database: $DB_NAME"
+
+        # Update docker-compose for this specific run
+        export DB_NAME
+        export PROTOCOL
+
+        # Run with unique database and protocol
+        docker compose -f protocol-testing/docker-compose.yaml up \
+          --abort-on-container-exit \
+          --exit-code-from test-runner \
+          --renew-anon-volumes
+      shell: bash
