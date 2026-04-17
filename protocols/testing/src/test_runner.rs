@@ -478,10 +478,9 @@ impl TestRunner {
         info!("Running {} tests on Chain {}...\n", tests_count, self.chain);
 
         let mut failed_tests: Vec<String> = Vec::new();
-        let mut count = 1;
 
-        for test in &tests {
-            info!("TEST {}: {}", count, test.name);
+        for (idx, test) in tests.iter().enumerate() {
+            info!("TEST {}: {}", idx + 1, test.name);
             let mut initialized_accounts = config
                 .initialized_accounts
                 .clone()
@@ -523,7 +522,6 @@ impl TestRunner {
             }
             tycho_runner.stop_rpc_server(rpc_server)?;
             info!("{}\n", "-".repeat(terminal_width));
-            count += 1;
         }
 
         info!("Tests finished!");

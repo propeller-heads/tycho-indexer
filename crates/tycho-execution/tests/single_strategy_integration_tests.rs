@@ -16,7 +16,7 @@ use crate::common::{
 };
 
 #[test]
-fn test_single_swap_strategy_encoder() {
+fn test_evm_single_swap_strategy_encoder() {
     // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
     // optimizations.
     let checked_amount = BigUint::from_str("2018817438608734439720").unwrap();

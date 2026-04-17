@@ -16,7 +16,7 @@ use crate::common::{
 };
 
 #[test]
-fn test_split_swap_strategy_encoder() {
+fn test_evm_split_swap_strategy_encoder() {
     // Note: This test does not assert anything. It is only used to obtain integration
     // test data for our router solidity test.
     //
@@ -105,7 +105,7 @@ fn test_split_swap_strategy_encoder() {
 }
 
 #[test]
-fn test_split_input_cyclic_swap() {
+fn test_evm_split_input_cyclic_swap() {
     // This test has start and end tokens that are the same
     // The flow is:
     //            ┌─ (USV3, 60% split) ──> WETH ─┐
@@ -267,7 +267,7 @@ fn test_split_input_cyclic_swap() {
 }
 
 #[test]
-fn test_split_output_cyclic_swap() {
+fn test_evm_split_output_cyclic_swap() {
     // This test has start and end tokens that are the same
     // The flow is:
     //                        ┌─── (USV3, 60% split) ───┐
@@ -423,7 +423,7 @@ fn test_split_output_cyclic_swap() {
 }
 
 #[test]
-fn test_split_swap_strategy_with_fees() {
+fn test_evm_split_swap_strategy_with_fees() {
     // Performs a split swap from WETH to USDC though WBTC and DAI using USV2 pools
     //
     //         ┌──(USV2)──> WBTC ───(USV2)──> USDC
