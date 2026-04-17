@@ -19,7 +19,7 @@ runs:
       shell: bash
       run: |
         # Convert space-separated list to newline-separated list and process
-        echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '^substreams/' | grep -v 'Cargo.lock$' > changed_files.txt
+        echo '${{ inputs.changed-files }}' | tr ' ' '\n' | grep '^protocols/substreams/' | grep -v 'Cargo.lock$' > changed_files.txt
 
         # Initialize empty array for package names
         PACKAGE_NAMES=()
@@ -36,7 +36,7 @@ runs:
           ENCOUNTERED_WORKSPACE=""
 
           # Find the nearest parent directory containing Cargo.toml
-          while [ "$dir" != "substreams" ] && [ "$dir" != "." ]; do
+          while [ "$dir" != "protocols/substreams" ] && [ "$dir" != "." ]; do
             if [ -f "$dir/Cargo.toml" ]; then
               # Check if this Cargo.toml is a workspace (has [workspace] section)
               if grep -q '^\[workspace\]' "$dir/Cargo.toml" 2>/dev/null; then
