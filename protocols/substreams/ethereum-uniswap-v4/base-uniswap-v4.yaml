@@ -11,7 +11,7 @@ protobuf:
     - tycho/evm/v1/utils.proto
     - uniswap.proto
   importPaths:
-    - ../../proto
+    - ../../../proto
     - ./proto
   excludePaths:
     - sf/ethereum

@@ -9,7 +9,7 @@ protobuf:
     - ambient.proto
   importPaths:
     - ./proto
-    - ../../proto
+    - ../../../proto
 
 binaries:
   default:

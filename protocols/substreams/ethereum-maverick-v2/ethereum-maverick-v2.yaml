@@ -12,7 +12,7 @@ protobuf:
     - maverick.proto
   importPaths:
     - ./proto/v1
-    - ../../proto
+    - ../../../proto
 
 binaries:
   default:

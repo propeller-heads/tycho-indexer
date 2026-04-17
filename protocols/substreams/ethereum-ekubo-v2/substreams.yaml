@@ -10,7 +10,7 @@ protobuf:
     - tycho/evm/v1/utils.proto
     - ekubo.proto
   importPaths:
-    - ../../proto
+    - ../../../proto
     - ./proto
   excludePaths:
     - google
