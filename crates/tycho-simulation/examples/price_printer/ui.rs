@@ -288,10 +288,8 @@ impl App {
                         if key.kind == KeyEventKind::Press {
                             if self.input_mode {
                                 match key.code {
-                                    KeyCode::Char(c) => {
-                                        if c.is_ascii_digit() {
-                                            self.input_buffer.push(c);
-                                        }
+                                    KeyCode::Char(c) if c.is_ascii_digit() => {
+                                        self.input_buffer.push(c);
                                     },
                                     KeyCode::Backspace => {
                                         self.input_buffer.pop();

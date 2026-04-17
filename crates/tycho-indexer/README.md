@@ -130,8 +130,8 @@ Note: Ensure that `/usr/local/bin/` is included in your system's PATH. On most s
 but on minimalist Linux distributions or custom setups, you may need to verify or modify your PATH.
 
 3. **Verify the installation:**
-After completing the above steps, you can check that the binary is correctly linked by running:
-```bash
-tycho-indexer --help
-```
-This should display the help information for the `tycho-indexer` commands.
+   After completing the above steps, you can check that the binary is correctly linked by running:
+   ```bash
+   tycho-indexer --help
+   ```
+   This should display the help information for the `tycho-indexer` commands.

@@ -1,14 +1,14 @@
 //! Builder for configuring a multi-protocol stream.
 //!
 //! Provides a builder for creating a multi-protocol stream that produces
-//! [`protocol::models::Update`] messages. It runs one synchronization worker per protocol
+//! protocol state update messages. It runs one synchronization worker per protocol
 //! and a supervisor that aggregates updates, ensuring gap‑free streaming
 //! and robust state tracking.
 //!
 //! ## Context
 //!
-//! This stream wraps [`tycho_client::stream::TychoStream`]. It decodes `FeedMessage`s
-//! into [`protocol::models::Update`]s. Internally, each protocol runs in its own
+//! This stream wraps a `TychoStream` from `tycho-client`. It decodes `FeedMessage`s
+//! into protocol state updates. Internally, each protocol runs in its own
 //! synchronization worker, and a supervisor aggregates their messages per block.
 //!
 //! ### Protocol Synchronization Worker
@@ -48,7 +48,7 @@
 //! workers are `Stale` or `Ended`.
 //!
 //! ## Stream
-//! The stream emits one [`protocol::models::Update`] every `block_time`. Each update
+//! The stream emits one protocol state update every `block_time`. Each update
 //! reports protocol synchronization states and any changes.
 //!
 //! The `new_components` field lists newly deployed components and their tokens.
@@ -296,7 +296,7 @@ impl ProtocolStreamBuilder {
 
     /// Sets the network operation timeout (deprecated).
     ///
-    /// Use [`latency_buffer`] instead for controlling latency.
+    /// Use [`latency_buffer()`](Self::latency_buffer) instead for controlling latency.
     /// This method is retained for backwards compatibility.
     #[deprecated = "Use latency_buffer instead"]
     pub fn timeout(mut self, timeout: u64) -> Self {
@@ -413,7 +413,8 @@ impl ProtocolStreamBuilder {
     /// Sets the minimum token quality for tokens added via the stream.
     ///
     /// Tokens arriving in stream deltas below this threshold are ignored. Defaults to 100.
-    /// Set this to the same value used in [`load_all_tokens`] to apply consistent filtering.
+    /// Set this to the same value used in [`load_all_tokens()`](crate::utils::load_all_tokens) to
+    /// apply consistent filtering.
     pub fn min_token_quality(mut self, quality: u32) -> Self {
         self.decoder.min_token_quality(quality);
         self

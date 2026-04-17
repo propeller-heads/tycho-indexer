@@ -142,10 +142,12 @@ impl PreCachedDB {
         Ok(())
     }
 
-    /// Like [`update`] but unconditionally overwrites existing accounts on `Creation` updates.
+    /// Like [`update()`](Self::update) but unconditionally overwrites existing accounts on
+    /// `Creation` updates.
     ///
     /// Use only for authoritative proxy-token accounts that must win over placeholder entries
-    /// inserted by other decoders' snapshot loops. Generic callers should use [`update`].
+    /// inserted by other decoders' snapshot loops. Generic callers should use
+    /// [`update()`](Self::update).
     pub fn force_update_accounts(
         &self,
         account_updates: Vec<AccountUpdate>,
