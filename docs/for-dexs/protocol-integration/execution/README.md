@@ -19,14 +19,14 @@ fn encode_swap(
 ) -> Result<Vec<u8>, EncodingError>;
 ```
 
-This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src/encoding/evm/swap_encoder).
+This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution/src/encoding/evm/swap_encoder).
 
-If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/protocol_specific_addresses.json).
+If your protocol needs some specific constant addresses please add them in [config/protocol\_specific\_addresses.json](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/protocol_specific_addresses.json).
 
 After implementing your `SwapEncoder` , you need to:
 
-* Add your protocol with a placeholder address in: [config/executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/executor_addresses.json) and [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/test_executor_addresses.json)
-* Add your protocol in the [`SwapEncoderRegister`](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src/encoding/evm/swap_encoder/swap_encoder_registry.rs#L38) (if you want it to be one of the default protocols)
+* Add your protocol with a placeholder address in: [config/executor\_addresses.json](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/executor_addresses.json) and [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/test_executor_addresses.json)
+* Add your protocol in the [`SwapEncoderRegister`](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/src/encoding/evm/swap_encoder/swap_encoder_registry.rs) (if you want it to be one of the default protocols)
 
 <details>
 
@@ -44,7 +44,7 @@ Depending on the index of the swap in the swap group, the encoder may be respons
 
 ## Swap Interface
 
-Every integrated protocol requires its own swap executor contract. This contract must implement the [`IExecutor`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/interfaces/IExecutor.sol) interface. See currently implemented executors [here](https://github.com/propeller-heads/tycho-contracts/tree/main/foundry/src/executors). Please also look through our [Contributing Guidelines for Solidity](../contributing-guidelines.md#changing-solidity-code).
+Every integrated protocol requires its own swap executor contract. This contract must implement the [`IExecutor`](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/interfaces/IExecutor.sol) interface. See currently implemented executors [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution/contracts/src/executors). Please also look through our [Contributing Guidelines for Solidity](../contributing-guidelines.md#changing-solidity-code).
 
 The `IExecutor` interface requires three methods:
 
@@ -105,7 +105,7 @@ Used during [sequential swaps](../../../concepts.md#sequential) to determine whe
 
 ### Callbacks
 
-Some protocols require a callback during swap execution (e.g., Uniswap V3, Uniswap V4, Balancer V3). In these cases, the executor contract must also implement [`ICallback`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/interfaces/ICallback.sol).
+Some protocols require a callback during swap execution (e.g., Uniswap V3, Uniswap V4, Balancer V3). In these cases, the executor contract must also implement [`ICallback`](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/interfaces/ICallback.sol).
 
 **Required Methods**
 
@@ -143,7 +143,7 @@ The callback data passed through this flow should include the function selector 
 
 ## Token Transfers
 
-**Executors do not handle any token transfers**. All ERC20 token transfers are orchestrated by the Dispatcher via the [`TransferManager`](https://github.com/propeller-heads/tycho-contracts/blob/main/foundry/src/TransferManager.sol). The Dispatcher calls `getTransferData` (or `getCallbackTransferData` during callbacks) on the executor to learn _how_ the protocol expects to receive tokens, and then performs the transfer itself.
+**Executors do not handle any token transfers**. All ERC20 token transfers are orchestrated by the Dispatcher via the [`TransferManager`](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/TransferManager.sol). The Dispatcher calls `getTransferData` (or `getCallbackTransferData` during callbacks) on the executor to learn _how_ the protocol expects to receive tokens, and then performs the transfer itself.
 
 This design reduces the attack surface — a malicious or buggy executor cannot misroute user funds because it never touches the input token directly.
 
@@ -220,7 +220,7 @@ These helpers save and load the calldata to/from `calldata.txt`.
 
 * In `tests/protocol_integration_tests.rs`, write a Rust test that encodes a single swap and saves the calldata using `write_calldata_to_file()`.
 * In `TychoRouterTestSetup`, deploy your new executor and add it to executors list in `deployExecutors`.
-* Run the setup to retrieve your executor’s deployed address and add it to [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/config/test_executor_addresses.json).
+* Run the setup to retrieve your executor’s deployed address and add it to [config/test\_executor\_addresses.json](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/test_executor_addresses.json).
 * Create a new Solidity test contract that inherits from `TychoRouterTestSetup`. For example:
 
 ```solidity
@@ -241,7 +241,7 @@ These tests ensure your integration works end-to-end within Tycho’s architectu
 
 Once your implementation is approved:
 
-1. **Deploy the executor contract** on the appropriate network (more [here](https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/scripts/README.md)).
+1. **Deploy the executor contract** on the appropriate network (more [here](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/scripts/README.md)).
 2. **Contact us** to whitelist the new executor address on our main router contract.
 3. **Update the configuration** by adding the new executor address to `executor_addresses.json` and register the `SwapEncoder` within the `SwapEncoderBuilder` .
 

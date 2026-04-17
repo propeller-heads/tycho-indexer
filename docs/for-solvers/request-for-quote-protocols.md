@@ -13,7 +13,7 @@ Tycho supports streaming, simulating, and executing RFQ quotes as part of multi-
 
 The RFQ quickstart is similar to the other protocols [quickstart](../).
 
-See the code [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) and [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) are the only supported providers.
+See the code [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro) and [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) are the only supported providers.
 
 You need to set up the API credentials of the desired RFQs to access live pricing data and quoting, as well as your private key if you wish to execute against the Tycho Router:
 

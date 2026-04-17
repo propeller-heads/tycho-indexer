@@ -55,12 +55,16 @@ For security purposes, new Executors must have:
 
 #### Running tests <a href="#running-tests" id="running-tests"></a>
 
+Run from `crates/tycho-execution/contracts/`:
+
 ```bash
 export ETH_RPC_URL=<url>
 forge test
 ```
 
 #### Code formatting <a href="#code-formatting" id="code-formatting"></a>
+
+Run from `crates/tycho-execution/contracts/`:
 
 ```bash
 forge fmt
@@ -74,14 +78,14 @@ Please **minimize** use of assembly for security reasons.
 
 We use [Slither](https://github.com/crytic/slither) to detect any potential vulnerabilities in our contracts.
 
-To run locally, simply install Slither in your conda env and run it inside the foundry directory.
+To run locally, simply install Slither in your conda env and run it inside the contracts directory.
 
 ```bash
 conda create --name tycho-execution python=3.10
 conda activate tycho-execution
 
 pip install slither-analyzer
-cd foundry
+cd crates/tycho-execution/contracts
 slither .
 ```
 

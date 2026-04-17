@@ -1,7 +1,7 @@
 # Tracking Contract Storage
 
 {% hint style="info" %}
-This implementation pattern is, by default, used in both the [ethereum-template-factory](https://github.com/propeller-heads/tycho-protocol-sdk/tree/503a83595ec1c69e7007167dfd36e2aacc88888c/substreams/ethereum-template-factory) and the [ethereum-template-singleton ](https://github.com/propeller-heads/tycho-protocol-sdk/tree/503a83595ec1c69e7007167dfd36e2aacc88888c/substreams/ethereum-template-singleton)templates.
+This implementation pattern is, by default, used in both the [ethereum-template-factory](https://github.com/propeller-heads/tycho-indexer/tree/main/protocols/substreams/ethereum-template-factory) and the [ethereum-template-singleton](https://github.com/propeller-heads/tycho-indexer/tree/main/protocols/substreams/ethereum-template-singleton) templates.
 {% endhint %}
 
 In VM implementations, accurately identifying and extracting relevant contract changes is essential.&#x20;
@@ -40,7 +40,7 @@ extract_contract_changes(
 For protocols where contracts aren't necessarily pools themselves, you'll need to identify specific contracts to track. These addresses can be:
 
 1. Hard-coded (for single-chain implementations)
-2. Configured via parameters in your [substreams.yaml](https://github.com/propeller-heads/tycho-protocol-sdk/blob/503a83595ec1c69e7007167dfd36e2aacc88888c/substreams/ethereum-template-singleton/substreams.yaml#L28) file (for chain-agnostic implementations)
+2. Configured via parameters in your [substreams.yaml](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/substreams/ethereum-template-singleton/substreams.yaml) file (for chain-agnostic implementations)
 3. Read from the storage of a known contract (hardcoded or configured)
 
 Here's how to extract changes for specific addresses using configuration parameters:

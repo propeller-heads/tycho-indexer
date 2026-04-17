@@ -22,7 +22,7 @@ pub fn map_relative_balances(
 }
 ```
 
-Use the `tycho_substream::balances::extract_balance_deltas_from_tx` function from our Substreams SDK to extract `BalanceDelta` data from ERC20 Transfer events for a given transaction, as in the [Curve implementation](https://github.com/propeller-heads/propeller-protocol-lib/blob/main/substreams/ethereum-curve/src/modules.rs#L153).
+Use the `tycho_substream::balances::extract_balance_deltas_from_tx` function from our Substreams SDK to extract `BalanceDelta` data from ERC20 Transfer events for a given transaction, as in the [Curve implementation](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/substreams/ethereum-curve/src/modules.rs).
 
 #### 2. Aggregate balances with an additive store
 

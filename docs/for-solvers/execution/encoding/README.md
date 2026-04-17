@@ -2,7 +2,7 @@
 
 The first step to executing a trade on-chain is encoding.
 
-Our Rust [crate](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/src)
+Our Rust [crate](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution/src)
 converts your trades into calldata
 that the Tycho contracts can execute.
 

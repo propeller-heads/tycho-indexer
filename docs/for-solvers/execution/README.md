@@ -15,7 +15,7 @@ Tycho Execution provides tools for **encoding and executing swaps** against Tych
 * **Encoding**: A Rust crate that encodes swaps and generates calldata for execution.
 * **Executing**: Solidity contracts for executing trades on-chain.
 
-The source code for **Tycho Execution** is available [here](https://github.com/propeller-heads/tycho-execution). For a practical example of its usage, please refer to our [Quickstart](../../).
+The source code for **Tycho Execution** lives at [`crates/tycho-execution`](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution) inside the [Tycho monorepo](https://github.com/propeller-heads/tycho-indexer). For a practical example of its usage, please refer to our [Quickstart](../../).
 
 ## Token transfers
 
@@ -51,7 +51,7 @@ More on the Vault [here](vault.md).
 
 ## Security and Audits
 
-The Tycho Router V2 has been audited by [Maximilian Krüger](https://snd.github.io/). Past audits are [here](https://github.com/propeller-heads/tycho-execution/tree/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/docs/audits).
+The Tycho Router V2 has been audited by [Maximilian Krüger](https://snd.github.io/). Past audits are [here](https://github.com/propeller-heads/tycho-indexer/tree/main/docs/audits).
 
 {% hint style="danger" %}
 **Router V3 is still undergoing an audit.** Use at your own discretion. Funds stored in the router (including vault deposits) might be lost.

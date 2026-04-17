@@ -1,6 +1,6 @@
 # Protocol Integration
 
-[Tycho Protocol SDK ](https://github.com/propeller-heads/tycho-protocol-sdk)is a library to help you integrate liquidity layer protocols (DEXs, Staking, Lending, etc.) into Tycho.
+The [Tycho monorepo](https://github.com/propeller-heads/tycho-indexer) contains everything you need to integrate liquidity layer protocols (DEXs, Staking, Lending, etc.) into Tycho.
 
 ## Integration Process
 
