@@ -1,3 +1,13 @@
+## [0.259.1](https://github.com/propeller-heads/tycho-indexer/compare/0.259.0...0.259.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* repair integration test configs from monorepo assembly ([c419458](https://github.com/propeller-heads/tycho-indexer/commit/c4194582a223de3a2914df8972b64c30feebcb43))
+* resolve monorepo assembly issues ([238f95f](https://github.com/propeller-heads/tycho-indexer/commit/238f95f6294ffe4cf17d7d49fc272a3a98de4b6e))
+* resolve pre-existing clippy and rustdoc issues ([46451fb](https://github.com/propeller-heads/tycho-indexer/commit/46451fb490589aeeb88b796933fc81ea1c6587ae))
+* update quickstart example to current tycho-execution API ([085350d](https://github.com/propeller-heads/tycho-indexer/commit/085350d6eafef9dc70f2ff56308ad0cac9a2ce68))
+
 ## [0.158.0](https://github.com/propeller-heads/tycho-indexer/compare/0.157.4...0.158.0) (2026-04-15)
 
 
