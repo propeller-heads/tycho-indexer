@@ -2,13 +2,10 @@ name: Rust CI
 
 on:
   pull_request:
-    paths:
-      - 'crates/**'
-      - 'protocols/testing/**'
-      - 'Cargo.toml'
-      - 'Cargo.lock'
-      - 'rust-toolchain.toml'
-      - '.github/workflows/ci-rust.yaml'
+    # No path filter here. Path filtering is handled inside the `changes` job so
+    # that the skip-* jobs below always execute on every PR. GitHub branch
+    # protection requires a check to appear (pass or skip) on each commit — if
+    # the workflow never runs, required checks remain pending and block the PR.
   push:
     branches: [main]
     paths:
@@ -26,8 +23,39 @@ env:
   CARGO_INCREMENTAL: 0
 
 jobs:
+  # Detects whether any Rust-relevant paths changed in the PR.
+  # Real CI jobs run only when this outputs rust == 'true', or when triggered
+  # outside a PR (push/workflow_call/workflow_dispatch). The matching skip-*
+  # jobs run otherwise, producing green checks so branch protection rules that
+  # require "Rust CI / <job-name>" are satisfied on every PR.
+  changes:
+    name: Detect Rust changes
+    runs-on: ubuntu-latest
+    # continue-on-error so non-PR triggers (workflow_call, push) don't block
+    # dependent jobs if changed-files has no base ref to compare against.
+    continue-on-error: true
+    outputs:
+      rust: ${{ steps.filter.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
+        id: filter
+        with:
+          files: |
+            crates/**
+            protocols/testing/**
+            Cargo.toml
+            Cargo.lock
+            rust-toolchain.toml
+            .github/workflows/ci-rust.yaml
+
   lint:
     name: Lint (fmt + clippy)
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -51,8 +79,18 @@ jobs:
       - name: clippy
         run: cargo +${{ steps.toolchain.outputs.name }} clippy --workspace --all-targets --all-features -- -D warnings
 
+  lint-skip:
+    name: Lint (fmt + clippy)
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping lint"
+
   test-unit:
     name: Unit tests (no external deps)
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -82,8 +120,18 @@ jobs:
           cargo nextest run --workspace --all-features --locked \
             -E 'not (test(serial_db) | test(db_) | package(tycho-storage) | test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation))))'
 
+  test-unit-skip:
+    name: Unit tests (no external deps)
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping unit tests"
+
   test-db:
     name: DB tests (postgres)
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -165,7 +213,7 @@ jobs:
       - name: Run DB tests (parallel)
         run: |
           cargo nextest run --workspace --all-features --locked \
-            -E 'not (test(serial_db) | test(evm) | test(fork) | (package(protocol-testing) and (test(rpc) | test(test_token_balance_validation))))'
+            -E '(test(db_) | package(tycho-storage)) and not test(serial_db)'
         env:
           RUSTFLAGS: -Dwarnings
 
@@ -177,8 +225,18 @@ jobs:
         env:
           RUSTFLAGS: -Dwarnings
 
+  test-db-skip:
+    name: DB tests (postgres)
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping DB tests"
+
   test-evm:
     name: EVM tests (requires RPC)
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -210,8 +268,18 @@ jobs:
           RPC_URL: ${{ secrets.ETH_RPC_URL }}
           RUSTFLAGS: -Dwarnings
 
+  test-evm-skip:
+    name: EVM tests (requires RPC)
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping EVM tests"
+
   doc:
     name: Rustdoc
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -232,8 +300,18 @@ jobs:
         env:
           RUSTDOCFLAGS: -D rustdoc::broken_intra_doc_links
 
+  doc-skip:
+    name: Rustdoc
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping doc check"
+
   check-no-default-features:
     name: Check (no default features)
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -253,3 +331,11 @@ jobs:
         run: cargo check --workspace --no-default-features --locked
         env:
           RUSTFLAGS: -Dwarnings
+
+  check-no-default-features-skip:
+    name: Check (no default features)
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping no-default-features check"
