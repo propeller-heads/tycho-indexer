@@ -1,3 +1,10 @@
+## [0.259.2](https://github.com/propeller-heads/tycho-indexer/compare/0.259.1...0.259.2) (2026-04-17)
+
+
+### Bug Fixes
+
+* remove unused substreams CLI from Docker build stage ([20d167f](https://github.com/propeller-heads/tycho-indexer/commit/20d167f524fbee392371fd5355e71ced9fc99fe6))
+
 ## [0.259.1](https://github.com/propeller-heads/tycho-indexer/compare/0.259.0...0.259.1) (2026-04-17)
 
 
