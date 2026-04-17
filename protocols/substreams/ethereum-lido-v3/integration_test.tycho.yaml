@@ -1,0 +1,29 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_system: "lido_v3"
+module_name: "map_protocol_changes"
+protocol_type_names:
+  - "stETH"
+  - "wstETH"
+skip_balance_check: true # Lido liquidity is indexed from internal accounting, not direct component balances.
+
+tests:
+  - name: test_lido_v3_component_creation
+    start_block: 24083113
+    stop_block: 24083220
+    expected_components:
+      - id: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
+        tokens:
+          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
+          - "0x0000000000000000000000000000000000000000"
+        static_attributes: { }
+        creation_tx: "0xd377156654a0d6f646c9eea54e893352f98c26e8ff14911c4df8127578ff3b97"
+        skip_simulation: true # tycho-simulation does not have a Lido V3 native decoder in this repo yet.
+        skip_execution: true # tycho-execution does not have a Lido V3 adapter in this repo yet.
+      - id: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+        tokens:
+          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
+          - "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+        static_attributes: { }
+        creation_tx: "0xd377156654a0d6f646c9eea54e893352f98c26e8ff14911c4df8127578ff3b97"
+        skip_simulation: true # tycho-simulation does not have a Lido V3 native decoder in this repo yet.
+        skip_execution: true # tycho-execution does not have a Lido V3 adapter in this repo yet.

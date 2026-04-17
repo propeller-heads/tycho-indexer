@@ -1,0 +1,65 @@
+specVersion: v0.1.0
+package:
+  name: "ethereum_lido_v3"
+  version: v0.1.0
+
+protobuf:
+  files:
+    - tycho/protocols/adapter-integration/evm/v1/common.proto
+    - tycho/protocols/adapter-integration/evm/v1/utils.proto
+  importPaths:
+    - ../../proto
+
+binaries:
+  default:
+    type: wasm/rust-v1
+    file: ../target/wasm32-unknown-unknown/release/ethereum_lido_v3.wasm
+
+network: mainnet
+
+params:
+  map_protocol_components: &initial_state |
+    {
+      "start_block": 24083113,
+      "total_shares": "0x00000000000000000000000000000000000000000005f18d02edc955cbcfc9b0",
+      "external_shares": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "buffered_ether": "0x00000000000000000000000000000000000000000000002303b296dd9f3631db",
+      "deposited_validators": "0x0000000000000000000000000000000000000000000000000000000000065004",
+      "cl_balance": "0x000000000000000000000000000000000000000000073f77f7680e9a096c4600",
+      "cl_validators": "0x0000000000000000000000000000000000000000000000000000000000064d49",
+      "staking_state": "0x00001fc3842bd1f071c000000000190000001fc37ee5c9f3db1a0000016f7a9f"
+    }
+  store_protocol_state: *initial_state
+  map_protocol_changes: *initial_state
+
+modules:
+  - name: map_protocol_components
+    kind: map
+    initialBlock: &start_block 24083113
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+    output:
+      type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
+
+  - name: store_protocol_state
+    kind: store
+    initialBlock: *start_block
+    updatePolicy: set
+    valueType: bigint
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+
+  - name: map_protocol_changes
+    kind: map
+    initialBlock: *start_block
+    inputs:
+      - params: string
+      - source: sf.ethereum.type.v2.Block
+      - map: map_protocol_components
+      - store: store_protocol_state
+        mode: deltas
+      - store: store_protocol_state
+    output:
+      type: proto:tycho.evm.v1.BlockChanges
