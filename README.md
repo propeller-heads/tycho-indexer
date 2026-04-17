@@ -1,12 +1,12 @@
 [![Telegram Chat](https://img.shields.io/badge/chat-telegram-blue)][tg-url]
 
-# Tycho Indexer
+# Tycho
 
-![Tycho Indexer](./assets/tycho.png)
+![Tycho](./assets/tycho.png)
 
-Tycho Indexer gives you a low-latency, reorg-aware stream of all attributes you need to simulate swaps over DEX and other onchain liquidity.
+Tycho is an open-source interface to on-chain liquidity.
 
-For comprehensive documentation about tycho-indexer, visit our [GitBook](https://docs.propellerheads.xyz/tycho/for-solvers/indexer).
+For comprehensive documentation about Tycho, visit our [GitBook](https://docs.propellerheads.xyz/tycho/overview).
 
 ## How to Contribute
 
@@ -63,8 +63,6 @@ The [Official Documentation](https://docs.propellerheads.xyz/tycho) is our curre
 Tycho's architecture is designed to handle both real-time and historical data efficiently. Extractors process on-chain data,
 which then propagate the data to clients and storage. Clients can access stored data with the RPC service,
 and combine it with streamed deltas to reconstruct the current state of a protocol system.
-
-![Tycho Flow Diagram](./assets/tycho_architecture.png)
 
 Tycho consists of several crates, each responsible for different aspects of the system:
 
