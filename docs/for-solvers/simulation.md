@@ -8,7 +8,7 @@ description: Simulate interactions with any protocol.
 
 Tycho Simulation is a Rust crate that provides powerful tools for **interacting with protocol states**, **calculating spot prices**, and **simulating token swaps**.
 
-The repository is available [here](https://github.com/propeller-heads/tycho-simulation).
+The crate lives at [`crates/tycho-simulation`](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation) inside the [Tycho monorepo](https://github.com/propeller-heads/tycho-indexer).
 
 {% hint style="info" %}
 **✨ New: Sub-Second Latency with Partial Blocks**
@@ -18,13 +18,13 @@ Tycho now provides early support for partial blocks on Base, enabling sub-second
 
 ## Installation
 
-The `tycho-simulation` package is available on [Github](https://github.com/propeller-heads/tycho-simulation).
+The `tycho-simulation` package is available on [Github](https://github.com/propeller-heads/tycho-indexer).
 
 To use the simulation tools with Ethereum Virtual Machine (EVM) chains, add the optional `evm` feature flag to your dependency configuration:
 
 ```toml
 tycho-simulation = { 
-     git = "https://github.com/propeller-heads/tycho-simulation.git",
+     git = "https://github.com/propeller-heads/tycho-indexer.git",
      package = "tycho-simulation",
      tag = "x.y.z", # Replace with latest version
      features = ["evm"]
@@ -35,12 +35,12 @@ tycho-simulation = {
 Add this to your project's `Cargo.toml` file.
 
 {% hint style="info" %}
-**Note:** Replace `x.y.z` with the latest version number from our [GitHub Releases page](https://github.com/propeller-heads/tycho-simulation/releases). Using the latest release ensures you have the most up-to-date features and bug fixes.
+**Note:** Replace `x.y.z` with the latest version number from our [GitHub Releases page](https://github.com/propeller-heads/tycho-indexer/releases). Using the latest release ensures you have the most up-to-date features and bug fixes.
 {% endhint %}
 
 ## Main Interface
 
-All protocols implement the `ProtocolSim` trait (see definition [here](https://github.com/propeller-heads/tycho-simulation/blob/e588151d25a6d8070f7813b4ea8608329d221ab2/src/protocol/state.rs#L66)). It has the main methods:
+All protocols implement the `ProtocolSim` trait (see definition [here](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/protocol/state.rs)). It has the main methods:
 
 #### Spot price
 
@@ -75,7 +75,7 @@ pub struct GetAmountOutResult {
 
 `new state` allows you to, for example, simulate consecutive swaps in the same protocol.
 
-Please refer to the [in-code documentation](../../tycho-common/src/simulation/protocol_sim.rs#L116) of the `ProtocolSim` trait and its methods for more in-depth information.
+Please refer to the [in-code documentation](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-common/src/simulation/protocol_sim.rs) of the `ProtocolSim` trait and its methods for more in-depth information.
 
 #### Fee
 
@@ -177,7 +177,7 @@ let all_tokens = load_all_tokens(
 
 #### Step 2: Create a stream
 
-You can use the [ProtocolStreamBuilder](https://github.com/propeller-heads/tycho-simulation/blob/main/src/evm/stream.rs#L55) to easily set up and manage multiple protocols within one stream. An example of creating such a stream with Uniswap V2 and Balancer V2 protocols is as follows:
+You can use the [ProtocolStreamBuilder](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/evm/stream.rs) to easily set up and manage multiple protocols within one stream. An example of creating such a stream with Uniswap V2 and Balancer V2 protocols is as follows:
 
 ```rust
 use tycho_simulation::evm::{
@@ -284,7 +284,7 @@ let mut amount_out = HashMap::new()
 
 ## Example Use Case: Token Price Printer
 
-You can find an example of a **price printer** [here](https://github.com/propeller-heads/tycho-simulation/tree/main/examples).
+You can find an example of a **price printer** [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples).
 
 Clone the repo, then run:
 

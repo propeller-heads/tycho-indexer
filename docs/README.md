@@ -13,7 +13,7 @@ Want to chat with our docs? Download an LLM-friendly [text file of the full Tych
 
 ## Run the Quickstart
 
-Clone the [Tycho Simulation repository](https://github.com/propeller-heads/tycho-simulation); here's [the quickstart](https://github.com/propeller-heads/tycho-simulation/blob/main/examples/quickstart/main.rs) code.
+Clone the [Tycho repository](https://github.com/propeller-heads/tycho-indexer); here's [the quickstart](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/examples/quickstart/main.rs) code.
 
 Run the quickstart with execution using the following commands:
 

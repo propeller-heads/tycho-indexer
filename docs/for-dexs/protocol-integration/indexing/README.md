@@ -35,7 +35,7 @@ The Tycho Indexer ingests all data versioned by block and transaction. This appr
 2. Each transaction must be paired with its corresponding block.
 3. All changes must be absolute values (final state), not deltas.
 
-Details of the data model that encodes these changes, transactions, and blocks in messages are available [here](https://github.com/propeller-heads/tycho-protocol-sdk/blob/main/proto/tycho/evm/v1/common.proto). These models facilitate communication between Substreams and the Tycho Indexer, and within Substreams modules. Tycho Indexer expects to receive a `BlockChanges` output from your Substreams package.
+Details of the data model that encodes these changes, transactions, and blocks in messages are available [here](https://github.com/propeller-heads/tycho-indexer/blob/main/proto/tycho/evm/v1/common.proto). These models facilitate communication between Substreams and the Tycho Indexer, and within Substreams modules. Tycho Indexer expects to receive a `BlockChanges` output from your Substreams package.
 
 You must aggregate changes at the transaction level. Emitting `BlockChanges` with duplicate transactions in the `changes` attributes is an error.
 
