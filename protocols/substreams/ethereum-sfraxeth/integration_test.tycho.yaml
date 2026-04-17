@@ -1,5 +1,6 @@
 # Name of the substreams config file in your substreams module. Usually "./substreams.yaml"
 substreams_yaml_path: ./substreams.yaml
+protocol_system: "sfraxeth"
 # Name of the adapter contract, usually: ProtocolSwapAdapter"
 adapter_contract: "FraxV3FrxEthAdapter"
 # Constructor signature of the Adapter contract"

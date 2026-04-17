@@ -133,7 +133,8 @@ where
     /// Sets the minimum token quality for decoding.
     ///
     /// Tokens arriving in stream deltas below this threshold are ignored. Defaults to 100.
-    /// Set this to the same value used in [`load_all_tokens`] to apply consistent filtering.
+    /// Set this to the same value used in [`load_all_tokens()`](crate::utils::load_all_tokens) to
+    /// apply consistent filtering.
     pub fn min_token_quality(&mut self, quality: u32) {
         self.min_token_quality = quality;
     }
@@ -897,7 +898,7 @@ where
 
         state_guard
             .states
-            .extend(updated_states.clone().into_iter());
+            .extend(updated_states.clone());
 
         // Add new components to persistent state
         for (id, component) in new_pairs.iter() {

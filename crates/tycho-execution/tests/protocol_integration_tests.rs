@@ -232,7 +232,7 @@ fn test_single_encoding_strategy_maverick() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_eth_in() {
+fn test_evm_single_encoding_strategy_usv4_eth_in() {
     // Performs a single swap from ETH to PEPE using a USV4 pool
     // Note: This test does not assert anything. It is only used to obtain integration
     // test data for our router solidity test.
@@ -293,7 +293,7 @@ fn test_single_encoding_strategy_usv4_eth_in() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_eth_out() {
+fn test_evm_single_encoding_strategy_usv4_eth_out() {
     // Performs a single swap from USDC to ETH using a USV4 pool
     // Note: This test does not assert anything. It is only used to obtain integration
     // test data for our router solidity test.
@@ -359,7 +359,7 @@ fn test_single_encoding_strategy_usv4_eth_out() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_grouped_swap() {
+fn test_evm_single_encoding_strategy_usv4_grouped_swap() {
     // Performs a sequential swap from USDC to PEPE though ETH using two consecutive
     // USV4 pools
     //
@@ -489,7 +489,7 @@ fn test_single_encoding_strategy_usv4_grouped_swap() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
+fn test_evm_single_encoding_strategy_usv4_and_hooks_grouped_swap() {
     // Performs a sequential swap from WETH to USDC through ETH using
     // a USV4 pool with Euler hooks followed by a USV4 pool with no hooks
     //
@@ -2080,7 +2080,7 @@ fn test_sequential_encoding_strategy_etherfi_wrap_eeth() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_twif_fee_token() {
+fn test_evm_single_encoding_strategy_usv4_twif_fee_token() {
     // Encodes a single swap of TWIF (a fee-on-transfer token that
     // actually charges 6% on every transfer) to USDC through a
     // real UniswapV4 pool on mainnet.
@@ -2150,7 +2150,7 @@ fn test_single_encoding_strategy_usv4_twif_fee_token() {
 }
 
 #[test]
-fn test_single_encoding_strategy_usv4_twif_fee_token_output() {
+fn test_evm_single_encoding_strategy_usv4_twif_fee_token_output() {
     // Encodes a swap of USDC to TWIF (a fee-on-transfer token that
     // actually charges 6% on every transfer) through a real
     // UniswapV4 pool on mainnet.
@@ -2342,7 +2342,7 @@ fn test_single_encoding_strategy_liquorice_settle_single() {
 }
 
 #[test]
-fn test_two_hop_usv4_twif_intermediary() {
+fn test_evm_two_hop_usv4_twif_intermediary() {
     // UniswapV4 cyclical swaps encoded as two separate hops with TWIF (6%
     // fee-on-transfer) as intermediary. Same pool used in both directions to
     // isolate the effect of the transfer tax on the intermediate hop.

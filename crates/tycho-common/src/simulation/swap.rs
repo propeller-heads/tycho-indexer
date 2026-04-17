@@ -759,7 +759,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// # Default behavior
     ///
     /// The default implementation derives the pairs from the tokens exposed by
-    /// [`component()`], returning all ordered pairs `(a, b)` where `a != b`.
+    /// [`component()`](Self::component), returning all ordered pairs `(a, b)` where `a != b`.
     /// Protocols with restricted or asymmetric support (e.g. RFQ-based or single-sided
     /// designs) should override this method.
     ///
@@ -768,7 +768,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///
     /// This method is primarily intended for routing, discovery, and validation logic,
     /// allowing callers to determine whether a quote request is meaningful before invoking
-    /// [`quote`].
+    /// [`quote()`](Self::quote).
     fn quotable_pairs(&self) -> Vec<(Arc<Token>, Arc<Token>)> {
         let component = self.component();
         component
@@ -795,8 +795,8 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///
     /// # Relation to quoting
     ///
-    /// Implementations may internally reuse logic from [`quote`], but this method exists to
-    /// allow callers to:
+    /// Implementations may internally reuse logic from [`quote()`](Self::quote), but this method
+    /// exists to allow callers to:
     /// - Inspect or decompose pricing components
     /// - Perform fee-aware routing or optimization
     /// - Estimate costs without requesting a full quote
@@ -822,7 +822,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///   finite trade.
     /// - This method is **pure and side-effect free**; it must not mutate internal state.
     /// - For sufficiently small trade sizes, the marginal price should be consistent with
-    ///   [`quote`], up to numerical precision.
+    ///   [`quote()`](Self::quote), up to numerical precision.
     ///
     /// # Use cases
     ///
@@ -854,7 +854,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///   applicable.
     /// - This method is **pure and side-effect free**; it must not mutate internal state.
     /// - For sufficiently small trade sizes, the quote should be consistent with
-    ///   [`marginal_price`], up to numerical precision.
+    ///   [`marginal_price()`](Self::marginal_price), up to numerical precision.
     ///
     /// # Intended use
     ///
@@ -883,8 +883,8 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     /// - The limits may depend on swap direction, fees, liquidity constraints, or protocol-specific
     ///   rules.
     /// - This method is **pure and side-effect free**; it must not mutate internal state.
-    /// - Limits are expressed in **fee-inclusive terms**, consistent with [`quote`] and
-    ///   [`marginal_price`].
+    /// - Limits are expressed in **fee-inclusive terms**, consistent with [`quote()`](Self::quote)
+    ///   and [`marginal_price()`](Self::marginal_price).
     ///
     /// # Intended use
     ///
@@ -901,7 +901,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
 
     /// Produces an **advanced, price-constraint-based quote**
     ///
-    /// Unlike [`quote`], which prices a swap for a fixed input or output amount,
+    /// Unlike [`quote()`](Self::quote), which prices a swap for a fixed input or output amount,
     /// `query_swap` solves for a swap that satisfies a higher-level [`SwapConstraint`],
     /// such as a minimum execution price or a target post-trade pool price.
     ///
@@ -912,7 +912,7 @@ pub trait SwapQuoter: fmt::Debug + Send + Sync + 'static {
     ///
     /// - The method is **read-only** and does not mutate internal state.
     /// - All amounts and prices in the returned [`Swap`] are **fee-inclusive**, consistent with
-    ///   [`quote`] and [`marginal_price`].
+    ///   [`quote()`](Self::quote) and [`marginal_price()`](Self::marginal_price).
     /// - The constraint defines *what is solved for* (e.g. maximum trade size, target price),
     ///   rather than supplying an explicit trade amount.
     /// - Implementations may use analytical or numerical methods to satisfy the constraint, subject

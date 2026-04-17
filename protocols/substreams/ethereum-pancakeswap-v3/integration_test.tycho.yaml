@@ -1,4 +1,5 @@
 substreams_yaml_path: ./ethereum-pancakeswap-v3.yaml
+protocol_system: "pancakeswap_v3"
 protocol_type_names:
   - "pancakeswap_v3_pool"
 module_name: "map_protocol_changes"

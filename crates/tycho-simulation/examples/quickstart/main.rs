@@ -31,11 +31,13 @@ use tycho_common::{models::token::Token, Bytes};
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
-        approvals::permit2::PermitSingle, encoder_builders::TychoRouterEncoderBuilder,
+        approvals::permit2::{Permit2, PermitSingle},
+        encoder_builders::TychoRouterEncoderBuilder,
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
+        utils::biguint_to_u256,
     },
     models,
-    models::{EncodedSolution, Solution, Swap, Transaction, UserTransferType},
+    models::{EncodedSolution, Solution, Swap, UserTransferType},
 };
 use tycho_simulation::{
     evm::{
@@ -45,7 +47,6 @@ use tycho_simulation::{
             ekubo_v3::{self, state::EkuboV3State},
             filters::{balancer_v2_pool_filter, curve_pool_filter},
             pancakeswap_v2::state::PancakeswapV2State,
-            u256_num::biguint_to_u256,
             uniswap_v2::state::UniswapV2State,
             uniswap_v3::state::UniswapV3State,
             uniswap_v4::state::UniswapV4State,
@@ -58,6 +59,14 @@ use tycho_simulation::{
     tycho_common::models::Chain,
     utils::{get_default_url, load_all_tokens, load_blocklist},
 };
+
+/// Represents a transaction to be executed.
+#[derive(Clone, Debug)]
+pub struct Transaction {
+    pub to: Bytes,
+    pub value: BigUint,
+    pub data: Vec<u8>,
+}
 
 #[derive(Parser)]
 struct Cli {
@@ -235,7 +244,6 @@ async fn main() {
         .expect("Failed to get default SwapEncoderRegistry");
     let encoder = TychoRouterEncoderBuilder::new()
         .chain(chain)
-        .user_transfer_type(UserTransferType::TransferFromPermit2)
         .swap_encoder_registry(swap_encoder_registry)
         .build()
         .expect("Failed to build encoder");
@@ -637,17 +645,16 @@ fn create_solution(
     let min_amount_out = (expected_amount * &multiplier) / &bps;
 
     // Then we create a solution object with the previous swap
-    Solution {
-        sender: user_address.clone(),
-        receiver: user_address,
-        given_token: sell_token.address,
-        given_amount: sell_amount,
-        checked_token: buy_token.address,
-        exact_out: false, // it's an exact in solution
-        checked_amount: min_amount_out,
-        swaps: vec![simple_swap],
-        ..Default::default()
-    }
+    Solution::new(
+        user_address.clone(),
+        user_address,
+        sell_token.address,
+        buy_token.address,
+        sell_amount,
+        min_amount_out,
+        vec![simple_swap],
+    )
+    .with_user_transfer_type(UserTransferType::TransferFromPermit2)
 }
 
 /// Encodes a transaction for the Tycho Router using the `singleSwapPermit2` method.
@@ -665,39 +672,48 @@ fn encode_tycho_router_call(
     native_address: Bytes,
     signer: PrivateKeySigner,
 ) -> Result<Transaction, EncodingError> {
-    let p = encoded_solution
-        .permit
-        .expect("Permit object must be set");
+    let given_amount = biguint_to_u256(solution.amount_in());
+    let min_amount_out = biguint_to_u256(solution.min_amount_out());
+    let given_token = Address::from_slice(solution.token_in());
+    let checked_token = Address::from_slice(solution.token_out());
+    let receiver = Address::from_slice(solution.receiver());
+
+    let permit2 = Permit2::new()?;
+    let p = permit2.get_permit(
+        encoded_solution.interacting_with(),
+        solution.sender(),
+        solution.token_in(),
+        solution.amount_in(),
+    )?;
     let permit = PermitSingle::try_from(&p)
         .map_err(|_| EncodingError::InvalidInput("Invalid permit".to_string()))?;
     let signature = sign_permit(chain_id, &p, signer)?;
-    let given_amount = biguint_to_u256(&solution.given_amount);
-    let min_amount_out = biguint_to_u256(&solution.checked_amount);
-    let given_token = Address::from_slice(&solution.given_token);
-    let checked_token = Address::from_slice(&solution.checked_token);
-    let receiver = Address::from_slice(&solution.receiver);
 
     let method_calldata = (
         given_amount,
         given_token,
         checked_token,
         min_amount_out,
-        false,
-        false,
         receiver,
         permit,
         signature.as_bytes().to_vec(),
-        encoded_solution.swaps,
+        encoded_solution.swaps().to_vec(),
     )
         .abi_encode();
 
-    let contract_interaction = encode_input(&encoded_solution.function_signature, method_calldata);
-    let value = if solution.given_token == native_address {
-        solution.given_amount.clone()
+    let contract_interaction = encode_input(encoded_solution.function_signature(), method_calldata);
+    let value = if solution.token_in() == &native_address {
+        solution.amount_in().clone()
     } else {
         BigUint::ZERO
     };
-    Ok(Transaction { to: encoded_solution.interacting_with, value, data: contract_interaction })
+    Ok(Transaction {
+        to: encoded_solution
+            .interacting_with()
+            .clone(),
+        value,
+        data: contract_interaction,
+    })
 }
 
 /// Signs a Permit2 `PermitSingle` struct using the EIP-712 signing scheme.

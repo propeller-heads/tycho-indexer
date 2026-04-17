@@ -333,7 +333,7 @@ fn test_balancer_v2_uniswap_v2() {
 }
 
 #[test]
-fn test_multi_protocol() {
+fn test_evm_multi_protocol() {
     // Note: This test does not assert anything. It is only used to obtain
     // integration test data for our router solidity test.
     //

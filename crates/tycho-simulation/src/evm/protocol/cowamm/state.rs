@@ -111,7 +111,7 @@ impl CowAMMState {
     /// https://github.com/balancer/balancer-v2-monorepo/blob/master/pkg/core/contracts/pools/weighted/WeightedMath.sol#L299
     ///
     /// Formula:
-    /// amountOut[i] = balances[i] * (lpTokenAmountIn / totalLpToken)
+    /// amountOut\[i\] = balances\[i\] * (lpTokenAmountIn / totalLpToken)
     ///
     /// # Arguments
     /// * `pool` - Reference to the pool containing balances and LP supply

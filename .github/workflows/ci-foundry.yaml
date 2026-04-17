@@ -2,11 +2,10 @@ name: Foundry CI
 
 on:
   pull_request:
-    paths:
-      - 'crates/tycho-execution/contracts/**'
-      - 'protocols/adapter-integration/evm/**'
-      - 'crates/tycho-simulation/token-proxy-contracts/**'
-      - '.github/workflows/ci-foundry.yaml'
+    # No path filter here. Path filtering is handled inside the `changes` job so
+    # that the skip-* jobs below always execute on every PR. GitHub branch
+    # protection requires a check to appear (pass or skip) on each commit — if
+    # the workflow never runs, required checks remain pending and block the PR.
   push:
     branches: [main]
     paths:
@@ -19,8 +18,37 @@ permissions:
   contents: read
 
 jobs:
+  # Detects whether any Foundry-relevant paths changed in the PR.
+  # Real CI jobs run only when this outputs foundry == 'true', or when triggered
+  # outside a PR (push/workflow_dispatch). The matching skip-* jobs run otherwise,
+  # producing green checks so branch protection rules that require
+  # "Foundry CI / <job-name>" are satisfied on every PR.
+  changes:
+    name: Detect Foundry changes
+    runs-on: ubuntu-latest
+    # continue-on-error so non-PR triggers (push, workflow_dispatch) don't block
+    # dependent jobs if changed-files has no base ref to compare against.
+    continue-on-error: true
+    outputs:
+      foundry: ${{ steps.filter.outputs.any_changed }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: tj-actions/changed-files@48d8f15b2aaa3d255ca5af3eba4870f807ce6b3c  # v45
+        id: filter
+        with:
+          files: |
+            crates/tycho-execution/contracts/**
+            protocols/adapter-integration/evm/**
+            crates/tycho-simulation/token-proxy-contracts/**
+            .github/workflows/ci-foundry.yaml
+
   forge-test:
     name: Forge build, fmt, test (${{ matrix.project.path }})
+    needs: [changes]
+    if: needs.changes.outputs.foundry == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -55,8 +83,36 @@ jobs:
         run: NO_COLOR=1 forge snapshot >> "$GITHUB_STEP_SUMMARY"
         if: matrix.project.path == 'crates/tycho-execution/contracts'
 
+  # One skip job per matrix entry so each check name matches exactly what branch
+  # protection requires ("Foundry CI / Forge build, fmt, test (<path>)").
+  forge-test-skip-execution:
+    name: Forge build, fmt, test (crates/tycho-execution/contracts)
+    needs: [changes]
+    if: needs.changes.outputs.foundry != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Foundry changes detected, skipping forge-test"
+
+  forge-test-skip-adapter:
+    name: Forge build, fmt, test (protocols/adapter-integration/evm)
+    needs: [changes]
+    if: needs.changes.outputs.foundry != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Foundry changes detected, skipping forge-test"
+
+  forge-test-skip-token-proxy:
+    name: Forge build, fmt, test (crates/tycho-simulation/token-proxy-contracts)
+    needs: [changes]
+    if: needs.changes.outputs.foundry != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Foundry changes detected, skipping forge-test"
+
   slither:
     name: Slither static analysis
+    needs: [changes]
+    if: needs.changes.outputs.foundry == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -69,3 +125,11 @@ jobs:
         with:
           target: 'crates/tycho-execution/contracts/'
           slither-args: '--filter-paths crates/tycho-execution/contracts/lib/ --exclude unindexed-event-address'
+
+  slither-skip:
+    name: Slither static analysis
+    needs: [changes]
+    if: needs.changes.outputs.foundry != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Foundry changes detected, skipping Slither"

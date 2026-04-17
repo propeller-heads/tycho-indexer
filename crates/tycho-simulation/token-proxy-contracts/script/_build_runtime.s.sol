@@ -23,10 +23,7 @@ contract buildRuntime is Script {
         }
     }
 
-    function deployContract(string memory contractName, bytes memory args)
-    internal
-    returns (address)
-    {
+    function deployContract(string memory contractName, bytes memory args) internal returns (address) {
         if (args.length == 0) {
             return deployCode(contractName);
         } else {

@@ -57,7 +57,7 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
         // own group instead.
         let no_cycle = current_group
             .as_ref()
-            .map_or(true, |g| swap.token_out() != &g.token_in);
+            .is_none_or(|g| swap.token_out() != &g.token_in);
 
         if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split && no_cycle
         {

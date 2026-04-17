@@ -41,3 +41,11 @@
 [submodule "crates/tycho-simulation/token-proxy-contracts/lib/forge-std"]
     path = crates/tycho-simulation/token-proxy-contracts/lib/forge-std
     url = https://github.com/foundry-rs/forge-std
+
+[submodule "protocols/adapter-integration/evm/lib/forge-std"]
+    path = protocols/adapter-integration/evm/lib/forge-std
+    url = https://github.com/foundry-rs/forge-std
+
+[submodule "protocols/adapter-integration/evm/lib/openzeppelin-contracts"]
+    path = protocols/adapter-integration/evm/lib/openzeppelin-contracts
+    url = https://github.com/OpenZeppelin/openzeppelin-contracts

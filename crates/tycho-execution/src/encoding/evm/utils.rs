@@ -196,7 +196,7 @@ pub fn write_calldata_to_file(test_identifier: &str, hex_calldata: &str) {
         .lock()
         .expect("Couldn't acquire lock");
 
-    let file_path = "foundry/test/assets/calldata.txt";
+    let file_path = "contracts/test/assets/calldata.txt";
     let file = OpenOptions::new()
         .read(true)
         .open(file_path)

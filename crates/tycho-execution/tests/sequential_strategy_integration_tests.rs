@@ -15,7 +15,7 @@ use crate::common::{
 };
 
 #[test]
-fn test_sequential_swap_strategy_encoder() {
+fn test_evm_sequential_swap_strategy_encoder() {
     // Note: This test does not assert anything. It is only used to obtain integration
     // test data for our router solidity test.
     //
@@ -188,7 +188,7 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
 }
 
 #[test]
-fn test_sequential_strategy_cyclic_swap() {
+fn test_evm_sequential_strategy_cyclic_swap() {
     // This test has start and end tokens that are the same
     // The flow is:
     // USDC -> WETH -> USDC  using two pools
@@ -310,7 +310,7 @@ fn test_sequential_strategy_cyclic_swap() {
 }
 
 #[test]
-fn test_sequential_strategy_cyclic_swap_and_vault() {
+fn test_evm_sequential_strategy_cyclic_swap_and_vault() {
     // This test has start and end tokens that are the same
     // The flow is:
     // USDC -> WETH -> USDC  using two pools
@@ -430,7 +430,7 @@ fn test_sequential_strategy_cyclic_swap_and_vault() {
 }
 
 #[test]
-fn test_sequential_swap_strategy_encoder_with_fees() {
+fn test_evm_sequential_swap_strategy_encoder_with_fees() {
     // Performs a sequential swap from WETH to USDC through WBTC using USV2 pools
     //
     //   WETH ───(USV2)──> WBTC ───(USV2)──> USDC

@@ -1,4 +1,4 @@
-/// serde functions for handling bytes as hex strings, such as [bytes::Bytes]
+/// serde functions for handling bytes as hex strings, such as `bytes::Bytes`
 pub mod hex_bytes {
     use serde::{Deserialize, Deserializer, Serializer};
 

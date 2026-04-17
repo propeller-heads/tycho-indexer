@@ -2,10 +2,9 @@ use tycho_simulation::{
     evm::{
         engine_db::tycho_db::PreCachedDB,
         protocol::{
-            ekubo::state::EkuboState,
-            pancakeswap_v2::state::PancakeswapV2State, uniswap_v2::state::UniswapV2State,
-            uniswap_v3::state::UniswapV3State, uniswap_v4::state::UniswapV4State,
-            vm::state::EVMPoolState,
+            ekubo::state::EkuboState, pancakeswap_v2::state::PancakeswapV2State,
+            uniswap_v2::state::UniswapV2State, uniswap_v3::state::UniswapV3State,
+            uniswap_v4::state::UniswapV4State, vm::state::EVMPoolState,
         },
         stream::ProtocolStreamBuilder,
     },

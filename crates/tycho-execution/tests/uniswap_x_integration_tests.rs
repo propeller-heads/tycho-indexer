@@ -19,7 +19,7 @@ use crate::common::{
 mod common;
 
 #[test]
-fn test_sequential_swap_usx() {
+fn test_evm_sequential_swap_usx() {
     // Replicates real uniswap X order settled in tx:
     // 0x005d7b150017ba1b59d2f99395ccae7bda9b739938ade4e509817e32760aaf9d
     // Performs a sequential

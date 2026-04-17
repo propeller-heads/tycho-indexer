@@ -16,9 +16,9 @@ pub struct OverwriteMetadata {
 /// Metadata for a single storage slot
 #[derive(Debug, Clone)]
 pub enum SlotMetadata {
-    /// Balance slot: balance[owner]
+    /// Balance slot: balance\[owner\]
     Balance { owner: Address, slot: B256 },
-    /// Allowance slot: allowance[owner][spender]
+    /// Allowance slot: allowance\[owner\]\[spender\]
     Allowance { owner: Address, spender: Address, slot: B256 },
 }
 
