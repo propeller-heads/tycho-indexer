@@ -1,4 +1,5 @@
 // @generated
+#[allow(dead_code)]
 pub mod contract {
     // @@protoc_insertion_point(attribute:contract.v1)
     pub mod v1 {
