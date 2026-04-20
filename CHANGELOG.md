@@ -1,3 +1,12 @@
+## [0.259.3](https://github.com/propeller-heads/tycho-indexer/compare/0.259.2...0.259.3) (2026-04-20)
+
+
+### Bug Fixes
+
+* proto import paths and root_path detection ([2556966](https://github.com/propeller-heads/tycho-indexer/commit/2556966cdc306d920e2a1953ee6ebbfb9dddd35d))
+* proto import paths and root_path detection ([#914](https://github.com/propeller-heads/tycho-indexer/issues/914)) ([bf00f14](https://github.com/propeller-heads/tycho-indexer/commit/bf00f14d9812d60d0409aa674b83416d521681f4))
+* update substreams-check action paths for monorepo layout ([8027757](https://github.com/propeller-heads/tycho-indexer/commit/80277577925fb64526be266ff59a8612232f561a))
+
 ## [0.259.2](https://github.com/propeller-heads/tycho-indexer/compare/0.259.1...0.259.2) (2026-04-17)
 
 
