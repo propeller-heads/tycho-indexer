@@ -1,0 +1,1122 @@
+[
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "errorId_",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexError",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "errorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexFactoryError",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "shares_",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexLiquidityOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "token0Amt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "token1Amt",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexPerfectLiquidityOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "lastStoredPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "centerPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "upperRange",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lowerRange",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "geometricMean",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "supplyToken0ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "borrowToken0ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "supplyToken1ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "borrowToken1ExchangePrice",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Structs.PricesAndExchangePrice",
+        "name": "pex_",
+        "type": "tuple"
+      }
+    ],
+    "name": "FluidDexPricesAndExchangeRates",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenAmt",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexSingleTokenOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountOut",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexSwapResult",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "errorId_",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidSafeTransferError",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "smartCol",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "smartDebt",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token0ColAmt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token0DebtAmt",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "revenueCut",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "centerPriceAddress",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hookAddress",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogInitializePoolConfig",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "upperPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lowerPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "upperShiftThreshold",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lowerShiftThreshold",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "thresholdShiftTime",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxCenterPrice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minCenterPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogInitializePriceParams",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "LogPauseSwapAndArbitrage",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "pauseSupply",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "pauseBorrow",
+        "type": "bool"
+      }
+    ],
+    "name": "LogPauseUser",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      }
+    ],
+    "name": "LogRescueFunds",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "turnOn",
+        "type": "bool"
+      }
+    ],
+    "name": "LogToggleOracleActivation",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token0Amt",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogTurnOnSmartCol",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token0Amt",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogTurnOnSmartDebt",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "LogUnpauseSwapAndArbitrage",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "unpauseSupply",
+        "type": "bool"
+      },
+      {
+        "indexed": false,
+        "internalType": "bool",
+        "name": "unpauseBorrow",
+        "type": "bool"
+      }
+    ],
+    "name": "LogUnpauseUser",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "centerPriceAddress",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "percent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "time",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateCenterPriceAddress",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxCenterPrice",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "minCenterPrice",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateCenterPriceLimits",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "fee",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "revenueCut",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateFeeAndRevenueCut",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "hookAddress",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateHookAddress",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxBorrowShares",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateMaxBorrowShares",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "maxSupplyShares",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateMaxSupplyShares",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "upperPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lowerPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "shiftTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateRangePercents",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "upperThresholdPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "lowerThresholdPercent",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "thresholdShiftTime",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "shiftTime",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateThresholdPercent",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "user",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandDuration",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseDebtCeiling",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxDebtCeiling",
+            "type": "uint256"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct Structs.UserBorrowConfig[]",
+        "name": "userBorrowConfigs",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "LogUpdateUserBorrowConfigs",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "user",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandDuration",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseWithdrawalLimit",
+            "type": "uint256"
+          }
+        ],
+        "indexed": false,
+        "internalType": "struct Structs.UserSupplyConfig[]",
+        "name": "userSupplyConfigs",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "LogUpdateUserSupplyConfigs",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "newLimit",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateUserWithdrawalLimit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token0UtilizationLimit",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "token1UtilizationLimit",
+        "type": "uint256"
+      }
+    ],
+    "name": "LogUpdateUtilizationLimit",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bool",
+            "name": "smartCol",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "token0ColAmt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "bool",
+            "name": "smartDebt",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint256",
+            "name": "token0DebtAmt",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "centerPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "fee",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "revenueCut",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "upperPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lowerPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "upperShiftThreshold",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lowerShiftThreshold",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "thresholdShiftTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "centerPriceAddress",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "hookAddress",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxCenterPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minCenterPrice",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Structs.InitializeVariables",
+        "name": "i_",
+        "type": "tuple"
+      }
+    ],
+    "name": "initialize",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "pauseSwapAndArbitrage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user_",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "pauseSupply_",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "pauseBorrow_",
+        "type": "bool"
+      }
+    ],
+    "name": "pauseUser",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "slot_",
+        "type": "bytes32"
+      }
+    ],
+    "name": "readFromStorage",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "result_",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token_",
+        "type": "address"
+      }
+    ],
+    "name": "rescueFunds",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bool",
+        "name": "turnOn_",
+        "type": "bool"
+      }
+    ],
+    "name": "toggleOracleActivation",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "token0Amt_",
+        "type": "uint256"
+      }
+    ],
+    "name": "turnOnSmartCol",
+    "outputs": [],
+    "stateMutability": "payable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "token0Amt_",
+        "type": "uint256"
+      }
+    ],
+    "name": "turnOnSmartDebt",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "unpauseSwapAndArbitrage",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user_",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "unpauseSupply_",
+        "type": "bool"
+      },
+      {
+        "internalType": "bool",
+        "name": "unpauseBorrow_",
+        "type": "bool"
+      }
+    ],
+    "name": "unpauseUser",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "centerPriceAddress_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "percent_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "time_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateCenterPriceAddress",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "maxCenterPrice_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minCenterPrice_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateCenterPriceLimits",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "fee_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "revenueCut_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateFeeAndRevenueCut",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "hookAddress_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateHookAddress",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "maxBorrowShares_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateMaxBorrowShares",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "maxSupplyShares_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateMaxSupplyShares",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "upperPercent_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lowerPercent_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "shiftTime_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateRangePercents",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "upperThresholdPercent_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "lowerThresholdPercent_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "thresholdShiftTime_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "shiftTime_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateThresholdPercent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "user",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandDuration",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseDebtCeiling",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "maxDebtCeiling",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Structs.UserBorrowConfig[]",
+        "name": "userBorrowConfigs_",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "updateUserBorrowConfigs",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "address",
+            "name": "user",
+            "type": "address"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandPercent",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "expandDuration",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "baseWithdrawalLimit",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Structs.UserSupplyConfig[]",
+        "name": "userSupplyConfigs_",
+        "type": "tuple[]"
+      }
+    ],
+    "name": "updateUserSupplyConfigs",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user_",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "newLimit_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateUserWithdrawalLimit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "token0UtilizationLimit_",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "token1UtilizationLimit_",
+        "type": "uint256"
+      }
+    ],
+    "name": "updateUtilizationLimit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
