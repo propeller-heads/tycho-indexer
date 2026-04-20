@@ -13,7 +13,7 @@ RUN /root/.foundry/bin/foundryup
 FROM rust:1.89-bookworm AS tycho-indexer-builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y git
-RUN git clone --depth 1 --branch "0.83.4" https://github.com/propeller-heads/tycho-indexer.git
+RUN git clone --depth 1 --branch "0.153.0" https://github.com/propeller-heads/tycho-indexer.git
 WORKDIR /build/tycho-indexer
 RUN cargo build --release --bin tycho-indexer
 
