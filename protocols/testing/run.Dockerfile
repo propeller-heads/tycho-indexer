@@ -24,7 +24,7 @@ RUN forge build
 # Build substreams (wasm targets only - source not needed in final image)
 WORKDIR /build/tycho-protocol-sdk/protocols/substreams
 # resolve_base maps clone protocol names to their base substreams directory.
-# Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocol-testing/src/test_runner.rs.
+# Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocols/testing/src/test_runner.rs.
 RUN resolve_base() { \
         case "$1" in \
             base-alienbase-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
@@ -62,7 +62,7 @@ FROM debian:bookworm-slim AS substreams-filter
 ARG PROTOCOLS=""
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/substreams /source
 # resolve_base maps clone protocol names to their base substreams directory.
-# Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocol-testing/src/test_runner.rs.
+# Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocols/testing/src/test_runner.rs.
 RUN resolve_base() { \
         case "$1" in \
             base-alienbase-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
@@ -111,7 +111,7 @@ RUN chmod +x /entrypoint.sh
 # Create minimal directory structure
 RUN mkdir -p /app/proto /app/evm
 
-# Copy proto files (needed for substreams pack)  
+# Copy proto files (needed for substreams pack)
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/proto /app/proto
 
 # Copy EVM directory
