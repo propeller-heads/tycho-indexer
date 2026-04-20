@@ -6719,7 +6719,6 @@ name = "protocol-testing"
 version = "0.265.0"
 dependencies = [
  "alloy",
- "async-trait",
  "clap",
  "colored",
  "dotenv",
@@ -6734,7 +6733,6 @@ dependencies = [
  "num-traits",
  "postgres",
  "regex",
- "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -6743,7 +6741,6 @@ dependencies = [
  "termsize",
  "tokio",
  "tokio-postgres",
- "tokio-retry2",
  "tracing",
  "tracing-subscriber 0.3.20",
  "tycho-execution",
@@ -9583,7 +9580,6 @@ version = "0.265.0"
 dependencies = [
  "actix",
  "actix-cors",
- "actix-http",
  "actix-rt",
  "actix-test",
  "actix-web",
@@ -9693,6 +9689,7 @@ dependencies = [
  "hex-literal 0.4.1",
  "http 1.3.1",
  "itertools 0.13.0",
+ "lazy_static",
  "mockall",
  "num-bigint",
  "num-traits",
@@ -9706,7 +9703,6 @@ dependencies = [
  "ruint",
  "serde",
  "serde_json",
- "strum 0.25.0",
  "strum_macros 0.25.3",
  "thiserror 1.0.69",
  "tokio",
@@ -9722,7 +9718,7 @@ dependencies = [
  "tycho-execution",
  "tycho-test",
  "typetag",
- "uuid",
+ "unicode-width 0.1.14",
 ]
 
 [[package]]

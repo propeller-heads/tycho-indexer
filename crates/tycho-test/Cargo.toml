@@ -4,14 +4,18 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-alloy = { workspace = true, features = ["rpc-types-eth", "sol-types", "contract"] }
+alloy = { workspace = true, features = [
+    "rpc-types-eth",
+    "sol-types",
+    "contract",
+] }
 alloy-chains = "0.2.6"
 alloy-rpc-types-trace = "1.0.38"
 async-trait = { workspace = true }
 colored = "3.0.0"
 hex = { workspace = true }
-num-bigint = { workspace = true }
 miette = { version = "7.6.0" }
+num-bigint = { workspace = true }
 regex = "1.12.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -20,6 +24,6 @@ tokio-retry2 = { version = "0.6.0", features = ["jitter"] }
 tracing = { workspace = true }
 tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
-tycho-execution  = { workspace = true }
+tycho-execution = { workspace = true }
 tycho-simulation = { workspace = true, features = ["evm"] }
 urlencoding = "2.1.3"
