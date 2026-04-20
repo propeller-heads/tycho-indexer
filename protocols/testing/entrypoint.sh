@@ -28,14 +28,44 @@ if [ "${#errors[@]}" -ne 0 ]; then
     exit 1
 fi
 
+# Infer the chain from the protocol name prefix.
+infer_chain() {
+    local protocol="$1"
+    case "$protocol" in
+        base-*)     echo "base" ;;
+        arbitrum-*) echo "arbitrum" ;;
+        unichain-*) echo "unichain" ;;
+        bsc-*)      echo "bsc" ;;
+        *)          echo "ethereum" ;;
+    esac
+}
+
+# Return the appropriate RPC URL for the given protocol.
+# Chain-specific URLs fall back to the generic RPC_URL if not set.
+get_rpc_url() {
+    local protocol="$1"
+    case "$protocol" in
+        base-*)     echo "${BASE_RPC_URL:-$RPC_URL}" ;;
+        arbitrum-*) echo "${ARBITRUM_RPC_URL:-$RPC_URL}" ;;
+        unichain-*) echo "${UNICHAIN_RPC_URL:-$RPC_URL}" ;;
+        bsc-*)      echo "${BSC_RPC_URL:-$RPC_URL}" ;;
+        *)          echo "$RPC_URL" ;;
+    esac
+}
+
 # Run tests
 for test in "${args[@]}"; do
 	protocol="${test%%=*}"
 	filter="${test#*=}"
-	echo "Running tests for protocol: $protocol with filter: $filter"
+	chain=$(infer_chain "$protocol")
+	rpc_url=$(get_rpc_url "$protocol")
+	export RPC_URL="$rpc_url"
+	echo "Running tests for protocol: $protocol (chain: $chain)"
 	if [[ "$test" == *"="* ]]; then
-		tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL" --match-test "$filter"
+		tycho-protocol-sdk range --package "$protocol" --chain "$chain" --rpc-url "$rpc_url" \
+			--db-url "$DATABASE_URL" --match-test "$filter"
 	else
-	  tycho-protocol-sdk range --package "$protocol" --db-url "$DATABASE_URL"
+		tycho-protocol-sdk range --package "$protocol" --chain "$chain" --rpc-url "$rpc_url" \
+			--db-url "$DATABASE_URL"
 	fi
 done

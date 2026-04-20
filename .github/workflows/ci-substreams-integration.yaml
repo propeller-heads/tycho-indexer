@@ -2,6 +2,10 @@ name: Substreams Integration Tests
 
 env:
   RPC_URL: ${{ secrets.RPC_URL_ARCHIVE }}
+  BASE_RPC_URL: ${{ secrets.BASE_RPC_URL_ARCHIVE }}
+  ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL_ARCHIVE }}
+  UNICHAIN_RPC_URL: ${{ secrets.UNICHAIN_RPC_URL_ARCHIVE }}
+  BSC_RPC_URL: ${{ secrets.BSC_RPC_URL_ARCHIVE }}
   SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
   AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}
   EXCLUDED_SUBSTREAMS: target|crates|ethereum-template-factory|ethereum-template-singleton|ethereum-fluid
@@ -66,22 +70,56 @@ jobs:
       - name: Get all substreams folders
         id: all_substreams
         run: |
+          # Clone protocol names mapped to their base substreams directory.
+          # Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocols/testing/src/test_runner.rs.
+          CLONE_NAMES="base-alienbase-v3 ethereum-pancakeswap-v2 ethereum-sushiswap-v2 unichain-curve"
+
           FOLDERS=$(find protocols/substreams -mindepth 1 -maxdepth 1 -type d \
             -exec basename {} \; | sort | \
             grep -v -E "^(${EXCLUDED_SUBSTREAMS})$" | \
             tr '\n' ' ')
-          echo "all_substreams=$FOLDERS" >> "$GITHUB_OUTPUT"
-          echo "Substreams folders: $FOLDERS"
+          ALL="$FOLDERS $CLONE_NAMES"
+          ALL=$(echo $ALL | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+          if [ -z "$ALL" ]; then
+            echo "No substreams folders found"
+          else
+            echo "Substreams folders (including clones): $ALL"
+          fi
+          echo "all_substreams=$ALL" >> "$GITHUB_OUTPUT"
 
       - name: Get changed substreams folders
         id: changes
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
         run: |
+          # Clone protocol to base directory mapping.
+          # Keep this in sync with CLONE_TO_BASE_PROTOCOL in protocols/testing/src/test_runner.rs.
+          declare -A CLONE_TO_BASE
+          CLONE_TO_BASE["base-alienbase-v3"]="ethereum-uniswap-v3-logs-only"
+          CLONE_TO_BASE["ethereum-pancakeswap-v2"]="ethereum-uniswap-v2"
+          CLONE_TO_BASE["ethereum-sushiswap-v2"]="ethereum-uniswap-v2"
+          CLONE_TO_BASE["unichain-curve"]="ethereum-curve"
+
           VALID="${{ steps.all_substreams.outputs.all_substreams }}"
-          CHANGED=$(git diff --name-only --diff-filter=d origin/main ${{ github.sha }} | \
-            grep '^protocols/substreams/' | awk -F'/' '{print $3}' | sort -u | \
+
+          # Detect changed top-level substreams directories from git diff.
+          CHANGED_DIRS=$(git diff --name-only --diff-filter=d origin/main \
+            ${{ github.sha }} | \
+            grep '^protocols/substreams/' | awk -F'/' '{print $3}' | sort -u)
+
+          # Match against known protocols (base dirs and clone names).
+          CHANGED=$(echo "$CHANGED_DIRS" | \
             grep -Fx "$(printf '%s\n' ${VALID})" | \
             tr '\n' ' ' | sed 's/ *$//')
+
+          # When a base directory changes, also add any clone protocols that use it.
+          for clone in "${!CLONE_TO_BASE[@]}"; do
+            base="${CLONE_TO_BASE[$clone]}"
+            if echo "$CHANGED_DIRS" | grep -qx "$base"; then
+              CHANGED="$CHANGED $clone"
+            fi
+          done
+
+          CHANGED=$(echo $CHANGED | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ *$//')
           echo "changed_substreams=$CHANGED" >> "$GITHUB_OUTPUT"
           echo "Changed substreams: $CHANGED"
 

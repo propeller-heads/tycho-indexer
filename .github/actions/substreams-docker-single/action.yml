@@ -11,6 +11,10 @@ runs:
       env:
         PROTOCOL: ${{ inputs.protocol }}
         RPC_URL: ${{ env.RPC_URL }}
+        BASE_RPC_URL: ${{ env.BASE_RPC_URL }}
+        ARBITRUM_RPC_URL: ${{ env.ARBITRUM_RPC_URL }}
+        UNICHAIN_RPC_URL: ${{ env.UNICHAIN_RPC_URL }}
+        BSC_RPC_URL: ${{ env.BSC_RPC_URL }}
         SUBSTREAMS_API_TOKEN: ${{ env.SUBSTREAMS_API_TOKEN }}
         AUTH_API_KEY: ${{ env.AUTH_API_KEY }}
       run: |
