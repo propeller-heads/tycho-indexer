@@ -63,12 +63,12 @@ modules:
 network: mainnet
 package:
   name: ethereum_fluid_v1
-  version: v0.2.1
+  version: v0.3.0
 protobuf:
   files:
     - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
   importPaths:
-    - ../../proto
+    - ../../../proto
 specVersion: v0.1.0
