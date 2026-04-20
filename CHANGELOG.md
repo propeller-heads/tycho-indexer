@@ -1,3 +1,12 @@
+## [0.261.0](https://github.com/propeller-heads/tycho-indexer/compare/0.260.0...0.261.0) (2026-04-20)
+
+
+### Features
+
+* Add Fluid V1 DEX indexing and simulation ([#919](https://github.com/propeller-heads/tycho-indexer/issues/919)) ([279e456](https://github.com/propeller-heads/tycho-indexer/commit/279e456b68aef5680a09379a07584e6d6c489313))
+* **protocol-testing:** register fluid_v1 native decoder and add integration test ([cff34c1](https://github.com/propeller-heads/tycho-indexer/commit/cff34c17328eec6a8236d8998d832b527364ffaa))
+* **substreams:** add ethereum-fluid indexer ([668b47e](https://github.com/propeller-heads/tycho-indexer/commit/668b47ef6979fe896bdd48047e3c0af598f87395))
+
 ## [0.260.0](https://github.com/propeller-heads/tycho-indexer/compare/0.259.3...0.260.0) (2026-04-20)
 
 
