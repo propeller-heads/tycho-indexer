@@ -11,7 +11,9 @@
 #   tycho-protocol-sdk  substreams→protocols/substreams,
 #                       evm→protocols/adapter-integration/evm,
 #                       protocol-testing→protocols/testing
-#   tycho-simulation    → crates/tycho-simulation  (prefix all paths)
+#   tycho-simulation    tycho-integration-test→crates/tycho-integration-test,
+#                       tycho-test→crates/tycho-test,
+#                       everything else → crates/tycho-simulation  (conditional prefix)
 #   tycho-execution     → crates/tycho-execution   (prefix all paths)
 #
 # Examples:
@@ -43,6 +45,7 @@ EXTRA_MAPS=("$@")
 # ---------------------------------------------------------------------------
 REPO_NAME=$(basename "$SOURCE_REPO")
 DEFAULT_MAPS=()
+CONDITIONAL_PREFIX=""
 case "$REPO_NAME" in
   tycho-protocol-sdk)
     DEFAULT_MAPS=(
@@ -52,7 +55,13 @@ case "$REPO_NAME" in
     )
     ;;
   tycho-simulation)
-    DEFAULT_MAPS=("crates/tycho-simulation")
+    # tycho-integration-test and tycho-test live in their own monorepo crates;
+    # everything else maps under crates/tycho-simulation via the conditional prefix below.
+    DEFAULT_MAPS=(
+      "tycho-integration-test:crates/tycho-integration-test"
+      "tycho-test:crates/tycho-test"
+    )
+    CONDITIONAL_PREFIX="crates/tycho-simulation"
     ;;
   tycho-execution)
     DEFAULT_MAPS=("crates/tycho-execution")
@@ -130,6 +139,17 @@ for map in "${MAPS[@]}"; do
     PERL_EXPR+="s,^((---|\+\+\+) [ab]/),\${1}${prefix}/,; "
   fi
 done
+
+# Conditional prefix: prepend to paths not already rewritten by a src:dst map
+# above (i.e., not already starting with "crates/"). Used by tycho-simulation to
+# route most files to crates/tycho-simulation while routing tycho-integration-test
+# to crates/tycho-integration-test.
+if [ -n "$CONDITIONAL_PREFIX" ]; then
+  DST_PREFIXES+=("$CONDITIONAL_PREFIX")
+  PERL_EXPR+="s,^(diff --git a/)(?!crates/),\${1}${CONDITIONAL_PREFIX}/,; "
+  PERL_EXPR+="s,^(diff --git \\S+) b/(?!crates/),\${1} b/${CONDITIONAL_PREFIX}/,; "
+  PERL_EXPR+="s,^((---|\+\+\+) [ab]/)(?!crates/),\${1}${CONDITIONAL_PREFIX}/,; "
+fi
 
 for patch in "$PATCH_DIR"/*.patch; do
   perl -i -pe "$PERL_EXPR" "$patch"
