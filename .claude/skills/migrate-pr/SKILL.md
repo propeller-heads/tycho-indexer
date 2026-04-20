@@ -48,7 +48,7 @@ Known mappings applied automatically:
 | Source repo | Path mapping |
 |---|---|
 | `tycho-protocol-sdk` | `substreams→protocols/substreams`, `evm→protocols/adapter-integration/evm`, `protocol-testing→protocols/testing` |
-| `tycho-simulation` | everything → `crates/tycho-simulation/` |
+| `tycho-simulation` | `tycho-integration-test→crates/tycho-integration-test`, `tycho-test→crates/tycho-test`, everything else → `crates/tycho-simulation/` |
 | `tycho-execution` | everything → `crates/tycho-execution/` |
 
 The script will:
