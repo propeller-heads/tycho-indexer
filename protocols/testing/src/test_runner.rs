@@ -118,7 +118,7 @@ impl TestRunner {
         let substreams_path = root_path
             .join("substreams")
             .join(&base_protocol);
-        let evm_path = root_path.join("evm");
+        let evm_path = root_path.join("adapter-integration/evm");
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
 

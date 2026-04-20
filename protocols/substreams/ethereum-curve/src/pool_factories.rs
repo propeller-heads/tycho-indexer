@@ -807,12 +807,8 @@ pub fn address_map(
                         asset_type: BigInt::from(0),
                         implementation_idx: BigInt::from(0),
                     }
-                } else if let Some(pool) =
-                    abi::stableswap_factory::functions::DeployPlainPool3::match_and_decode(call)
-                {
-                    pool
                 } else {
-                    return None;
+                    abi::stableswap_factory::functions::DeployPlainPool3::match_and_decode(call)?
                 };
                 let component_id = &call.return_data[12..];
 

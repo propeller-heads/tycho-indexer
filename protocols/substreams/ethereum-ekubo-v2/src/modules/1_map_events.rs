@@ -86,7 +86,8 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
                     delta1: ev.delta1.to_signed_bytes_be(),
                 }),
             )
-        } else if let Some(ev) = core_events::PoolInitialized::match_and_decode(log) {
+        } else {
+            let ev = core_events::PoolInitialized::match_and_decode(log)?;
             let pool_config = PoolConfig::from(ev.pool_key.2);
 
             let extension = {
@@ -116,8 +117,6 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
                     extension: extension.into(),
                 }),
             )
-        } else {
-            return None;
         }
     } else if log.address == config.twamm {
         if log.topics.is_empty() {
@@ -132,7 +131,8 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
                     token1_sale_rate: data[46..60].to_vec(),
                 }),
             )
-        } else if let Some(ev) = twamm_events::OrderUpdated::match_and_decode(log) {
+        } else {
+            let ev = twamm_events::OrderUpdated::match_and_decode(log)?;
             let key = ev.order_key;
 
             (
@@ -148,8 +148,6 @@ fn maybe_pool_log(log: &Log, config: &DeploymentConfig) -> Option<PoolLog> {
                     sale_rate_delta: ev.sale_rate_delta.to_signed_bytes_be(),
                 }),
             )
-        } else {
-            return None;
         }
     } else {
         return None;

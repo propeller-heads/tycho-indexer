@@ -12,7 +12,7 @@ protobuf:
     - uniswap.proto
     - angstrom.proto
   importPaths:
-    - ../../../proto
+    - ../../../../proto
     - ../shared/proto
     - ./proto
   excludePaths:

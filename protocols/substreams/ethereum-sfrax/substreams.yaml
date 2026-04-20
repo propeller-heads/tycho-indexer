@@ -9,7 +9,7 @@ protobuf:
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
   importPaths:
-    - ../../proto
+    - ../../../proto
     - ./proto
 
 binaries:
