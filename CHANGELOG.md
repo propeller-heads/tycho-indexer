@@ -1,3 +1,12 @@
+## [0.261.1](https://github.com/propeller-heads/tycho-indexer/compare/0.261.0...0.261.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* build tycho-indexer from monorepo source instead of GitHub clone ([17ebed1](https://github.com/propeller-heads/tycho-indexer/commit/17ebed1b53ee63f15a1741879492fe9b6ab99216))
+* build tycho-indexer from monorepo source instead of GitHub clone  ([#925](https://github.com/propeller-heads/tycho-indexer/issues/925)) ([326ce90](https://github.com/propeller-heads/tycho-indexer/commit/326ce905aa37213cd94b134b3ab7df146a7fd9eb))
+* checkout PR branch in pull_request_target workflow ([fbea963](https://github.com/propeller-heads/tycho-indexer/commit/fbea9638ff94cdfb5da3da9ef6da2b2195e3d87b))
+
 ## [0.261.0](https://github.com/propeller-heads/tycho-indexer/compare/0.260.0...0.261.0) (2026-04-20)
 
 
