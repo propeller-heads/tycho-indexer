@@ -1,3 +1,11 @@
+## [0.260.0](https://github.com/propeller-heads/tycho-indexer/compare/0.259.3...0.260.0) (2026-04-20)
+
+
+### Features
+
+* **execution:** add missing files from migration ([64c5267](https://github.com/propeller-heads/tycho-indexer/commit/64c5267ac9474299c53d5c133fbd2e54df50349d))
+* **execution:** add missing files from migration ([#915](https://github.com/propeller-heads/tycho-indexer/issues/915)) ([c8ea624](https://github.com/propeller-heads/tycho-indexer/commit/c8ea62463654a60f176751327a25814699a29fb0))
+
 ## [0.259.3](https://github.com/propeller-heads/tycho-indexer/compare/0.259.2...0.259.3) (2026-04-20)
 
 
