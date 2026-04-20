@@ -24,9 +24,21 @@ gh pr view <number-or-url> --repo propeller-heads/<source-repo> --json headRefNa
 
 Confirm with the user:
 - Which local path holds the source repo (e.g. `../tycho-protocol-sdk`)
-- Whether the source branch is rebased onto the source repo's `main` (required before migrating)
+- Whether the commits are still on an open branch, or already merged into the source repo's `main`
 
-If the branch has unresolved conflicts against its `main`, stop and ask the user to rebase first:
+**If already merged into main**, find the merge commit and use a range instead of a branch name:
+
+```bash
+cd <source-repo>
+git fetch origin
+git log --oneline --merges origin/main | grep -i "<pr-title-or-number>"
+# note the merge commit hash, e.g. b865ff1a
+```
+
+Pass `<merge>^1..<merge>^2` as the branch argument in Phase 2. The script will stay on
+the current branch and apply the commits directly.
+
+**If still on an open branch**, confirm it is rebased onto the source repo's `main`:
 
 ```
 cd <source-repo>
@@ -40,7 +52,10 @@ git rebase origin/main <branch>
 The script auto-detects path mappings from the repo name:
 
 ```bash
+# Open branch:
 ./scripts/migrate-pr.sh <source-repo-path> <branch-name>
+# Already-merged PR (use merge commit parents as range):
+./scripts/migrate-pr.sh <source-repo-path> <merge-commit>^1..<merge-commit>^2
 ```
 
 Known mappings applied automatically:

@@ -2,7 +2,16 @@
 # Migrate an open PR from a source repo to the monorepo.
 #
 # Usage:
-#   ./scripts/migrate-pr.sh <source-repo-path> <branch-name> [extra-src:dst ...]
+#   ./scripts/migrate-pr.sh <source-repo-path> <branch-or-range> [extra-src:dst ...]
+#
+# <branch-or-range> is either:
+#   - A branch name: commits exported as main..<branch> (the normal case)
+#   - A commit range A..B: used when a PR is already merged into main. Pass
+#     the merge commit's parents: "<merge>^1..<merge>^2". The script stays on
+#     the current branch instead of checking out a new one.
+#
+# Merge commits are always excluded from the export (--no-merges), so
+# intermediate "Merge branch 'main' into feature" commits are dropped.
 #
 # Path mappings are looked up automatically from the source repo name.
 # Pass extra "src:dst" arguments to add or override mappings (e.g. for CI files).
@@ -19,6 +28,7 @@
 # Examples:
 #   ./scripts/migrate-pr.sh ../tycho-protocol-sdk ah/ENG-5053/fluid-indexing
 #   ./scripts/migrate-pr.sh ../tycho-simulation ah/my-feature
+#   ./scripts/migrate-pr.sh ../tycho-simulation b865ff1a^1..b865ff1a^2  # already-merged PR
 #
 # Notes:
 #   - Diff blocks for paths not covered by any src:dst mapping are stripped
@@ -90,12 +100,22 @@ fi
 # ---------------------------------------------------------------------------
 PATCH_DIR=$(mktemp -d)
 
-echo "Exporting patches from ${SOURCE_REPO} (${REPO_NAME}) branch ${BRANCH}..."
-(cd "$SOURCE_REPO" && git format-patch main.."$BRANCH" -o "$PATCH_DIR")
+# Determine the commit range. If BRANCH contains ".." it's already a range
+# (used when the PR is already merged into the source repo's main).
+if [[ "$BRANCH" == *..* ]]; then
+  PATCH_RANGE="$BRANCH"
+  IS_RANGE=true
+else
+  PATCH_RANGE="main..${BRANCH}"
+  IS_RANGE=false
+fi
+
+echo "Exporting patches from ${SOURCE_REPO} (${REPO_NAME}) range ${PATCH_RANGE}..."
+(cd "$SOURCE_REPO" && git format-patch "$PATCH_RANGE" --no-merges -o "$PATCH_DIR")
 
 PATCH_COUNT=$(find "$PATCH_DIR" -maxdepth 1 -name '*.patch' | wc -l | tr -d ' ')
 if [ "$PATCH_COUNT" -eq 0 ]; then
-  echo "No commits between main and ${BRANCH}. Nothing to migrate."
+  echo "No commits in range ${PATCH_RANGE}. Nothing to migrate."
   rm -rf "$PATCH_DIR"
   exit 0
 fi
@@ -196,19 +216,22 @@ done
 # it can and writes <file>.rej for the rest. Resolving .rej files with
 # `wiggle --merge` produces inline conflict markers for any remaining gaps.
 # ---------------------------------------------------------------------------
-if ! git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
-  echo "Creating branch ${BRANCH}..."
-  git checkout -b "$BRANCH"
-else
-  echo "Branch ${BRANCH} already exists, appending commits..."
-  git checkout "$BRANCH"
+if [ "$IS_RANGE" = false ]; then
+  if ! git rev-parse --verify "$BRANCH" >/dev/null 2>&1; then
+    echo "Creating branch ${BRANCH}..."
+    git checkout -b "$BRANCH"
+  else
+    echo "Branch ${BRANCH} already exists, appending commits..."
+    git checkout "$BRANCH"
+  fi
 fi
+TARGET_BRANCH=$(git branch --show-current)
 
 echo "Applying patches..."
 if git am "$PATCH_DIR"/*.patch; then
   rm -rf "$PATCH_DIR"
   echo ""
-  echo "Done. Push with: git push origin ${BRANCH}"
+  echo "Done. Push with: git push origin ${TARGET_BRANCH}"
   echo "Then open a PR against the monorepo and close the original PR with a link."
 else
   echo ""
