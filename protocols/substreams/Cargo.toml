@@ -20,6 +20,7 @@ members = [
     "ethereum-maverick-v2",
     "ethereum-lido",
     "ethereum-balancer-v3",
+    "ethereum-fluid",
     "base-aerodrome-slipstreams",
     "ethereum-erc4626",
 ]

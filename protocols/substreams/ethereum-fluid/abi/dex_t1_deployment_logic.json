@@ -1,0 +1,385 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "liquidity_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "dexFactory_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "contractDeployer_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "colOperations_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "debtOperations_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "perfectOperationsAndSwapOut1_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "perfectOperationsAndSwapOut2_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "mainAddress1_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "mainAddress2_",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "errorId_",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexError",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "errorId",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexFactoryError",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "shares_",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexLiquidityOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "token0Amt",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "token1Amt",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexPerfectLiquidityOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint256",
+            "name": "lastStoredPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "centerPrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "upperRange",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lowerRange",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "geometricMean",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "supplyToken0ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "borrowToken0ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "supplyToken1ExchangePrice",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "borrowToken1ExchangePrice",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct Structs.PricesAndExchangePrice",
+        "name": "pex_",
+        "type": "tuple"
+      }
+    ],
+    "name": "FluidDexPricesAndExchangeRates",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tokenAmt",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexSingleTokenOutput",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "amountOut",
+        "type": "uint256"
+      }
+    ],
+    "name": "FluidDexSwapResult",
+    "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "dex",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "dexId",
+        "type": "uint256"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "supplyToken",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "borrowToken",
+        "type": "address"
+      }
+    ],
+    "name": "DexT1Deployed",
+    "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "ADDRESS_THIS",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "ADMIN_IMPLEMENTATION",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "CONTRACT_DEPLOYER",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "DEX_FACTORY",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "LIQUIDITY",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MINI_DEPLOYER",
+    "outputs": [
+      {
+        "internalType": "contract MiniDeployer",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "SHIFT_IMPLEMENTATION",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "colOperationsCreationCode",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "debtOperationsCreationCode",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token0_",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "token1_",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "oracleMapping_",
+        "type": "uint256"
+      }
+    ],
+    "name": "dexT1",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "dexCreationBytecode_",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "dexT1CreationBytecode",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "perfectOperationsCreationCode",
+    "outputs": [
+      {
+        "internalType": "bytes",
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
