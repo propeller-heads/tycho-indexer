@@ -18,18 +18,16 @@ binaries:
 network: mainnet
 
 params:
+  # Recompute these raw slot values with:
+  #   RPC_URL=<your-archive-rpc> ./scripts/compute_initial_state.sh <block_number>
   map_protocol_components: &initial_state |
     {
       "start_block": 24083113,
-      "total_shares": "0x00000000000000000000000000000000000000000005f18d02edc955cbcfc9b0",
-      "external_shares": "0x0000000000000000000000000000000000000000000000000000000000000000",
-      "buffered_ether": "0x00000000000000000000000000000000000000000000002303b296dd9f3631db",
-      "deposited_validators": "0x0000000000000000000000000000000000000000000000000000000000065004",
-      "cl_balance": "0x000000000000000000000000000000000000000000073f77f7680e9a096c4600",
-      "cl_validators": "0x0000000000000000000000000000000000000000000000000000000000064d49",
+      "total_and_external_shares": "0x00000000000000000000000000000000000000000005f18d02edc955cbcfc9b0",
+      "buffered_ether_and_deposited_validators": "0x00000000000000000000000000065004000000000000002303b296dd9f3631db",
+      "cl_balance_and_cl_validators": "0x00000000000000000000000000064d490000000000073f77f7680e9a096c4600",
       "staking_state": "0x00001fc3842bd1f071c000000000190000001fc37ee5c9f3db1a0000016f7a9f"
     }
-  store_protocol_state: *initial_state
   map_protocol_changes: *initial_state
 
 modules:
@@ -42,15 +40,6 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
-  - name: store_protocol_state
-    kind: store
-    initialBlock: *start_block
-    updatePolicy: set
-    valueType: bigint
-    inputs:
-      - params: string
-      - source: sf.ethereum.type.v2.Block
-
   - name: map_protocol_changes
     kind: map
     initialBlock: *start_block
@@ -58,8 +47,5 @@ modules:
       - params: string
       - source: sf.ethereum.type.v2.Block
       - map: map_protocol_components
-      - store: store_protocol_state
-        mode: deltas
-      - store: store_protocol_state
     output:
       type: proto:tycho.evm.v1.BlockChanges

@@ -16,12 +16,9 @@ pub const CL_BALANCE_AND_CL_VALIDATORS_POSITION: [u8; 32] =
 pub const STAKING_STATE_POSITION: [u8; 32] =
     hex!("a3678de4a579be090bed1177e0a24f77cc29d181ac22fd7688aca344d8938015");
 
-pub const TOTAL_SHARES_ATTR: &str = "total_shares";
-pub const EXTERNAL_SHARES_ATTR: &str = "external_shares";
-pub const BUFFERED_ETHER_ATTR: &str = "buffered_ether";
-pub const DEPOSITED_VALIDATORS_ATTR: &str = "deposited_validators";
-pub const CL_BALANCE_ATTR: &str = "cl_balance";
-pub const CL_VALIDATORS_ATTR: &str = "cl_validators";
+pub const TOTAL_AND_EXTERNAL_SHARES_ATTR: &str = "total_and_external_shares";
+pub const BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_ATTR: &str =
+    "buffered_ether_and_deposited_validators";
+pub const CL_BALANCE_AND_CL_VALIDATORS_ATTR: &str = "cl_balance_and_cl_validators";
 pub const STAKING_STATE_ATTR: &str = "staking_state";
-pub const INTERNAL_ETHER_ATTR: &str = "internal_ether";
-pub const INTERNAL_SHARES_ATTR: &str = "internal_shares";
+pub const TOKEN_TO_TRACK_TOTAL_POOLED_ETH_ATTR: &str = "token_to_track_total_pooled_eth";
