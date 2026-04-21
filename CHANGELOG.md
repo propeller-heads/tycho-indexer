@@ -1,3 +1,19 @@
+## [0.263.0](https://github.com/propeller-heads/tycho-indexer/compare/0.262.0...0.263.0) (2026-04-21)
+
+
+### Features
+
+* aerodrome v1 simulation ([#928](https://github.com/propeller-heads/tycho-indexer/issues/928)) ([a7bf21e](https://github.com/propeller-heads/tycho-indexer/commit/a7bf21e67e6ca6ade92992e316242ceb3920c5a4))
+* init aerodrome_v1 simulation ([e05a893](https://github.com/propeller-heads/tycho-indexer/commit/e05a89326effc5cfe735ca54473f784064202952))
+* support stable curve swaps and raw custom fee semantics ([09ac2c5](https://github.com/propeller-heads/tycho-indexer/commit/09ac2c56a06b65437a761221984a0a64e97a931c))
+
+
+### Bug Fixes
+
+* address aerodrome v1 review ([a24cf00](https://github.com/propeller-heads/tycho-indexer/commit/a24cf006fba8567dda9ba4c8f39a213fc5e53cc5))
+* aerodrome v1 decoder test ([e51cca1](https://github.com/propeller-heads/tycho-indexer/commit/e51cca1537b1f02a0f092ac592eacf0d965f68da))
+* align rounding with onchain pools and add real pool tests ([40d721c](https://github.com/propeller-heads/tycho-indexer/commit/40d721c00be041728d87e52d765ebebef05d66a7))
+
 ## [0.262.0](https://github.com/propeller-heads/tycho-indexer/compare/0.261.1...0.262.0) (2026-04-21)
 
 
