@@ -470,6 +470,69 @@ async fn run(cli: Cli) -> miette::Result<()> {
     Ok(())
 }
 
+/// Polls the RPC until it reaches the target block number.
+///
+/// Returns `Some(block)` when the RPC block matches `target_block`, or `None` if the update
+/// is behind the RPC (stale) or we exhaust all polling attempts (RPC too slow).
+async fn poll_rpc_for_block(
+    rpc_tools: &tycho_test::RPCTools,
+    target_block: u64,
+    max_attempts: u32,
+    poll_interval: Duration,
+) -> miette::Result<Option<Block>> {
+    for attempt in 0..max_attempts {
+        let block = match rpc_tools
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to fetch latest block")
+            .ok()
+            .flatten()
+        {
+            Some(b) => b,
+            None => {
+                warn!("Failed to retrieve latest block (attempt {}/{})", attempt + 1, max_attempts);
+                if attempt < max_attempts - 1 {
+                    tokio::time::sleep(poll_interval).await;
+                }
+                continue;
+            }
+        };
+
+        let rpc_block = block.header.number;
+
+        if rpc_block > target_block {
+            let delay = rpc_block - target_block;
+            warn!(
+                "Update block ({target_block}) is behind RPC block ({rpc_block}), \
+                 skipping to catch up."
+            );
+            metrics::record_protocol_update_block_delay(delay);
+            metrics::record_protocol_update_skipped();
+            return Ok(None);
+        }
+
+        if rpc_block == target_block {
+            if attempt > 0 {
+                debug!("RPC caught up to block {target_block} after {} poll(s)", attempt);
+            }
+            return Ok(Some(block));
+        }
+
+        // RPC is behind — wait and retry
+        debug!(
+            "RPC block ({rpc_block}) behind update block ({target_block}), \
+             polling... (attempt {}/{})",
+            attempt + 1,
+            max_attempts
+        );
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    Ok(None)
+}
+
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
@@ -485,23 +548,8 @@ async fn process_update(
         update.update.states.len()
     );
 
-    let block = match rpc_tools
-        .provider
-        .get_block_by_number(BlockNumberOrTag::Latest)
-        .await
-        .into_diagnostic()
-        .wrap_err("Failed to fetch latest block")
-        .ok()
-        .flatten()
-    {
-        Some(b) => Arc::new(b),
-        None => {
-            warn!("Failed to retrieve last block, continuing to next message...");
-            return Ok(());
-        }
-    };
-
-    if let UpdateType::Protocol = update.update_type {
+    let block = if let UpdateType::Protocol = update.update_type {
+        // Update state cache before block alignment check
         {
             let mut current_state = tycho_state
                 .write()
@@ -517,7 +565,6 @@ async fn process_update(
                     .insert(id.clone());
             }
             for (id, state) in update.update.states.iter() {
-                // this overwrites existing entries
                 current_state
                     .states
                     .insert(id.clone(), state.clone());
@@ -533,30 +580,32 @@ async fn process_update(
                     .map(|id_set| id_set.remove(removed_id));
             }
         }
-        // Record block processing latency
+
+        // Poll RPC until it reaches the update's block number
+        const MAX_POLL_ATTEMPTS: u32 = 10;
+        const POLL_INTERVAL: Duration = Duration::from_millis(500);
+        let update_block_number = update.update.block_number_or_timestamp;
+
+        let block =
+            poll_rpc_for_block(&rpc_tools, update_block_number, MAX_POLL_ATTEMPTS, POLL_INTERVAL)
+                .await?;
+
+        let block = match block {
+            Some(b) => Arc::new(b),
+            None => {
+                warn!(
+                    "Timed out waiting for RPC to reach update block {update_block_number}, \
+                     skipping."
+                );
+                metrics::record_protocol_update_skipped();
+                return Ok(());
+            }
+        };
+
+        // Block numbers match — record latency against the correct block
         let latency_seconds =
             (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
         metrics::record_block_processing_duration(latency_seconds);
-
-        let rpc_block_number = block.header.number;
-        let update_block_number = update.update.block_number_or_timestamp;
-        let block_diff = rpc_block_number.abs_diff(update_block_number);
-
-        if block_diff > 0 {
-            if rpc_block_number > update_block_number {
-                warn!(
-                    "Update block ({update_block_number}) is behind the current block ({rpc_block_number}), skipping to catch up.",
-                );
-                metrics::record_protocol_update_block_delay(block_diff);
-            } else {
-                warn!(
-                    "Update block ({update_block_number}) is ahead of the current block ({rpc_block_number}), skipping this update.",
-                );
-                // perf: consider waiting for the block to be mined instead of skipping
-            }
-            metrics::record_protocol_update_skipped();
-            return Ok(());
-        }
 
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
@@ -570,7 +619,26 @@ async fn process_update(
                 .expect("Failed to get write lock for statistics (record block)");
             stats.record_block_processed();
         }
-    }
+
+        block
+    } else {
+        // RFQ updates: fetch latest block without alignment checks
+        match rpc_tools
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to fetch latest block")
+            .ok()
+            .flatten()
+        {
+            Some(b) => Arc::new(b),
+            None => {
+                warn!("Failed to retrieve latest block, continuing to next message...");
+                return Ok(());
+            }
+        }
+    };
 
     for (protocol, sync_state) in update.update.sync_states.iter() {
         metrics::record_protocol_sync_state(protocol, sync_state);
