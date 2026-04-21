@@ -8,6 +8,7 @@ pub mod erc4626;
 pub mod etherfi;
 pub mod filters;
 pub mod fluid;
+pub mod lido_v3;
 pub mod pancakeswap_v2;
 pub mod rocketpool;
 pub mod safe_math;
@@ -18,7 +19,6 @@ pub mod uniswap_v4;
 pub mod utils;
 pub mod velodrome_slipstreams;
 pub mod vm;
-
 #[cfg(test)]
 mod test_utils {
     use std::collections::HashMap;
