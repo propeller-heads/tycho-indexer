@@ -1,3 +1,17 @@
+## [0.262.0](https://github.com/propeller-heads/tycho-indexer/compare/0.261.1...0.262.0) (2026-04-21)
+
+
+### Features
+
+* **integration-test:** add --partial-blocks flag to opt in to flashblock stream updates ([ca84328](https://github.com/propeller-heads/tycho-indexer/commit/ca84328e89503ad0e4a929d22b572e769ccbd548))
+* **integration-test:** add --partial-blocks flag to opt in to flashblock stream updates ([#921](https://github.com/propeller-heads/tycho-indexer/issues/921)) ([2fa2182](https://github.com/propeller-heads/tycho-indexer/commit/2fa2182933d03ec67304e314682c302d5decb06c))
+* liquorice protocol integration ([#922](https://github.com/propeller-heads/tycho-indexer/issues/922)) ([45725c0](https://github.com/propeller-heads/tycho-indexer/commit/45725c0f3fb314a161befd52e0bd8cb465350e22))
+
+
+### Bug Fixes
+
+* provide all price levels for the component ([03469af](https://github.com/propeller-heads/tycho-indexer/commit/03469affffe43f5ba912be3744163b3ef52a8f03))
+
 ## [0.261.1](https://github.com/propeller-heads/tycho-indexer/compare/0.261.0...0.261.1) (2026-04-20)
 
 
