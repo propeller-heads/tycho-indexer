@@ -1,5 +1,104 @@
 # Getting started
 
+## Migrating a PR from a related repo
+
+When a PR is open in a related repository (`tycho-protocol-sdk`, `tycho-simulation`,
+`tycho-execution`) and the work needs to land in this monorepo, use `migrate-pr.sh`.
+
+### Prerequisites
+
+1. Clone (or have a local checkout of) the source repository.
+2. **Resolve any merge conflicts first**: rebase the source branch onto the source repo's `main`
+   before migrating. Unresolved conflicts produce broken patches that fail during `git am`.
+
+   ```bash
+   cd ../tycho-protocol-sdk
+   git fetch origin
+   git rebase origin/main <branch-name>
+   # resolve conflicts, then git rebase --continue
+   ```
+
+### Usage
+
+Path mappings are **looked up automatically** from the source repo name. Just pass the repo
+path and branch — no mapping arguments needed for known repos:
+
+```bash
+./scripts/migrate-pr.sh <source-repo-path> <branch-name>
+```
+
+| Source repo | Mappings applied automatically |
+|---|---|
+| `tycho-protocol-sdk` | `substreams→protocols/substreams`, `evm→protocols/adapter-integration/evm`, `protocol-testing→protocols/testing` |
+| `tycho-simulation` | everything → `crates/tycho-simulation/` |
+| `tycho-execution` | everything → `crates/tycho-execution/` |
+
+```bash
+# tycho-protocol-sdk PR — no extra args needed:
+./scripts/migrate-pr.sh ../tycho-protocol-sdk ah/ENG-5053/fluid-indexing
+
+# tycho-simulation PR:
+./scripts/migrate-pr.sh ../tycho-simulation ah/my-feature
+```
+
+### Custom / extra mappings
+
+Pass additional `src:dst` arguments to extend the default mappings (e.g. to bring over a
+CI file change, or to migrate a new repo not yet in the table):
+
+```bash
+./scripts/migrate-pr.sh ../tycho-protocol-sdk ah/my-feature \
+  ".github/workflows:protocols/ci"
+```
+
+For a repo not in the table, pass all mappings explicitly and add the repo to the table
+in `migrate-pr.sh` for future use.
+
+### Known manual steps after applying
+
+The script automates path rewriting and strips common problem cases, but some things
+need manual handling:
+
+**Cargo.lock**: always stripped and must be regenerated after migration:
+```bash
+cargo check --workspace
+git add -p  # stage only the Cargo.lock changes you want
+```
+
+**Cargo.toml / source file context conflicts**: when `-C0` can't apply a patch, the script
+retries with `--reject`. Git applies all hunks it can and writes `<file>.rej` files for
+the rest. Use `wiggle` to apply them — it uses word-level diffing and inserts
+`<<<<<<<`/`=======`/`>>>>>>>` conflict markers for anything it can't resolve automatically:
+
+```bash
+brew install wiggle  # one-time setup
+
+# Apply all .rej files; conflict markers appear in-place for anything unresolved
+find . -name '*.rej' | while read -r rej; do
+  target="${rej%.rej}"
+  wiggle --merge "$target" "$rej" && rm "$rej"
+done
+
+# Resolve any remaining conflict markers in your editor, then:
+git add <resolved-files>
+git am --continue
+```
+
+**`include_str!()` and path literals**: the script rewrites path segments on added content
+lines alongside the diff headers. A reference like `../../evm/test/executors/X.json` in
+`protocol-testing/src/` is automatically rewritten to `../../adapter-integration/evm/test/executors/X.json`
+so it resolves correctly from `protocols/testing/src/`.
+
+### After migration
+
+1. Run `cargo check --workspace` to regenerate `Cargo.lock`.
+2. Push the branch and open a PR against this repo.
+3. Close the original PR with a comment linking to the new PR.
+
+---
+
+
+
 ## Compare scripts
 
 All comparison scripts rely on using an archive node. You will need to set it using the 
