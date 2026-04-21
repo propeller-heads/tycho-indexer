@@ -5,7 +5,7 @@
 # source repo before the first real build.
 
 # ── Stage 1: chef (rust + tools layer, cached) ─────────────────────────────
-FROM rust:bookworm AS chef
+FROM rust:1.91-bookworm AS chef
 WORKDIR /build
 RUN apt-get update && apt-get install -y libpq-dev && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-chef
