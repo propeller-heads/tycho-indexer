@@ -1,20 +1,11 @@
-use std::{collections::HashSet, path::Path, str::FromStr, time::Duration};
+use std::{path::Path, str::FromStr};
 
 use clap::Parser;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 use tracing_appender::rolling;
-use tycho_common::dto::{Chain, ExtractorIdentity};
+use tycho_common::dto::Chain;
 
-use crate::{
-    deltas::DeltasClient,
-    feed::{
-        component_tracker::ComponentFilter, synchronizer::ProtocolStateSynchronizer,
-        BlockSynchronizer,
-    },
-    rpc::HttpRPCClientOptions,
-    stream::ProtocolSystemsInfo,
-    HttpRPCClient, WsDeltasClient,
-};
+use crate::{feed::component_tracker::ComponentFilter, stream::TychoStreamBuilder};
 
 /// Tycho Client CLI - A tool for indexing and tracking blockchain protocol data
 ///
@@ -60,19 +51,20 @@ struct CliArgs {
     #[clap(long)]
     add_tvl_threshold: Option<f64>,
 
-    /// Expected block time in seconds. For blockchains with consistent intervals,
-    /// set to the average block time (e.g., "600" for a 10-minute interval).
+    /// Expected block time in seconds. Defaults to the canonical block time for the selected
+    /// chain (e.g. 12s for Ethereum, 2s for Base).
     ///
     /// Adjusting `block_time` helps balance efficiency and responsiveness:
     /// - **Low values**: Increase sync frequency but may waste resources on retries.
     /// - **High values**: Reduce sync frequency but may delay updates on faster chains.
-    #[clap(long, default_value = "600")]
-    block_time: u64,
+    #[clap(long)]
+    block_time: Option<u64>,
 
     /// Maximum wait time in seconds beyond the block time. Useful for handling
-    /// chains with variable block intervals or network delays.
-    #[clap(long, default_value = "1")]
-    timeout: u64,
+    /// chains with variable block intervals or network delays. Defaults to a chain-appropriate
+    /// value.
+    #[clap(long)]
+    timeout: Option<u64>,
 
     /// Logging folder path.
     #[clap(long, default_value = "logs")]
@@ -95,8 +87,9 @@ struct CliArgs {
 
     /// Maximum blocks an exchange can be absent for before it is marked as stale. Used
     /// in conjunction with block_time to calculate a timeout: block_time * max_missed_blocks.
-    #[clap(long, default_value = "10")]
-    max_missed_blocks: u64,
+    /// Defaults to a chain-appropriate value.
+    #[clap(long)]
+    max_missed_blocks: Option<u64>,
 
     /// If set, the synchronizer will include TVL in the messages.
     /// Enabling this option will increase the number of network requests made during start-up,
@@ -209,7 +202,7 @@ pub async fn run_cli() -> Result<(), String> {
                     if parts.len() == 2 {
                         Some((parts[0].to_string(), Some(parts[1].to_string())))
                     } else {
-                        warn!("Ignoring invalid exchange format: {}", e);
+                        tracing::warn!("Ignoring invalid exchange format: {}", e);
                         None
                     }
                 } else {
@@ -231,91 +224,56 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         None => Vec::new(),
     };
 
-    info!("Running with version: {}", option_env!("CARGO_PKG_VERSION").unwrap_or("unknown"));
-    //TODO: remove "or args.auth_key.is_none()" when our internal client use the no_tls flag
-    let (tycho_ws_url, tycho_rpc_url) = if args.no_tls || args.auth_key.is_none() {
-        info!("Using non-secure connection: ws:// and http://");
-        let tycho_ws_url = format!("ws://{url}", url = &args.tycho_url);
-        let tycho_rpc_url = format!("http://{url}", url = &args.tycho_url);
-        (tycho_ws_url, tycho_rpc_url)
-    } else {
-        info!("Using secure connection: wss:// and https://");
-        let tycho_ws_url = format!("wss://{url}", url = &args.tycho_url);
-        let tycho_rpc_url = format!("https://{url}", url = &args.tycho_url);
-        (tycho_ws_url, tycho_rpc_url)
-    };
-
-    let ws_client = WsDeltasClient::new(&tycho_ws_url, args.auth_key.as_deref())
-        .map_err(|e| format!("Failed to create WebSocket client: {e}"))?;
-    let rpc_client = HttpRPCClient::new(
-        &tycho_rpc_url,
-        HttpRPCClientOptions::new()
-            .with_auth_key(args.auth_key.clone())
-            .with_compression(!args.disable_compression),
-    )
-    .map_err(|e| format!("Failed to create RPC client: {e}"))?;
     let chain = Chain::from_str(&args.chain)
         .map_err(|_| format!("Unknown chain: {chain}", chain = &args.chain))?;
-    let ws_jh = ws_client
-        .connect()
-        .await
-        .map_err(|e| format!("WebSocket client connection error: {e}"))?;
 
-    let mut block_sync = BlockSynchronizer::new(
-        Duration::from_secs(args.block_time),
-        Duration::from_secs(args.timeout),
-        args.max_missed_blocks,
-    );
+    let mut builder = TychoStreamBuilder::new(&args.tycho_url, chain)
+        .auth_key(args.auth_key)
+        .no_tls(args.no_tls)
+        .no_state(args.no_state)
+        .include_tvl(args.include_tvl)
+        .max_retries(args.max_retries)
+        .blocklisted_ids(blocklist);
 
-    if let Some(mm) = &args.max_messages {
-        block_sync.max_messages(*mm);
+    if let Some(bt) = args.block_time {
+        builder = builder.block_time(bt);
+    }
+    if let Some(to) = args.timeout {
+        builder = builder.timeout(to);
+    }
+    if let Some(mmb) = args.max_missed_blocks {
+        builder = builder.max_missed_blocks(mmb);
+    }
+    if args.disable_compression {
+        builder = builder.disable_compression();
+    }
+    if args.partial_blocks {
+        builder = builder.enable_partial_blocks();
+    }
+    if let Some(n) = args.max_messages {
+        builder = builder.max_messages(n);
     }
 
-    let requested_protocol_set: HashSet<_> = exchanges
-        .iter()
-        .map(|(name, _)| name.clone())
-        .collect();
-    let protocol_info =
-        ProtocolSystemsInfo::fetch(&rpc_client, chain, &requested_protocol_set).await;
-    protocol_info.log_other_available();
-    let dci_protocols = protocol_info.dci_protocols;
+    // Register exchanges
+    let builder = exchanges
+        .into_iter()
+        .fold(builder, |b, (name, address)| {
+            let filter = if let Some(addr) = address {
+                ComponentFilter::Ids(vec![addr])
+            } else if let (Some(remove_tvl), Some(add_tvl)) =
+                (args.remove_tvl_threshold, args.add_tvl_threshold)
+            {
+                ComponentFilter::with_tvl_range(remove_tvl, add_tvl)
+            } else {
+                ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
+            };
+            b.exchange(&name, filter)
+        });
 
-    for (name, address) in exchanges {
-        debug!("Registering exchange: {}", name);
-        let id = ExtractorIdentity { chain, name: name.clone() };
-        let filter = if let Some(address) = address {
-            ComponentFilter::Ids(vec![address])
-        } else if let (Some(remove_tvl), Some(add_tvl)) =
-            (args.remove_tvl_threshold, args.add_tvl_threshold)
-        {
-            ComponentFilter::with_tvl_range(remove_tvl, add_tvl)
-        } else {
-            ComponentFilter::with_tvl_range(args.min_tvl, args.min_tvl)
-        }
-        .blocklist(blocklist.clone());
-        let uses_dci = dci_protocols.contains(&name);
-        let sync = ProtocolStateSynchronizer::new(
-            id.clone(),
-            true,
-            filter,
-            args.max_retries,
-            Duration::from_secs(args.block_time / 2),
-            !args.no_state,
-            args.include_tvl,
-            !args.disable_compression,
-            rpc_client.clone(),
-            ws_client.clone(),
-            args.block_time + args.timeout,
-        )
-        .with_dci(uses_dci)
-        .with_partial_blocks(args.partial_blocks);
-        block_sync = block_sync.register_synchronizer(id, sync);
-    }
-
-    let (sync_jh, mut rx) = block_sync
-        .run()
+    let (handle, mut rx) = builder
+        .build()
         .await
-        .map_err(|e| format!("Failed to start block synchronizer: {e}"))?;
+        .map_err(|e| e.to_string())?;
 
     let msg_printer = tokio::spawn(async move {
         while let Some(result) = rx.recv().await {
@@ -333,23 +291,18 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
         Ok::<(), String>(())
     });
 
-    // Monitor the WebSocket, BlockSynchronizer and message printer futures.
+    // Monitor the stream handle and message printer futures.
     let (failed_task, shutdown_reason) = tokio::select! {
-        res = ws_jh => (
-            "WebSocket",
-            extract_nested_error(res)
+        res = handle => (
+            "Stream",
+            res.err().map(|e| e.to_string())
         ),
-        res = sync_jh => (
-            "BlockSynchronizer",
-            extract_nested_error::<_, _, String>(Ok(res))
-            ),
         res = msg_printer => (
             "MessagePrinter",
             extract_nested_error(res)
-        )
+        ),
     };
 
-    debug!("RX closed");
     Err(format!(
         "{failed_task} task terminated: {}",
         shutdown_reason.unwrap_or("unknown reason".to_string())
@@ -397,8 +350,8 @@ mod cli_tests {
         assert_eq!(args.tycho_url, "localhost:5000");
         assert_eq!(args.exchange, exchanges);
         assert_eq!(args.min_tvl, 3000.0);
-        assert_eq!(args.block_time, 50);
-        assert_eq!(args.timeout, 5);
+        assert_eq!(args.block_time, Some(50));
+        assert_eq!(args.timeout, Some(5));
         assert_eq!(args.log_folder, "test_logs");
         assert_eq!(args.max_messages, Some(1));
         assert!(args.example);

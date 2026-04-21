@@ -10,5 +10,10 @@
         "0x38c2a4a7330b22788374b8ff70bba513c8d848ca": "0x056bc75e2d63100000"
       }
     }
-  ]
+  ],
+  "pagination": {
+    "page": 0,
+    "page_size": 20,
+    "total": 1
+  }
 }

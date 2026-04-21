@@ -76,7 +76,11 @@ class TychoStream:
         # stdout=PIPE means that the output is piped directly to this Python process
         # stderr=STDOUT combines the stderr and stdout streams
 
-        cmd = ["--log-folder", self._logs_directory, "--tycho-url", self.tycho_url]
+        cmd = [
+            "--log-folder", self._logs_directory,
+            "--tycho-url", self.tycho_url,
+            "--chain", self._blockchain.value,
+        ]
 
         if self.min_tvl is not None:
             cmd.extend(["--min-tvl", str(self.min_tvl)])
