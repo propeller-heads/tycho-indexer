@@ -253,8 +253,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
     info!("Loaded {} tokens", all_tokens.len());
 
-    // Run streams in background tasks
-    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    // Run streams in background tasks with separate channels so RFQ processing
+    // cannot block protocol update consumption
+    let (protocol_tx, mut protocol_rx) =
+        tokio::sync::mpsc::channel::<miette::Result<StreamUpdate>>(64);
+    let (rfq_tx, mut rfq_rx) = tokio::sync::mpsc::channel::<miette::Result<StreamUpdate>>(64);
     let mut protocol_handle = None;
     let mut rfq_handle = None;
 
@@ -270,7 +273,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         ) {
             protocol_handle = Some(
                 protocol_stream_processor
-                    .run_stream(&all_tokens, tx.clone())
+                    .run_stream(&all_tokens, protocol_tx)
                     .await?,
             );
         }
@@ -284,7 +287,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         ) {
             rfq_handle = Some(
                 rfq_stream_processor
-                    .run_stream(&all_tokens, tx)
+                    .run_stream(&all_tokens, rfq_tx)
                     .await?,
             );
         }
@@ -305,9 +308,17 @@ async fn run(cli: Cli) -> miette::Result<()> {
         info!("Running integration test indefinitely");
     }
     info!("Waiting for first protocol update...");
-    let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let protocol_semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let rfq_semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let mut protocol_stream_open = true;
+    let mut rfq_stream_open = !cli.disable_rfq;
 
     loop {
+        if !protocol_stream_open && !rfq_stream_open {
+            info!("All streams closed, exiting");
+            break;
+        }
+
         tokio::select! {
             // Monitor protocol stream termination
             result = async {
@@ -349,8 +360,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             }
 
-            // Process incoming updates
-            update = rx.recv() => {
+            // Process protocol updates
+            update = protocol_rx.recv(), if protocol_stream_open => {
                 match update {
                     Some(update) => {
                         let update = match update {
@@ -361,7 +372,6 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             }
                         };
 
-                        // Check if we've reached max blocks (only when stats are enabled)
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {
                                 let stats = stats
@@ -372,19 +382,16 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                     info!("Reached max blocks ({}), stopping...", cli.max_blocks);
                                     break;
                                 }
-                                // Also check if this update's block would exceed our limit
-                                if update.update_type == UpdateType::Protocol {
-                                    let block_num = update.update.block_number_or_timestamp;
-                                    if !stats.blocks_seen.contains(&block_num)
-                                        && stats.blocks_processed >= cli.max_blocks
-                                    {
-                                        drop(stats);
-                                        info!(
-                                            "Next block would exceed max blocks ({}), stopping...",
-                                            cli.max_blocks
-                                        );
-                                        break;
-                                    }
+                                let block_num = update.update.block_number_or_timestamp;
+                                if !stats.blocks_seen.contains(&block_num)
+                                    && stats.blocks_processed >= cli.max_blocks
+                                {
+                                    drop(stats);
+                                    info!(
+                                        "Next block would exceed max blocks ({}), stopping...",
+                                        cli.max_blocks
+                                    );
+                                    break;
                                 }
                             }
                         }
@@ -393,12 +400,12 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         let rpc_tools = rpc_tools.clone();
                         let tycho_state = tycho_state.clone();
                         let statistics = statistics.clone();
-                        let permit = semaphore
+                        let permit = protocol_semaphore
                             .clone()
                             .acquire_owned()
                             .await
                             .into_diagnostic()
-                            .wrap_err("Failed to acquire permit")?;
+                            .wrap_err("Failed to acquire protocol permit")?;
                         tokio::spawn(async move {
                             if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, statistics, &update).await {
                                 warn!("{}", format_error_chain(&e));
@@ -407,8 +414,44 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         });
                     }
                     None => {
-                        info!("All streams closed, exiting");
-                        break;
+                        info!("Protocol stream closed");
+                        protocol_stream_open = false;
+                    }
+                }
+            }
+
+            // Process RFQ updates independently
+            update = rfq_rx.recv(), if rfq_stream_open => {
+                match update {
+                    Some(update) => {
+                        let update = match update {
+                            Ok(u) => Arc::new(u),
+                            Err(e) => {
+                                warn!("{}", format_error_chain(&e));
+                                continue;
+                            }
+                        };
+
+                        let cli = cli.clone();
+                        let rpc_tools = rpc_tools.clone();
+                        let tycho_state = tycho_state.clone();
+                        let statistics = statistics.clone();
+                        let permit = rfq_semaphore
+                            .clone()
+                            .acquire_owned()
+                            .await
+                            .into_diagnostic()
+                            .wrap_err("Failed to acquire RFQ permit")?;
+                        tokio::spawn(async move {
+                            if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, statistics, &update).await {
+                                warn!("{}", format_error_chain(&e));
+                            }
+                            drop(permit);
+                        });
+                    }
+                    None => {
+                        info!("RFQ stream closed");
+                        rfq_stream_open = false;
                     }
                 }
             }
