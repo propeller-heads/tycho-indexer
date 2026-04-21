@@ -439,6 +439,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ethereum-rocketpool"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "ethabi 18.0.0",
+ "heck",
+ "hex",
+ "itertools 0.10.5",
+ "num-bigint",
+ "serde",
+ "serde_json",
+ "substreams",
+ "substreams-ethereum",
+ "tycho-substreams 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "ethereum-sfrax"
 version = "0.1.2"
 dependencies = [
