@@ -28,6 +28,26 @@ pub fn get_hashflow_auth() -> Result<HashflowAuth, RFQError> {
     Ok(HashflowAuth { user, key })
 }
 
+/// Liquorice authentication configuration
+pub struct LiquoriceAuth {
+    pub solver: String,
+    pub key: String,
+}
+
+/// Read Liquorice authentication from environment variables
+/// Returns the LIQUORICE_USER and LIQUORICE_KEY environment variables
+pub fn get_liquorice_auth() -> Result<LiquoriceAuth, RFQError> {
+    let solver = env::var("LIQUORICE_USER").map_err(|_| {
+        RFQError::InvalidInput("LIQUORICE_USER environment variable is required".into())
+    })?;
+
+    let key = env::var("LIQUORICE_KEY").map_err(|_| {
+        RFQError::InvalidInput("LIQUORICE_KEY environment variable is required".into())
+    })?;
+
+    Ok(LiquoriceAuth { solver, key })
+}
+
 /// Read Bebop authentication from environment variables
 /// Returns the BEBOP_USER and BEBOP_KEY environment variables
 pub fn get_bebop_auth() -> Result<BebopAuth, RFQError> {

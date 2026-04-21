@@ -26,7 +26,10 @@ use tycho_common::simulation::protocol_sim::ProtocolSim;
 use tycho_simulation::{
     evm::protocol::cowamm::constants::PROTOCOL_SYSTEM as COWAMM_PROTOCOL_SYSTEM,
     protocol::models::ProtocolComponent,
-    rfq::protocols::hashflow::{client::HashflowClient, state::HashflowState},
+    rfq::protocols::{
+        hashflow::{client::HashflowClient, state::HashflowState},
+        liquorice::{client::LiquoriceClient, state::LiquoriceState},
+    },
     tycho_common::models::Chain,
     utils::load_all_tokens,
 };
@@ -880,6 +883,19 @@ async fn process_state(
             // small amounts are not accepted. The amount in will be capped to this value
             let min_amount_in = BigUint::from(state.levels.levels[0].quantity.ceil() as u128);
             min_amount = min_amount_in * BigUint::from(10u32).pow(state.base_token.decimals);
+            vec![(state.base_token, state.quote_token)]
+        }
+        LiquoriceClient::PROTOCOL_SYSTEM => {
+            let state = match state
+                .as_any()
+                .downcast_ref::<LiquoriceState>()
+            {
+                Some(s) => s.clone(),
+                None => {
+                    warn!("Failed to downcast state to LiquoriceState");
+                    return HashMap::new();
+                }
+            };
             vec![(state.base_token, state.quote_token)]
         }
         _ => component
