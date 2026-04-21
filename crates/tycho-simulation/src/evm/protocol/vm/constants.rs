@@ -1,14 +1,15 @@
+use std::sync::LazyLock;
+
 use alloy::primitives::{Address, U256};
-use lazy_static::lazy_static;
 use tycho_common::simulation::errors::SimulationError;
 
-lazy_static! {
-    pub static ref EXTERNAL_ACCOUNT: Address = Address::from_slice(
+pub static EXTERNAL_ACCOUNT: LazyLock<Address> = LazyLock::new(|| {
+    Address::from_slice(
         &hex::decode("f847a638E44186F3287ee9F8cAF73FF4d4B80784")
             .expect("Invalid string for external account address"),
-    );
-    pub static ref MAX_BALANCE: U256 = U256::MAX / U256::from(2);
-}
+    )
+});
+pub static MAX_BALANCE: LazyLock<U256> = LazyLock::new(|| U256::MAX / U256::from(2));
 
 pub const ERC20_BYTECODE: &[u8] = include_bytes!("assets/ERC20.bin");
 pub const ERC20_PROXY_BYTECODE: &[u8] = include_bytes!("assets/TokenProxy.bin");
