@@ -1,3 +1,11 @@
+## [0.263.1](https://github.com/propeller-heads/tycho-indexer/compare/0.263.0...0.263.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* **tycho-client-py:** pass --chain to CLI subprocess, add polygon ([1e5ff9f](https://github.com/propeller-heads/tycho-indexer/commit/1e5ff9f01e0686a69f8097aab5d6f54db2015368))
+* update cli and python clients ([#908](https://github.com/propeller-heads/tycho-indexer/issues/908)) ([9ca8523](https://github.com/propeller-heads/tycho-indexer/commit/9ca85233bd5071aa62d565889a14f2e97733b7a8))
+
 ## [0.263.0](https://github.com/propeller-heads/tycho-indexer/compare/0.262.0...0.263.0) (2026-04-21)
 
 
