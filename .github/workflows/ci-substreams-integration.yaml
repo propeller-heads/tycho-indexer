@@ -139,6 +139,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: recursive
 
       - name: Generate cache key
         id: cache-key
