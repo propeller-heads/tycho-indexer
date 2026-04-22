@@ -149,6 +149,9 @@ pub struct DBTransaction {
     tx: oneshot::Sender<Result<(), StorageError>>,
     /// Purely used to add an attribute to the span when the transaction is commited
     owner: Option<String>,
+    /// Span of the caller that created this transaction, used to link the db_write span
+    /// back to the originating trace across the channel boundary.
+    caller_span: tracing::Span,
 }
 
 impl DBTransaction {
@@ -351,6 +354,7 @@ impl DBCacheWriteExecutor {
 
     #[instrument(name="db_write", skip_all, fields(block_range = %new_db_tx.block_range, extractor_id = tracing::field::Empty))]
     async fn write(&mut self, new_db_tx: DBTransaction) {
+        tracing::Span::current().follows_from(new_db_tx.caller_span.id());
         debug!("NewDBTransactionStart");
         if let Some(extractor_id) = new_db_tx.owner.as_ref() {
             tracing::Span::current().record("extractor_id", extractor_id);
@@ -606,6 +610,7 @@ impl CachedGateway {
                     operations: vec![],
                     tx,
                     owner: owner.map(String::from),
+                    caller_span: tracing::Span::none(),
                 },
                 rx,
             ));
@@ -634,6 +639,7 @@ impl CachedGateway {
             Some((mut db_txn, rx)) => {
                 if db_txn.size > min_ops_batch_size {
                     let span = info_span!("DatabaseCommit", size = db_txn.size);
+                    db_txn.caller_span = tracing::Span::current();
                     async move {
                         db_txn
                             .operations
@@ -1698,6 +1704,7 @@ mod test_serial_db {
             operations,
             tx: os_tx,
             owner: None,
+            caller_span: tracing::Span::none(),
         };
 
         tx.send(DBCacheMessage::Write(db_transaction))
