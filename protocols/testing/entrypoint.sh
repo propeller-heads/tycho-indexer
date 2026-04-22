@@ -36,6 +36,7 @@ infer_chain() {
         arbitrum-*) echo "arbitrum" ;;
         unichain-*) echo "unichain" ;;
         bsc-*)      echo "bsc" ;;
+        polygon-*)  echo "polygon" ;;
         *)          echo "ethereum" ;;
     esac
 }
@@ -49,6 +50,7 @@ get_rpc_url() {
         arbitrum-*) echo "${ARBITRUM_RPC_URL:-$RPC_URL}" ;;
         unichain-*) echo "${UNICHAIN_RPC_URL:-$RPC_URL}" ;;
         bsc-*)      echo "${BSC_RPC_URL:-$RPC_URL}" ;;
+        polygon-*)  echo "${POLYGON_RPC_URL:-$RPC_URL}" ;;
         *)          echo "$RPC_URL" ;;
     esac
 }
