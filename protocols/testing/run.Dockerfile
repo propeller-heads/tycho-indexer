@@ -114,18 +114,19 @@ COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/target/release/protoc
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/testing/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Create minimal directory structure
-RUN mkdir -p /app/proto /app/evm
+# Create minimal directory structure matching expected layout:
+# The test runner looks for <root>/substreams/ and <root>/adapter-integration/evm/
+RUN mkdir -p /app/proto /app/adapter-integration/evm
 
 # Copy proto files (needed for substreams pack)
 COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/proto /app/proto
 
 # Copy EVM directory
-COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/adapter-integration/evm/out /app/evm/out
-COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/adapter-integration/evm/scripts /app/evm/scripts
+COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/adapter-integration/evm/out /app/adapter-integration/evm/out
+COPY --from=protocol-sdk-builder /build/tycho-protocol-sdk/protocols/adapter-integration/evm/scripts /app/adapter-integration/evm/scripts
 # Remove unnecessary EVM build artifacts
-RUN find /app/evm/out -name "*.json" ! -name "*.runtime.json" -delete && \
-    find /app/evm/out -type d -empty -delete 2>/dev/null || true
+RUN find /app/adapter-integration/evm/out -name "*.json" ! -name "*.runtime.json" -delete && \
+    find /app/adapter-integration/evm/out -type d -empty -delete 2>/dev/null || true
 
 # Copy filtered substreams from filter stage
 COPY --from=substreams-filter /filtered /app/substreams
