@@ -11,11 +11,12 @@ use crate::encoding::{
             balancer_v3::BalancerV3SwapEncoder, bebop::BebopSwapEncoder, curve::CurveSwapEncoder,
             ekubo::EkuboSwapEncoder, ekubo_v3::EkuboV3SwapEncoder, erc_4626::ERC4626SwapEncoder,
             etherfi::EtherfiSwapEncoder, fluid_v1::FluidV1SwapEncoder,
-            hashflow::HashflowSwapEncoder, liquidity_party::LiquidityPartySwapEncoder,
-            liquorice::LiquoriceSwapEncoder, maverick_v2::MaverickV2SwapEncoder,
-            rocketpool::RocketpoolSwapEncoder, slipstreams::SlipstreamsSwapEncoder,
-            uniswap_v2::UniswapV2SwapEncoder, uniswap_v3::UniswapV3SwapEncoder,
-            uniswap_v4::UniswapV4SwapEncoder, weth::WethSwapEncoder,
+            hashflow::HashflowSwapEncoder, lido_v3::LidoV3SwapEncoder,
+            liquidity_party::LiquidityPartySwapEncoder, liquorice::LiquoriceSwapEncoder,
+            maverick_v2::MaverickV2SwapEncoder, rocketpool::RocketpoolSwapEncoder,
+            slipstreams::SlipstreamsSwapEncoder, uniswap_v2::UniswapV2SwapEncoder,
+            uniswap_v3::UniswapV3SwapEncoder, uniswap_v4::UniswapV4SwapEncoder,
+            weth::WethSwapEncoder,
         },
     },
     swap_encoder::SwapEncoder,
@@ -164,6 +165,9 @@ impl SwapEncoderRegistry {
             "weth" => Ok(Box::new(WethSwapEncoder::new(executor_address, self.chain, config)?)),
             "etherfi" => {
                 Ok(Box::new(EtherfiSwapEncoder::new(executor_address, self.chain, config)?))
+            }
+            "lido_v3" => {
+                Ok(Box::new(LidoV3SwapEncoder::new(executor_address, self.chain, config)?))
             }
             _ => Err(EncodingError::FatalError(format!(
                 "Unknown protocol system: {}",
