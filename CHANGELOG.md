@@ -1,3 +1,50 @@
+## [0.263.1](https://github.com/propeller-heads/tycho-indexer/compare/0.263.0...0.263.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* **tycho-client-py:** pass --chain to CLI subprocess, add polygon ([1e5ff9f](https://github.com/propeller-heads/tycho-indexer/commit/1e5ff9f01e0686a69f8097aab5d6f54db2015368))
+* update cli and python clients ([#908](https://github.com/propeller-heads/tycho-indexer/issues/908)) ([9ca8523](https://github.com/propeller-heads/tycho-indexer/commit/9ca85233bd5071aa62d565889a14f2e97733b7a8))
+
+## [0.263.0](https://github.com/propeller-heads/tycho-indexer/compare/0.262.0...0.263.0) (2026-04-21)
+
+
+### Features
+
+* aerodrome v1 simulation ([#928](https://github.com/propeller-heads/tycho-indexer/issues/928)) ([a7bf21e](https://github.com/propeller-heads/tycho-indexer/commit/a7bf21e67e6ca6ade92992e316242ceb3920c5a4))
+* init aerodrome_v1 simulation ([e05a893](https://github.com/propeller-heads/tycho-indexer/commit/e05a89326effc5cfe735ca54473f784064202952))
+* support stable curve swaps and raw custom fee semantics ([09ac2c5](https://github.com/propeller-heads/tycho-indexer/commit/09ac2c56a06b65437a761221984a0a64e97a931c))
+
+
+### Bug Fixes
+
+* address aerodrome v1 review ([a24cf00](https://github.com/propeller-heads/tycho-indexer/commit/a24cf006fba8567dda9ba4c8f39a213fc5e53cc5))
+* aerodrome v1 decoder test ([e51cca1](https://github.com/propeller-heads/tycho-indexer/commit/e51cca1537b1f02a0f092ac592eacf0d965f68da))
+* align rounding with onchain pools and add real pool tests ([40d721c](https://github.com/propeller-heads/tycho-indexer/commit/40d721c00be041728d87e52d765ebebef05d66a7))
+
+## [0.262.0](https://github.com/propeller-heads/tycho-indexer/compare/0.261.1...0.262.0) (2026-04-21)
+
+
+### Features
+
+* **integration-test:** add --partial-blocks flag to opt in to flashblock stream updates ([ca84328](https://github.com/propeller-heads/tycho-indexer/commit/ca84328e89503ad0e4a929d22b572e769ccbd548))
+* **integration-test:** add --partial-blocks flag to opt in to flashblock stream updates ([#921](https://github.com/propeller-heads/tycho-indexer/issues/921)) ([2fa2182](https://github.com/propeller-heads/tycho-indexer/commit/2fa2182933d03ec67304e314682c302d5decb06c))
+* liquorice protocol integration ([#922](https://github.com/propeller-heads/tycho-indexer/issues/922)) ([45725c0](https://github.com/propeller-heads/tycho-indexer/commit/45725c0f3fb314a161befd52e0bd8cb465350e22))
+
+
+### Bug Fixes
+
+* provide all price levels for the component ([03469af](https://github.com/propeller-heads/tycho-indexer/commit/03469affffe43f5ba912be3744163b3ef52a8f03))
+
+## [0.261.1](https://github.com/propeller-heads/tycho-indexer/compare/0.261.0...0.261.1) (2026-04-20)
+
+
+### Bug Fixes
+
+* build tycho-indexer from monorepo source instead of GitHub clone ([17ebed1](https://github.com/propeller-heads/tycho-indexer/commit/17ebed1b53ee63f15a1741879492fe9b6ab99216))
+* build tycho-indexer from monorepo source instead of GitHub clone  ([#925](https://github.com/propeller-heads/tycho-indexer/issues/925)) ([326ce90](https://github.com/propeller-heads/tycho-indexer/commit/326ce905aa37213cd94b134b3ab7df146a7fd9eb))
+* checkout PR branch in pull_request_target workflow ([fbea963](https://github.com/propeller-heads/tycho-indexer/commit/fbea9638ff94cdfb5da3da9ef6da2b2195e3d87b))
+
 ## [0.261.0](https://github.com/propeller-heads/tycho-indexer/compare/0.260.0...0.261.0) (2026-04-20)
 
 

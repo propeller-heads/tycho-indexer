@@ -1,46 +1,42 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::LazyLock};
 
 use alloy::primitives::{Address, U256};
-use lazy_static::lazy_static;
 
 use super::utils::get_storage_slot_index_at_key;
 use crate::evm::{ContractCompiler, SlotId};
 
 pub(crate) type Overwrites = HashMap<SlotId, U256>;
 
-// Storage slots constants for TokenProxy contract
-lazy_static! {
-    pub static ref IMPLEMENTATION_SLOT: SlotId =
-        U256::from_str("0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB")
-            .unwrap();
-    static ref BALANCES_MAPPING_POSITION: SlotId =
-        U256::from_str("0x474F5FD57EE674F7B6851BC6F07E751B49076DFB356356985B9DAF10E9ABC941")
-            .unwrap();
-    static ref HAS_CUSTOM_BALANCE_POSITION: SlotId =
-        U256::from_str("0x7EAD8EDE9DBB385B0664952C7462C9938A5821E6F78E859DA2E683216E99411B")
-            .unwrap();
-    static ref CUSTOM_APPROVAL_MAPPING_POSITION: SlotId =
-        U256::from_str("0x71A54E125991077003BEF7E7CA57369C919DAC6D2458895F1EAB4D03960F4AEB")
-            .unwrap();
-    static ref HAS_CUSTOM_APPROVAL_MAPPING_POSITION: SlotId =
-        U256::from_str("0x9F0C1BC0E9C3078F9AD5FC59C8606416B3FABCBD4C8353FED22937C66C866CE3")
-            .unwrap();
-    static ref CUSTOM_NAME_POSITION: SlotId =
-        U256::from_str("0xCC1E513FB5BDA80DC466AD9D44DF38805A8DEE4C82B3C6DF3D9B25D3D5355D1C")
-            .unwrap();
-    static ref CUSTOM_SYMBOL_POSITION: SlotId =
-        U256::from_str("0xDC17DD3380A9A034A702A2B2B1C6C25D39EBF0E89796E0D15E1E04D23E3BB221")
-            .unwrap();
-    static ref CUSTOM_DECIMALS_POSITION: SlotId =
-        U256::from_str("0xADD486B234562DE9AC745F036F538CDA2547EF6DBB4DA3FA1C017625F888A8E8")
-            .unwrap();
-    static ref CUSTOM_TOTAL_SUPPLY_POSITION: SlotId =
-        U256::from_str("0x6014AF1E8E9BB2844581B2FA9E5E3620181C3192EEFD3258319AEC23538DA9F5")
-            .unwrap();
-    static ref HAS_CUSTOM_METADATA_POSITION: SlotId =
-        U256::from_str("0x9F37243DE61714BE9CC00628D4B9BF9897AE670218AF52ADE6D192B4339D7616")
-            .unwrap();
-}
+pub static IMPLEMENTATION_SLOT: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x6677C72CDEB41ACAF2B17EC8A6E275C4205F27DBFE4DE34EBAF2E928A7E610DB").unwrap()
+});
+static BALANCES_MAPPING_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x474F5FD57EE674F7B6851BC6F07E751B49076DFB356356985B9DAF10E9ABC941").unwrap()
+});
+static HAS_CUSTOM_BALANCE_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x7EAD8EDE9DBB385B0664952C7462C9938A5821E6F78E859DA2E683216E99411B").unwrap()
+});
+static CUSTOM_APPROVAL_MAPPING_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x71A54E125991077003BEF7E7CA57369C919DAC6D2458895F1EAB4D03960F4AEB").unwrap()
+});
+static HAS_CUSTOM_APPROVAL_MAPPING_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x9F0C1BC0E9C3078F9AD5FC59C8606416B3FABCBD4C8353FED22937C66C866CE3").unwrap()
+});
+static CUSTOM_NAME_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0xCC1E513FB5BDA80DC466AD9D44DF38805A8DEE4C82B3C6DF3D9B25D3D5355D1C").unwrap()
+});
+static CUSTOM_SYMBOL_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0xDC17DD3380A9A034A702A2B2B1C6C25D39EBF0E89796E0D15E1E04D23E3BB221").unwrap()
+});
+static CUSTOM_DECIMALS_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0xADD486B234562DE9AC745F036F538CDA2547EF6DBB4DA3FA1C017625F888A8E8").unwrap()
+});
+static CUSTOM_TOTAL_SUPPLY_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x6014AF1E8E9BB2844581B2FA9E5E3620181C3192EEFD3258319AEC23538DA9F5").unwrap()
+});
+static HAS_CUSTOM_METADATA_POSITION: LazyLock<SlotId> = LazyLock::new(|| {
+    U256::from_str("0x9F37243DE61714BE9CC00628D4B9BF9897AE670218AF52ADE6D192B4339D7616").unwrap()
+});
 
 pub(crate) struct TokenProxyOverwriteFactory {
     token_address: Address,

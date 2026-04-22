@@ -68,7 +68,13 @@
       "code_hash": "0x2b62e1037bf02c3617c0a8598318b9ca0d958fc7861377ee5912d56065234076",
       "balance_modify_tx": "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2",
       "code_modify_tx": "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2",
-      "creation_tx": "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2"
+      "creation_tx": "0xa63c671046ad2075ec8ea83ac21199cf3e3a5f433e72ec4c117cbabfb9b18de2",
+      "token_balances": {}
     }
-  ]
+  ],
+  "pagination": {
+    "page": 0,
+    "page_size": 20,
+    "total": 2
+  }
 }

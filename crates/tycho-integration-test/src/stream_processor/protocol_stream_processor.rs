@@ -43,6 +43,7 @@ pub struct ProtocolStreamProcessor {
     tvl_threshold: f64,
     tvl_buffer_ratio: f64,
     protocols: Option<Vec<String>>,
+    partial_blocks: bool,
 }
 
 impl ProtocolStreamProcessor {
@@ -53,8 +54,17 @@ impl ProtocolStreamProcessor {
         tvl_threshold: f64,
         tvl_buffer_ratio: f64,
         protocols: Option<Vec<String>>,
+        partial_blocks: bool,
     ) -> miette::Result<Self> {
-        Ok(Self { chain, tycho_url, tycho_api_key, tvl_threshold, tvl_buffer_ratio, protocols })
+        Ok(Self {
+            chain,
+            tycho_url,
+            tycho_api_key,
+            tvl_threshold,
+            tvl_buffer_ratio,
+            protocols,
+            partial_blocks,
+        })
     }
 
     pub async fn run_stream(
@@ -136,6 +146,9 @@ impl ProtocolStreamProcessor {
         for protocol in &protocols_to_enable {
             protocol_stream =
                 self.add_protocol_to_stream(protocol_stream, protocol, &tvl_filter)?;
+        }
+        if self.partial_blocks {
+            protocol_stream = protocol_stream.enable_partial_blocks();
         }
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
