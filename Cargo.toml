@@ -67,9 +67,8 @@ thiserror = "1"
 anyhow    = "1.0.76"
 
 # --- EVM / Blockchain ---
-alloy         = { version = "1.0.41", default-features = false }
-alloy-dyn-abi = ">=1.4.1"
-ethabi        = "18.0.0"
+alloy = { version = "1.1.0", default-features = false }
+ethabi = "18.0.0"
 
 # --- Utility ---
 chrono               = { version = "0.4.26", features = ["serde"] }
