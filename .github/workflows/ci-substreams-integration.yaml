@@ -6,6 +6,7 @@ env:
   ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL_ARCHIVE }}
   UNICHAIN_RPC_URL: ${{ secrets.UNICHAIN_RPC_URL_ARCHIVE }}
   BSC_RPC_URL: ${{ secrets.BSC_RPC_URL_ARCHIVE }}
+  POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL_ARCHIVE }}
   SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
   AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}
   EXCLUDED_SUBSTREAMS: target|crates|ethereum-template-factory|ethereum-template-singleton|ethereum-fluid
