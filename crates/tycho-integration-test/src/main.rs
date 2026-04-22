@@ -108,6 +108,17 @@ struct Cli {
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
 
+    /// Maximum number of attempts to poll the RPC when the update block is ahead of the RPC.
+    /// Each attempt is separated by --rpc-poll-interval-ms. Adjust for faster chains (e.g. Base,
+    /// Unichain) where blocks arrive more frequently.
+    #[arg(long, default_value_t = 10)]
+    rpc_poll_attempts: u32,
+
+    /// Interval in milliseconds between RPC polling attempts when waiting for the RPC to reach
+    /// the update block number.
+    #[arg(long, default_value_t = 500)]
+    rpc_poll_interval_ms: u64,
+
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
     always_test_components: Vec<String>,
@@ -582,13 +593,16 @@ async fn process_update(
         }
 
         // Poll RPC until it reaches the update's block number
-        const MAX_POLL_ATTEMPTS: u32 = 10;
-        const POLL_INTERVAL: Duration = Duration::from_millis(500);
         let update_block_number = update.update.block_number_or_timestamp;
+        let poll_interval = Duration::from_millis(cli.rpc_poll_interval_ms);
 
-        let block =
-            poll_rpc_for_block(&rpc_tools, update_block_number, MAX_POLL_ATTEMPTS, POLL_INTERVAL)
-                .await?;
+        let block = poll_rpc_for_block(
+            &rpc_tools,
+            update_block_number,
+            cli.rpc_poll_attempts,
+            poll_interval,
+        )
+        .await?;
 
         let block = match block {
             Some(b) => Arc::new(b),
