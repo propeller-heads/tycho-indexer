@@ -26,6 +26,6 @@ RUN ./stable-build.sh
 FROM debian:bookworm
 WORKDIR /opt/tycho-indexer
 COPY --from=build /build/target/release/tycho-indexer ./tycho-indexer
-COPY --from=build /build/extractors.yaml ./extractors.yaml
+COPY crates/tycho-indexer/extractors.yaml ./extractors.yaml
 RUN apt-get update && apt-get install -y libpq-dev libcurl4 && rm -rf /var/lib/apt/lists/*
 ENTRYPOINT [ "/opt/tycho-indexer/tycho-indexer", "--endpoint", "https://mainnet.eth.streamingfast.io:443", "index"]
