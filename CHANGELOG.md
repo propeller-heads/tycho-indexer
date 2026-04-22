@@ -1,3 +1,16 @@
+## [0.263.3](https://github.com/propeller-heads/tycho-indexer/compare/0.263.2...0.263.3) (2026-04-22)
+
+
+### Bug Fixes
+
+* **cd:** pin Rust image and fix if-condition syntax on reusable workflow jobs ([e50400a](https://github.com/propeller-heads/tycho-indexer/commit/e50400a07effca18dd3d3a8e4f983fd053b33926))
+* **docker:** copy extractors.yaml from build context instead of builder stage ([705f6ab](https://github.com/propeller-heads/tycho-indexer/commit/705f6ab6bccc7a582ac24688cdd0b6f81acf32a8))
+* **docker:** work around Kaniko path resolution bug for extractors.yaml ([12d646b](https://github.com/propeller-heads/tycho-indexer/commit/12d646b05faed7bb5e938a81dc234945165a2037))
+* **integration-test:** Fix block processing latency metric ([#931](https://github.com/propeller-heads/tycho-indexer/issues/931)) ([9142284](https://github.com/propeller-heads/tycho-indexer/commit/91422840111dffb64e82b4fefffcc8214d6c189d))
+* **integration-test:** make RPC poll attempts and interval configurable ([0a53997](https://github.com/propeller-heads/tycho-indexer/commit/0a53997b82b65b7bde80f8e317ae04ecdd93f705))
+* **integration-test:** poll RPC until it reaches update block number ([4e271cf](https://github.com/propeller-heads/tycho-indexer/commit/4e271cf8b034a06c447c21b8610f4aecfdc3a940))
+* **integration-test:** separate RFQ and protocol update channels ([e3183ca](https://github.com/propeller-heads/tycho-indexer/commit/e3183cae880bcd830bc871823c241b84d49c1a85))
+
 ## [0.263.2](https://github.com/propeller-heads/tycho-indexer/compare/0.263.1...0.263.2) (2026-04-22)
 
 ## [0.263.1](https://github.com/propeller-heads/tycho-indexer/compare/0.263.0...0.263.1) (2026-04-21)
