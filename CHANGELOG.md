@@ -1,3 +1,12 @@
+## [0.264.1](https://github.com/propeller-heads/tycho-indexer/compare/0.264.0...0.264.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **docker:** bump Rust base image to 1.91 to support cargo-chef ([0a5bebd](https://github.com/propeller-heads/tycho-indexer/commit/0a5bebd73dcbe08f4ce161d1d9beb64ab0d63b3e))
+* **docker:** copy extractors.yaml from build context to avoid kaniko path bug ([365b7dd](https://github.com/propeller-heads/tycho-indexer/commit/365b7ddd2a2e887fe60b74c25ae072433ec9effc))
+* **docker:** fix build workflows ([#936](https://github.com/propeller-heads/tycho-indexer/issues/936)) ([fa94247](https://github.com/propeller-heads/tycho-indexer/commit/fa94247a6f194f52f76696adb4d7f273a4f4fa88))
+
 ## [0.264.0](https://github.com/propeller-heads/tycho-indexer/compare/0.263.3...0.264.0) (2026-04-22)
 
 
