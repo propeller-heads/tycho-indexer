@@ -30,10 +30,7 @@ jobs:
       - name: Run cargo audit
         run: |
 
-          # RUSTSEC-2025-0055: tracing-subscriber ^0.2 log poisoning via ANSI escapes
-          # Dep chain: tycho-simulation <- revm <- ark-bn254 <- ark-r1cs-std <- ark-relations <- tracing-subscriber ^0.2
-          # We need ark to update their dependencies to fix this.
-          cargo audit --ignore RUSTSEC-2025-0055 --json > audit.json || true
+          cargo audit --json > audit.json || true
 
           COUNT=$(jq '.vulnerabilities.count' audit.json)
 

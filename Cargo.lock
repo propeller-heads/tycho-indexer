@@ -9863,7 +9863,6 @@ dependencies = [
  "hex-literal 0.4.1",
  "http 1.3.1",
  "itertools 0.13.0",
- "lazy_static",
  "mockall",
  "num-bigint",
  "num-traits",
@@ -9878,6 +9877,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum_macros 0.25.3",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
@@ -9885,6 +9885,7 @@ dependencies = [
  "tokio-tungstenite 0.28.0",
  "toml 0.8.23",
  "tracing",
+ "tracing-appender",
  "tracing-subscriber 0.3.20",
  "tycho-client",
  "tycho-common",
@@ -9893,6 +9894,7 @@ dependencies = [
  "tycho-test",
  "typetag",
  "unicode-width 0.1.14",
+ "uuid",
 ]
 
 [[package]]

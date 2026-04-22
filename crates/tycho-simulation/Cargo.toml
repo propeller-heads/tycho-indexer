@@ -23,7 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }
 typetag = { workspace = true }
-
+uuid       = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
@@ -44,9 +44,6 @@ num-traits = { workspace = true }
 
 # Enum utilities
 strum_macros = { workspace = true }
-
-# Caching
-lazy_static = "1.4.0"
 
 # Tycho dependencies
 tycho-client = { workspace = true }
@@ -104,6 +101,7 @@ ratatui = "0.29.0"
 crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = { workspace = true }
+dialoguer          = "0.10.4"
 
 [features]
 default = ["evm", "rfq"]
