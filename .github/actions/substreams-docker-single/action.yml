@@ -27,7 +27,7 @@ runs:
         export PROTOCOL
 
         # Run with unique database and protocol
-        docker compose -f protocol-testing/docker-compose.yaml up \
+        docker compose -f protocols/testing/docker-compose.yaml up \
           --abort-on-container-exit \
           --exit-code-from test-runner \
           --renew-anon-volumes
