@@ -1,0 +1,150 @@
+name: Cargo Update
+
+on:
+  schedule:
+    # 1st and 15th of each month at 06:00 UTC (biweekly)
+    - cron: '0 6 1,15 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  MIN_CRATE_AGE_DAYS: 3
+
+jobs:
+  cargo-update:
+    name: Update dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: true  # needed to push the branch
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - name: Save old lockfiles
+        run: |
+          mkdir -p /tmp/old-locks
+          while IFS= read -r -d '' lock; do
+            dir=$(dirname "$lock")
+            mkdir -p "/tmp/old-locks/$dir"
+            cp "$lock" "/tmp/old-locks/$lock"
+          done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
+
+      - name: Run cargo update in all workspaces
+        run: |
+          WORKSPACES=(
+            "."
+            "protocols/substreams"
+            "protocols/substreams/ethereum-ambient"
+            "protocols/substreams/ethereum-balancer-v3"
+            "protocols/substreams/ethereum-curve"
+            "protocols/substreams/ethereum-sfrax"
+            "protocols/substreams/ethereum-sfraxeth"
+            "protocols/substreams/ethereum-uniswap-v4"
+            "protocols/testing"
+          )
+          for ws in "${WORKSPACES[@]}"; do
+            echo "::group::cargo update in $ws"
+            (cd "$ws" && cargo update)
+            echo "::endgroup::"
+          done
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet -- '**/Cargo.lock'; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No lockfile changes detected."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Lockfile changes detected."
+          fi
+
+      - name: Check crate ages and collect too-recent crates
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          mkdir -p /tmp/young-crates
+          while IFS= read -r -d '' lock; do
+            old="/tmp/old-locks/$lock"
+            if [[ -f "$old" ]]; then
+              outfile="/tmp/young-crates/$(echo "$lock" | tr '/' '_').txt"
+              echo "::group::Checking $lock"
+              # Exit code 2 means some crates are too recent (written to outfile)
+              .github/scripts/check-crate-ages.sh "$old" "$lock" "$outfile" "$MIN_CRATE_AGE_DAYS" || true
+              echo "::endgroup::"
+            fi
+          done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
+
+      - name: Pin back too-recent crates
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          WORKSPACES=(
+            "."
+            "protocols/substreams"
+            "protocols/substreams/ethereum-ambient"
+            "protocols/substreams/ethereum-balancer-v3"
+            "protocols/substreams/ethereum-curve"
+            "protocols/substreams/ethereum-sfrax"
+            "protocols/substreams/ethereum-sfraxeth"
+            "protocols/substreams/ethereum-uniswap-v4"
+            "protocols/testing"
+          )
+          # Collect all unique "crate old_version" pairs across lockfiles
+          pinlist=$(cat /tmp/young-crates/*.txt 2>/dev/null | sort -u || true)
+          if [[ -z "$pinlist" ]]; then
+            echo "No too-recent crates to pin back."
+            exit 0
+          fi
+          echo "Pinning back too-recent crates:"
+          echo "$pinlist"
+          while IFS=' ' read -r crate old_version; do
+            for ws in "${WORKSPACES[@]}"; do
+              echo "::group::Pin ${crate}@${old_version} in $ws"
+              (cd "$ws" && cargo update -p "$crate" --precise "$old_version") || true
+              echo "::endgroup::"
+            done
+          done <<< "$pinlist"
+
+      - name: Re-check for changes after pinning
+        if: steps.changes.outputs.changed == 'true'
+        id: final-changes
+        run: |
+          if git diff --quiet -- '**/Cargo.lock'; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No lockfile changes remain after pinning."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build PR body
+        if: steps.final-changes.outputs.changed == 'true'
+        id: pr-body
+        run: |
+          pinlist=$(cat /tmp/young-crates/*.txt 2>/dev/null | sort -u || true)
+          body="Automated biweekly \`cargo update\` across all workspace lockfiles."
+          body="${body}"$'\n\n'"All updated crates have been verified to be at least ${MIN_CRATE_AGE_DAYS} days old (supply chain safety check)."
+          if [[ -n "$pinlist" ]]; then
+            body="${body}"$'\n\n'"**Skipped (published <${MIN_CRATE_AGE_DAYS} days ago, pinned to previous version):**"
+            while IFS=' ' read -r crate old_version; do
+              body="${body}"$'\n'"- \`${crate}\` pinned at \`${old_version}\`"
+            done <<< "$pinlist"
+          fi
+          # Write to file to avoid escaping issues
+          echo "$body" > /tmp/pr-body.md
+
+      - name: Create pull request
+        if: steps.final-changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e  # v7.0.8
+        with:
+          branch: chore/cargo-update
+          commit-message: "chore(deps): run cargo update"
+          title: "chore(deps): biweekly cargo update"
+          body-path: /tmp/pr-body.md
+          labels: dependencies
+          delete-branch: true
