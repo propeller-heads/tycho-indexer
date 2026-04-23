@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "ethereum-cowamm",
     "ethereum-balancer-v2",
     "ethereum-curve",
     "crates/tycho-substreams",
