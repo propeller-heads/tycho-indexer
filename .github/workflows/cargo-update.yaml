@@ -41,7 +41,9 @@ jobs:
           while IFS= read -r -d '' lock; do
             ws=$(dirname "$lock")
             echo "::group::cargo update in $ws"
-            (cd "$ws" && cargo update)
+            if ! (cd "$ws" && cargo update); then
+              echo "::warning::cargo update failed in $ws, skipping"
+            fi
             echo "::endgroup::"
           done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
 
@@ -110,9 +112,9 @@ jobs:
           body="Automated biweekly \`cargo update\` across all workspace lockfiles."
           body="${body}"$'\n\n'"All updated crates have been verified to be at least ${MIN_CRATE_AGE_DAYS} days old (supply chain safety check)."
           if [[ -n "$pinlist" ]]; then
-            body="${body}"$'\n\n'"**Skipped (published <${MIN_CRATE_AGE_DAYS} days ago, pinned to previous version):**"
-            while IFS=' ' read -r crate old_version; do
-              body="${body}"$'\n'"- \`${crate}\` pinned at \`${old_version}\`"
+            body="${body}"$'\n\n'"**Pinned (latest release <${MIN_CRATE_AGE_DAYS} days old, using latest safe version):**"
+            while IFS=' ' read -r crate safe_version; do
+              body="${body}"$'\n'"- \`${crate}\` pinned at \`${safe_version}\`"
             done <<< "$pinlist"
           fi
           # Write to file to avoid escaping issues

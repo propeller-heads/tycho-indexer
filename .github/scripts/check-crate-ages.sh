@@ -4,8 +4,9 @@ set -euo pipefail
 # Compares old and new Cargo.lock files, extracts updated crates,
 # and checks each was published at least MIN_AGE_DAYS ago on crates.io.
 #
-# Outputs too-recent crates as "crate old_version" lines to a file so the
-# caller can pin them back with `cargo update -p <crate> --precise <old_version>`.
+# Outputs too-recent crates as "crate safe_version" lines to a file so the
+# caller can pin them back with `cargo update -p <crate> --precise <safe_version>`.
+# The safe version is the latest release published at least MIN_AGE_DAYS ago.
 #
 # Usage: check-crate-ages.sh <old-lockfile> <new-lockfile> <output-file> [min-age-days]
 #
@@ -44,14 +45,33 @@ echo "Updated packages:"
 echo "$CHANGED"
 echo ""
 
-# Build a lookup of old versions: old_versions[crate]=version
-declare -A OLD_VERSIONS
-while IFS=' ' read -r name ver; do
-    OLD_VERSIONS["$name"]="$ver"
-done <<< "$OLD_PKGS"
+# Find the latest version of a crate published at least MIN_AGE_DAYS ago.
+# Queries the crates.io versions list and returns the first match.
+latest_safe_version() {
+    local crate="$1"
+    local min_age="$2"
+    local now="$3"
+    local threshold=$((min_age * 86400))
+
+    local resp
+    resp=$(curl -sf -H "User-Agent: tycho-indexer-ci (cargo-update)" \
+        "https://crates.io/api/v1/crates/${crate}/versions" 2>/dev/null) || return 1
+
+    # Versions are returned newest-first. Find the first non-yanked
+    # version published at least min_age days ago.
+    echo "$resp" | jq -r --argjson now "$now" --argjson threshold "$threshold" '
+        [.versions[] | select(.yanked == false)] |
+        map(select(
+            (.created_at | sub("\\.[0-9]+.*"; "") | strptime("%Y-%m-%dT%H:%M:%S") | mktime) as $t |
+            ($now - $t) >= $threshold
+        )) |
+        first | .num // empty
+    '
+}
 
 NOW=$(date +%s)
-TOO_RECENT=()
+: > "$OUTPUT_FILE"
+too_recent_count=0
 
 while IFS=' ' read -r crate version; do
     RESPONSE=$(curl -sf -H "User-Agent: tycho-indexer-ci (cargo-update)" \
@@ -66,7 +86,7 @@ while IFS=' ' read -r crate version; do
         continue
     fi
 
-    # Parse ISO 8601 timestamp to epoch (Linux date -d handles ISO 8601 natively)
+    # Parse ISO 8601 timestamp to epoch (Linux date -d, macOS date -j fallback)
     CREATED_EPOCH=$(date -d "${CREATED_AT}" +%s 2>/dev/null) || \
     CREATED_EPOCH=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${CREATED_AT%%.*}" +%s 2>/dev/null) || {
         echo "WARNING: Could not parse date '${CREATED_AT}' for ${crate}@${version}, skipping"
@@ -76,12 +96,14 @@ while IFS=' ' read -r crate version; do
     AGE_DAYS=$(( (NOW - CREATED_EPOCH) / 86400 ))
 
     if (( AGE_DAYS < MIN_AGE_DAYS )); then
-        old_ver="${OLD_VERSIONS[$crate]:-}"
-        if [[ -n "$old_ver" ]]; then
-            echo "TOO RECENT: ${crate}@${version} (${AGE_DAYS}d old) -> reverting to ${old_ver}"
-            TOO_RECENT+=("${crate} ${old_ver}")
+        safe_ver=$(latest_safe_version "$crate" "$MIN_AGE_DAYS" "$NOW")
+        sleep 1  # rate-limit the extra API call
+        if [[ -n "$safe_ver" ]]; then
+            echo "TOO RECENT: ${crate}@${version} (${AGE_DAYS}d old) -> pinning to ${safe_ver}"
+            echo "${crate} ${safe_ver}" >> "$OUTPUT_FILE"
+            too_recent_count=$((too_recent_count + 1))
         else
-            echo "TOO RECENT: ${crate}@${version} (${AGE_DAYS}d old) — new dep, no old version to pin"
+            echo "TOO RECENT: ${crate}@${version} (${AGE_DAYS}d old) — no safe version found, skipping"
         fi
     else
         echo "OK:   ${crate}@${version} published ${AGE_DAYS}d ago"
@@ -91,15 +113,13 @@ while IFS=' ' read -r crate version; do
     sleep 1
 done <<< "$CHANGED"
 
-: > "$OUTPUT_FILE"
-if (( ${#TOO_RECENT[@]} > 0 )); then
+if (( too_recent_count > 0 )); then
     echo ""
     echo "========================================="
-    echo "${#TOO_RECENT[@]} crate(s) more recent than ${MIN_AGE_DAYS} days will be pinned back:"
-    for entry in "${TOO_RECENT[@]}"; do
-        echo "  - $entry"
-        echo "$entry" >> "$OUTPUT_FILE"
-    done
+    echo "${too_recent_count} crate(s) more recent than ${MIN_AGE_DAYS} days will be pinned back:"
+    while IFS=' ' read -r c v; do
+        echo "  - ${c} ${v}"
+    done < "$OUTPUT_FILE"
     echo "========================================="
     exit 2
 fi
