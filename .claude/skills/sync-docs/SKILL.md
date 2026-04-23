@@ -61,11 +61,14 @@ This repo's documentation lives in two places:
 
 | File | Crate |
 |------|-------|
-| `tycho-indexer/CLAUDE.md` | Main indexer: extractors, services, RPC endpoints |
-| `tycho-common/CLAUDE.md` | Shared domain types, traits, simulation abstractions |
-| `tycho-storage/CLAUDE.md` | Postgres backend, temporal versioning, gateway structs |
-| `tycho-ethereum/CLAUDE.md` | Ethereum RPC, token analysis, entrypoint tracing |
-| `tycho-client/CLAUDE.md` | Consumer library: snapshot+delta sync, feed alignment |
+| `crates/tycho-indexer/CLAUDE.md` | Main indexer: extractors, services, RPC endpoints |
+| `crates/tycho-common/CLAUDE.md` | Shared domain types, traits, simulation abstractions |
+| `crates/tycho-storage/CLAUDE.md` | Postgres backend, temporal versioning, gateway structs |
+| `crates/tycho-ethereum/CLAUDE.md` | Ethereum RPC, token analysis, entrypoint tracing |
+| `crates/tycho-client/CLAUDE.md` | Consumer library: snapshot+delta sync, feed alignment |
+| `crates/tycho-execution/CLAUDE.md` | TychoRouter contracts + Rust encoding library |
+
+Note: `tycho-simulation` and `protocols/testing` do not yet have `CLAUDE.md` files.
 
 ## Process
 
@@ -92,39 +95,47 @@ it only reports discrepancies.
 > **Workspace entrypoint** (`.claude/CODEBASE.md`):
 > - Compare "Workspace Module Map" against actual crates in `Cargo.toml` `[workspace.members]`
 > - Compare feature flags table against each crate's `Cargo.toml` `[features]`
-> - Compare "End-to-End Data Flow" diagram against `tycho-indexer/src/extractor/protocol_extractor.rs`,
->   `tycho-indexer/src/services/`, and `tycho-client/src/feed/`
-> - Compare CLI commands table against `tycho-indexer/src/cli/`
+> - Compare "End-to-End Data Flow" diagram against `crates/tycho-indexer/src/extractor/protocol_extractor.rs`,
+>   `crates/tycho-indexer/src/services/`, and `crates/tycho-client/src/feed/`
+> - Compare CLI commands table against `crates/tycho-indexer/src/cli/`
 > - Compare env vars table against actual usage (search for `env::var` / `std::env`)
 > - Compare testing section against CI config (`.github/workflows/`)
 >
-> **tycho-indexer** (`tycho-indexer/CLAUDE.md`):
-> - Compare module map against `tycho-indexer/src/` directory tree
-> - Compare ProtocolExtractor description against `tycho-indexer/src/extractor/protocol_extractor.rs`
-> - Compare RPC endpoints table against `tycho-indexer/src/services/rpc.rs`
-> - Compare services/middleware listing against `tycho-indexer/src/services/middleware/`
-> - Compare DCI description against `tycho-indexer/src/extractor/dynamic_contract_indexer/`
+> **tycho-indexer** (`crates/tycho-indexer/CLAUDE.md`):
+> - Compare module map against `crates/tycho-indexer/src/` directory tree
+> - Compare ProtocolExtractor description against `crates/tycho-indexer/src/extractor/protocol_extractor.rs`
+> - Compare RPC endpoints table against `crates/tycho-indexer/src/services/rpc.rs`
+> - Compare services/middleware listing against `crates/tycho-indexer/src/services/middleware/`
+> - Compare DCI description against `crates/tycho-indexer/src/extractor/dynamic_contract_indexer/`
 >
-> **tycho-common** (`tycho-common/CLAUDE.md`):
-> - Compare module organisation against `tycho-common/src/` directory tree
-> - Compare trait abstractions against `tycho-common/src/storage/` and `tycho-common/src/traits/`
-> - Compare simulation module against `tycho-common/src/simulation/`
+> **tycho-common** (`crates/tycho-common/CLAUDE.md`):
+> - Compare module organisation against `crates/tycho-common/src/` directory tree
+> - Compare trait abstractions against `crates/tycho-common/src/storage.rs` and `crates/tycho-common/src/traits.rs`
+> - Compare simulation module against `crates/tycho-common/src/simulation/`
 > - Compare data flow diagram against actual inter-crate dependencies
 >
-> **tycho-storage** (`tycho-storage/CLAUDE.md`):
-> - Compare module map against `tycho-storage/src/postgres/` directory tree
-> - Compare write order against `DBCacheWriteExecutor` in `tycho-storage/src/postgres/cache.rs`
-> - Compare gateway descriptions against `tycho-storage/src/postgres/cache.rs` and `direct.rs`
+> **tycho-storage** (`crates/tycho-storage/CLAUDE.md`):
+> - Compare module map against `crates/tycho-storage/src/postgres/` directory tree
+> - Compare write order against `DBCacheWriteExecutor` in `crates/tycho-storage/src/postgres/cache.rs`
+> - Compare gateway descriptions against `crates/tycho-storage/src/postgres/cache.rs` and `direct.rs`
 >
-> **tycho-ethereum** (`tycho-ethereum/CLAUDE.md`):
-> - Compare module map against `tycho-ethereum/src/` directory tree
+> **tycho-ethereum** (`crates/tycho-ethereum/CLAUDE.md`):
+> - Compare module map against `crates/tycho-ethereum/src/` directory tree
 > - Compare trait implementations table against actual `impl` blocks
-> - Compare entrypoint_tracer contents against `tycho-ethereum/src/services/entrypoint_tracer/`
+> - Compare entrypoint_tracer contents against `crates/tycho-ethereum/src/services/entrypoint_tracer/`
 >
-> **tycho-client** (`tycho-client/CLAUDE.md`):
-> - Compare module map against `tycho-client/src/` directory tree
+> **tycho-client** (`crates/tycho-client/CLAUDE.md`):
+> - Compare module map against `crates/tycho-client/src/` directory tree
 > - Compare connections diagram against actual struct relationships
-> - Compare sync lifecycle against `tycho-client/src/feed/synchronizer.rs`
+> - Compare sync lifecycle against `crates/tycho-client/src/feed/synchronizer.rs`
+>
+> **tycho-execution** (`crates/tycho-execution/CLAUDE.md`):
+> - Compare Solidity architecture against `crates/tycho-execution/contracts/`
+> - Compare Rust encoding module map against `crates/tycho-execution/src/` directory tree
+> - Compare swap flow description against actual contract entry points
+>
+> **tycho-simulation** (no CLAUDE.md yet — skip unless creating one):
+> - Note whether a CLAUDE.md is warranted given the crate's complexity; if so, flag it
 >
 > **Skill file paths**: Verify every source path referenced in `.claude/skills/sync-docs/SKILL.md` and
 > `.claude/skills/run-ci/SKILL.md` still exists.
@@ -145,17 +156,19 @@ that hash and HEAD to find changes that demand documentation updates.
 >
 > 1. Read the first line of `.claude/CODEBASE.md` to extract the commit hash from the `docs-synced-at` HTML comment
 >    (format: `<!-- docs-synced-at: <hash> -->`).
-> 2. Run `git log --oneline <hash>..HEAD -- tycho-indexer/src/ tycho-common/src/ tycho-storage/src/ tycho-ethereum/src/ tycho-client/src/`
+> 2. Run `git log --oneline <hash>..HEAD -- crates/tycho-indexer/src/ crates/tycho-common/src/ crates/tycho-storage/src/ crates/tycho-ethereum/src/ crates/tycho-client/src/ crates/tycho-simulation/src/ crates/tycho-execution/src/ protocols/testing/`
 >    to list all source-code commits since the last doc sync.
 > 3. For each commit (or group of related commits), run `git diff <hash> HEAD` on the relevant paths to understand what
 >    changed. Focus on:
->    - New or removed files/modules under any `tycho-*/src/` directory
->    - Changed trait definitions (added/removed/renamed methods) in `tycho-common/src/storage/` or `tycho-common/src/traits/`
+>    - New or removed files/modules under any `crates/tycho-*/src/` or `protocols/` directory
+>    - Changed trait definitions (added/removed/renamed methods) in `crates/tycho-common/src/storage.rs` or `crates/tycho-common/src/traits.rs`
+>    - Changed `ProtocolSim` trait in `crates/tycho-simulation/src/` or executor interfaces in `crates/tycho-execution/src/`
 >    - Changed struct/enum definitions (added/removed/renamed fields/variants)
->    - Changed RPC endpoints in `tycho-indexer/src/services/rpc.rs`
+>    - Changed RPC endpoints in `crates/tycho-indexer/src/services/rpc.rs`
 >    - Changed feature flags in any crate's `Cargo.toml`
->    - Changed CLI commands in `tycho-indexer/src/cli/`
+>    - Changed CLI commands in `crates/tycho-indexer/src/cli/`
 >    - Changed data flow or extraction pipeline logic
+>    - New DEX integrations added to `crates/tycho-simulation/src/protocol/` or `crates/tycho-execution/src/encoding/`
 > 4. For each change that affects something documented in `.claude/CODEBASE.md` or any `CLAUDE.md`, report:
 >    - The commit(s) that introduced the change
 >    - Which doc file is affected

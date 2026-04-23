@@ -16,7 +16,12 @@ gas.rs                  BlockGasPrice / GasPrice (Legacy + EIP-1559) data types
 services/
   ├─ account_extractor.rs     Fetches code, balance, storage for accounts at a block height
   ├─ token_pre_processor.rs   Fetches symbol + decimals; gracefully handles non-standard tokens
-  ├─ token_analyzer.rs        Simulates token transfers via trace_callMany; classifies token quality
+  ├─ token_analyzer/
+  │    ├─ mod.rs              Public API; re-exports EthCallDetector (primary) and TraceCallDetector (deprecated)
+  │    ├─ ethcall_detector.rs EthCallDetector — simulates token transfers via eth_call with bytecode state overrides; works on all EVM chains
+  │    ├─ trace_detector.rs   TraceCallDetector — legacy trace_callMany approach; deprecated, use EthCallDetector
+  │    ├─ common.rs           Shared helpers (token quality classification, transfer cost parsing)
+  │    └─ bytecode.rs         Compiled bytecode + ABI for Analyzer and Forwarder Solidity contracts
   └─ entrypoint_tracer/
        ├─ tracer.rs                   Traces contract execution; returns access lists + state diffs
        ├─ slot_detector.rs            Detects ERC-20 storage slot layout via trace simulation
