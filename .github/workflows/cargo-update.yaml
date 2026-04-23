@@ -36,24 +36,14 @@ jobs:
             cp "$lock" "/tmp/old-locks/$lock"
           done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
 
-      - name: Run cargo update in all workspaces
+      - name: Run cargo update in every workspace with a Cargo.lock
         run: |
-          WORKSPACES=(
-            "."
-            "protocols/substreams"
-            "protocols/substreams/ethereum-ambient"
-            "protocols/substreams/ethereum-balancer-v3"
-            "protocols/substreams/ethereum-curve"
-            "protocols/substreams/ethereum-sfrax"
-            "protocols/substreams/ethereum-sfraxeth"
-            "protocols/substreams/ethereum-uniswap-v4"
-            "protocols/testing"
-          )
-          for ws in "${WORKSPACES[@]}"; do
+          while IFS= read -r -d '' lock; do
+            ws=$(dirname "$lock")
             echo "::group::cargo update in $ws"
             (cd "$ws" && cargo update)
             echo "::endgroup::"
-          done
+          done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
 
       - name: Check for changes
         id: changes
@@ -69,11 +59,11 @@ jobs:
       - name: Check crate ages and collect too-recent crates
         if: steps.changes.outputs.changed == 'true'
         run: |
-          mkdir -p /tmp/young-crates
+          mkdir -p /tmp/recent-crates
           while IFS= read -r -d '' lock; do
             old="/tmp/old-locks/$lock"
             if [[ -f "$old" ]]; then
-              outfile="/tmp/young-crates/$(echo "$lock" | tr '/' '_').txt"
+              outfile="/tmp/recent-crates/$(echo "$lock" | tr '/' '_').txt"
               echo "::group::Checking $lock"
               # Exit code 2 means some crates are too recent (written to outfile)
               .github/scripts/check-crate-ages.sh "$old" "$lock" "$outfile" "$MIN_CRATE_AGE_DAYS" || true
@@ -84,19 +74,8 @@ jobs:
       - name: Pin back too-recent crates
         if: steps.changes.outputs.changed == 'true'
         run: |
-          WORKSPACES=(
-            "."
-            "protocols/substreams"
-            "protocols/substreams/ethereum-ambient"
-            "protocols/substreams/ethereum-balancer-v3"
-            "protocols/substreams/ethereum-curve"
-            "protocols/substreams/ethereum-sfrax"
-            "protocols/substreams/ethereum-sfraxeth"
-            "protocols/substreams/ethereum-uniswap-v4"
-            "protocols/testing"
-          )
           # Collect all unique "crate old_version" pairs across lockfiles
-          pinlist=$(cat /tmp/young-crates/*.txt 2>/dev/null | sort -u || true)
+          pinlist=$(cat /tmp/recent-crates/*.txt 2>/dev/null | sort -u || true)
           if [[ -z "$pinlist" ]]; then
             echo "No too-recent crates to pin back."
             exit 0
@@ -104,11 +83,12 @@ jobs:
           echo "Pinning back too-recent crates:"
           echo "$pinlist"
           while IFS=' ' read -r crate old_version; do
-            for ws in "${WORKSPACES[@]}"; do
+            while IFS= read -r -d '' lock; do
+              ws=$(dirname "$lock")
               echo "::group::Pin ${crate}@${old_version} in $ws"
               (cd "$ws" && cargo update -p "$crate" --precise "$old_version") || true
               echo "::endgroup::"
-            done
+            done < <(find . -name Cargo.lock -not -path '*/target/*' -print0)
           done <<< "$pinlist"
 
       - name: Re-check for changes after pinning
@@ -126,7 +106,7 @@ jobs:
         if: steps.final-changes.outputs.changed == 'true'
         id: pr-body
         run: |
-          pinlist=$(cat /tmp/young-crates/*.txt 2>/dev/null | sort -u || true)
+          pinlist=$(cat /tmp/recent-crates/*.txt 2>/dev/null | sort -u || true)
           body="Automated biweekly \`cargo update\` across all workspace lockfiles."
           body="${body}"$'\n\n'"All updated crates have been verified to be at least ${MIN_CRATE_AGE_DAYS} days old (supply chain safety check)."
           if [[ -n "$pinlist" ]]; then
