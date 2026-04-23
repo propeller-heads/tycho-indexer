@@ -78,7 +78,7 @@ mini-moka = "0.10.3"
 num-bigint = "0.4.4"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"
-tycho-substreams = "0.6.0"
+tycho-substreams = { path = "../../protocols/substreams/crates/tycho-substreams" }
 rand.workspace = true
 alloy = { workspace = true, default-features = false, features = [
     "sol-types",

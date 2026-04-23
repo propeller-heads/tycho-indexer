@@ -17,7 +17,7 @@ prost-types = "0.11"
 substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
 hex = "0.4.3"
-tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "52d5021" }
+tycho-substreams.workspace = true
 itertools = "0.12.0"
 anyhow = "1.0.75"
 

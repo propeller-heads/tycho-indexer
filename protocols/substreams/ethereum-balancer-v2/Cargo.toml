@@ -15,7 +15,7 @@ hex = "0.4.3"
 anyhow = "1.0.75"
 num-bigint = "0.4.4"
 itertools = "0.12.0"
-tycho-substreams = "0.5.1"
+tycho-substreams.workspace = true
 
 [build-dependencies]
 anyhow = "1"

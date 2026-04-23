@@ -9751,15 +9751,15 @@ dependencies = [
 
 [[package]]
 name = "tycho-substreams"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6381b4b9443e767339412f1fdfc8a2dff208563ba8901d9b5181ac148b6064b"
+version = "0.8.0"
 dependencies = [
+ "base64 0.22.1",
  "ethabi 18.0.0",
  "hex",
  "itertools 0.12.1",
  "num-bigint",
  "prost 0.11.9",
+ "rstest 0.24.0",
  "serde",
  "serde_json",
  "substreams",

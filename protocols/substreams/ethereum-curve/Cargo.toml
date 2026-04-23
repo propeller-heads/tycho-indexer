@@ -18,7 +18,7 @@ hex = "0.4.3"
 bytes = "1.5.0"
 anyhow = "1.0.75"
 num-bigint = "0.4.4"
-tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "655fae7" }
+tycho-substreams.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_qs = "0.13.0"
 itertools = "0.13.0"

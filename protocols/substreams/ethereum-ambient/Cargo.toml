@@ -8,7 +8,7 @@ name = "ethereum_ambient"
 crate-type = ["cdylib"]
 
 [dependencies]
-tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "52d5021" }
+tycho-substreams.workspace = true
 substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
 prost = "0.11"

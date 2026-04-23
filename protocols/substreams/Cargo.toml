@@ -26,6 +26,10 @@ members = [
 ]
 resolver = "2"
 
+[workspace.dependencies]
+substreams-helper = { path = "crates/substreams-helper" }
+tycho-substreams = { path = "crates/tycho-substreams" }
+
 [profile.release]
 lto = true
 opt-level = 's'
