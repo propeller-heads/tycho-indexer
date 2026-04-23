@@ -5,7 +5,6 @@ package:
 
 protobuf:
   files:
-    - tycho/evm/v1/vm.proto
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
   importPaths:
