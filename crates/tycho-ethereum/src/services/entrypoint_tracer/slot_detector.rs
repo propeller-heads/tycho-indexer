@@ -951,4 +951,52 @@ mod tests {
         trace_mock.assert();
         slot_test_mock.assert();
     }
+
+    #[test]
+    fn test_sort_slots_by_priority() {
+        let addr = Address::from([0x11u8; 20]);
+        let slot_a = Bytes::from(vec![0x01u8; 32]);
+        let slot_b = Bytes::from(vec![0x02u8; 32]);
+        let slot_c = Bytes::from(vec![0x03u8; 32]);
+
+        let original_value = U256::from(1000u64);
+
+        // Slot values at different distances from original_value (1000):
+        //   slot_a: 5000 → distance 4000
+        //   slot_b: 999  → distance 1
+        //   slot_c: 1500 → distance 500
+        let mut slots: SlotValues = vec![
+            ((addr.clone(), slot_a.clone()), U256::from(5000u64)),
+            ((addr.clone(), slot_b.clone()), U256::from(999u64)),
+            ((addr.clone(), slot_c.clone()), U256::from(1500u64)),
+        ];
+
+        SlotDetector::<TestFixtureStrategy>::sort_slots_by_priority(&mut slots, original_value);
+
+        // Expected order: slot_b (dist 1), slot_c (dist 500), slot_a (dist 4000)
+        assert_eq!(slots[0].0 .1, slot_b);
+        assert_eq!(slots[1].0 .1, slot_c);
+        assert_eq!(slots[2].0 .1, slot_a);
+    }
+
+    #[test]
+    fn test_sort_slots_by_priority_stable_on_equal_distance() {
+        let addr = Address::from([0x11u8; 20]);
+        let slot_a = Bytes::from(vec![0x01u8; 32]);
+        let slot_b = Bytes::from(vec![0x02u8; 32]);
+
+        let original_value = U256::from(1000u64);
+
+        // Both slots equidistant from original_value: 900 and 1100, both distance 100
+        let mut slots: SlotValues = vec![
+            ((addr.clone(), slot_a.clone()), U256::from(900u64)),
+            ((addr.clone(), slot_b.clone()), U256::from(1100u64)),
+        ];
+
+        SlotDetector::<TestFixtureStrategy>::sort_slots_by_priority(&mut slots, original_value);
+
+        // Stable sort preserves original order for equal keys
+        assert_eq!(slots[0].0 .1, slot_a);
+        assert_eq!(slots[1].0 .1, slot_b);
+    }
 }
