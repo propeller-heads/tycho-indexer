@@ -67,8 +67,9 @@ This repo's documentation lives in two places:
 | `crates/tycho-ethereum/CLAUDE.md` | Ethereum RPC, token analysis, entrypoint tracing |
 | `crates/tycho-client/CLAUDE.md` | Consumer library: snapshot+delta sync, feed alignment |
 | `crates/tycho-execution/CLAUDE.md` | TychoRouter contracts + Rust encoding library |
+| `crates/tycho-simulation/CLAUDE.md` | DEX simulation library: native/VM/RFQ approaches, protocol implementations |
 
-Note: `tycho-simulation` and `protocols/testing` do not yet have `CLAUDE.md` files.
+Note: `protocols/testing` does not yet have a `CLAUDE.md` file.
 
 ## Process
 
@@ -134,8 +135,11 @@ it only reports discrepancies.
 > - Compare Rust encoding module map against `crates/tycho-execution/src/` directory tree
 > - Compare swap flow description against actual contract entry points
 >
-> **tycho-simulation** (no CLAUDE.md yet — skip unless creating one):
-> - Note whether a CLAUDE.md is warranted given the crate's complexity; if so, flag it
+> **tycho-simulation** (`crates/tycho-simulation/CLAUDE.md`):
+> - Compare module map against `crates/tycho-simulation/src/` directory tree
+> - Compare native protocol list against `crates/tycho-simulation/src/evm/protocol/` subdirectories
+> - Compare VM adapter description against `crates/tycho-simulation/src/evm/protocol/vm/`
+> - Compare features table against `crates/tycho-simulation/Cargo.toml` `[features]`
 >
 > **Skill file paths**: Verify every source path referenced in `.claude/skills/sync-docs/SKILL.md` and
 > `.claude/skills/run-ci/SKILL.md` still exists.
