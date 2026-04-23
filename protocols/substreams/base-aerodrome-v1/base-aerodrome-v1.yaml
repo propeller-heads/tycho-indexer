@@ -6,9 +6,9 @@ package:
 
 protobuf:
   files:
-    - tycho/protocols/adapter-integration/evm/v1/common.proto
+    - tycho/evm/v1/common.proto
   importPaths:
-    - ../../proto/
+    - ../../../proto/
 
 binaries:
   default:
