@@ -68,8 +68,9 @@ This repo's documentation lives in two places:
 | `crates/tycho-client/CLAUDE.md` | Consumer library: snapshot+delta sync, feed alignment |
 | `crates/tycho-execution/CLAUDE.md` | TychoRouter contracts + Rust encoding library |
 | `crates/tycho-simulation/CLAUDE.md` | DEX simulation library: native/VM/RFQ approaches, protocol implementations |
+| `crates/tycho-integration-test/CLAUDE.md` | Live integration validator: CLI binary, env vars, validation loop |
 
-Note: `protocols/testing` does not yet have a `CLAUDE.md` file.
+Note: `protocols/testing` does not have a `CLAUDE.md` file.
 
 ## Process
 
@@ -134,6 +135,11 @@ it only reports discrepancies.
 > - Compare Solidity architecture against `crates/tycho-execution/contracts/`
 > - Compare Rust encoding module map against `crates/tycho-execution/src/` directory tree
 > - Compare swap flow description against actual contract entry points
+>
+> **tycho-integration-test** (`crates/tycho-integration-test/CLAUDE.md`):
+> - Compare module map against `crates/tycho-integration-test/src/` directory tree
+> - Compare env vars / CLI args against `Cli` struct in `crates/tycho-integration-test/src/main.rs`
+> - Compare validation steps against actual logic in `stream_processor/`
 >
 > **tycho-simulation** (`crates/tycho-simulation/CLAUDE.md`):
 > - Compare module map against `crates/tycho-simulation/src/` directory tree
