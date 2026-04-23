@@ -70,7 +70,10 @@ This repo's documentation lives in two places:
 | `crates/tycho-simulation/CLAUDE.md` | DEX simulation library: native/VM/RFQ approaches, protocol implementations |
 | `crates/tycho-integration-test/CLAUDE.md` | Live integration validator: CLI binary, env vars, validation loop |
 
-Note: `protocols/testing` does not have a `CLAUDE.md` file.
+| `protocols/CLAUDE.md` | Index of sub-directories |
+| `protocols/substreams/CLAUDE.md` | WASM Substreams modules: layout, templates, release process |
+| `protocols/testing/CLAUDE.md` | Integration test runner: CLI, env vars |
+| `protocols/adapter-integration/CLAUDE.md` | Foundry VM adapter tests |
 
 ## Process
 
@@ -135,6 +138,12 @@ it only reports discrepancies.
 > - Compare Solidity architecture against `crates/tycho-execution/contracts/`
 > - Compare Rust encoding module map against `crates/tycho-execution/src/` directory tree
 > - Compare swap flow description against actual contract entry points
+>
+> **protocols** (`protocols/CLAUDE.md`, `protocols/substreams/CLAUDE.md`,
+> `protocols/testing/CLAUDE.md`, `protocols/adapter-integration/CLAUDE.md`):
+> - Compare substreams protocol list against `protocols/substreams/` subdirectories
+> - Compare adapter-integration protocol list against `protocols/adapter-integration/evm/src/` and `test/`
+> - Verify release tagging instructions still match `protocols/substreams/Readme.md`
 >
 > **tycho-integration-test** (`crates/tycho-integration-test/CLAUDE.md`):
 > - Compare module map against `crates/tycho-integration-test/src/` directory tree

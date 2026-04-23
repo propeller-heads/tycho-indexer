@@ -20,11 +20,16 @@ for any protocol indexed by Tycho.
 
 ## Simulation Approaches
 
-Order of preference when integrating a new protocol:
+**Always prefer native.** If a protocol's behaviour can be ported to Rust, it should be. VM is a
+fallback for protocols too complex to port, not a default.
 
-1. **Native** — pure Rust math; fastest, preferred for simple AMMs (Uniswap V2/V3 forks)
-2. **VM** — Solidity adapter in `revm`; works for any EVM protocol, slower
-3. **RFQ** — off-chain quotes via API; for protocols that can't be simulated on-chain
+1. **Native** — pure Rust math; fastest. Use whenever the protocol logic can be expressed in Rust.
+2. **Hybrid** — native Rust math for swap calculation, but reads/updates pool state via the local
+   VM (`SimulationDB`). Use when the swap logic can be ported but state is complex to track
+   independently. Example: Fluid V1.
+3. **VM** — Solidity adapter in `revm`; works for any EVM protocol but is slower and requires an
+   adapter contract in `protocols/adapter-integration/`. Use only when native is not feasible.
+4. **RFQ** — off-chain quotes via API; for protocols that cannot be simulated on-chain at all.
 
 ## Features
 
