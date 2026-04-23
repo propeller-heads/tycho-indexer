@@ -1,3 +1,11 @@
+## [0.264.2](https://github.com/propeller-heads/tycho-indexer/compare/0.264.1...0.264.2) (2026-04-23)
+
+
+### Bug Fixes
+
+* Don't allow Curve tokens to be zero address ([5648058](https://github.com/propeller-heads/tycho-indexer/commit/56480585f5aefa32def0d45234f143976f0d58ec))
+* Don't allow Curve tokens to be zero address ([#943](https://github.com/propeller-heads/tycho-indexer/issues/943)) ([fb31205](https://github.com/propeller-heads/tycho-indexer/commit/fb31205095dedc8100ac362ff65c34429d8adf04))
+
 ## [0.264.1](https://github.com/propeller-heads/tycho-indexer/compare/0.264.0...0.264.1) (2026-04-22)
 
 
