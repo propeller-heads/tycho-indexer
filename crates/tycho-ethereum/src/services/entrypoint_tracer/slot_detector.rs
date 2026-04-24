@@ -33,8 +33,8 @@ type SlotValues = Vec<((Address, Bytes), U256)>;
 /// Type alias for the cache
 type ThreadSafeCache<K, V> = Arc<std::sync::RwLock<HashMap<K, V>>>;
 
-/// Maximum number of slot test retries per token before giving up.
-const MAX_SLOT_TEST_RETRIES: u8 = 5;
+/// Maximum number of slot candidates to test per token before giving up.
+const MAX_SLOT_CANDIDATES: usize = 5;
 
 #[derive(Debug, Clone)]
 pub(crate) struct SlotMetadata {
@@ -42,7 +42,6 @@ pub(crate) struct SlotMetadata {
     original_value: U256,
     test_value: U256,
     all_slots: SlotValues,
-    retries: u8,
 }
 
 /// Shared error type for slot detection RPC operations
@@ -450,13 +449,13 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                         detected_results.insert(token, Err(SlotDetectorError::TokenNotInTrace));
                     } else {
                         Self::sort_slots_by_priority(&mut all_slots, original_value);
+                        all_slots.truncate(MAX_SLOT_CANDIDATES);
 
                         slots_to_test.push(SlotMetadata {
                             token,
                             original_value,
                             test_value: Self::generate_test_value(original_value),
                             all_slots,
-                            retries: 0,
                         });
                     }
                 }
@@ -574,10 +573,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                                 metadata
                                     .all_slots
                                     .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
-                                metadata.retries += 1;
-                                if !metadata.all_slots.is_empty() &&
-                                    metadata.retries < MAX_SLOT_TEST_RETRIES
-                                {
+                                if !metadata.all_slots.is_empty() {
                                     warn!("Storage slot test failed - trying next slot");
                                     retry_data.push(metadata.clone());
                                 } else {
@@ -602,10 +598,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                             metadata
                                 .all_slots
                                 .retain(|s| s.0 != (storage_addr.clone(), slot.clone()));
-                            metadata.retries += 1;
-                            if !metadata.all_slots.is_empty() &&
-                                metadata.retries < MAX_SLOT_TEST_RETRIES
-                            {
+                            if !metadata.all_slots.is_empty() {
                                 warn!(
                                     token = %metadata.token,
                                     error = %e,
@@ -690,7 +683,6 @@ mod tests {
                     (Address::from([0x11u8; 20]), Bytes::from(vec![0x01u8; 32])),
                     U256::from(1000u64),
                 )],
-                retries: 0,
             },
             SlotMetadata {
                 token: Address::from([0x22u8; 20]),
@@ -700,7 +692,6 @@ mod tests {
                     (Address::from([0x22u8; 20]), Bytes::from(vec![0x02u8; 32])),
                     U256::from(3000u64),
                 )],
-                retries: 0,
             },
         ]
     }
@@ -995,7 +986,7 @@ mod tests {
     }
 
     #[test]
-    fn test_retries_below_limit_schedule_retry() {
+    fn test_failed_slot_schedules_retry_with_remaining() {
         let detector = TestFixture::create_slot_detector_without_rpc();
 
         let token = Address::from([0x11u8; 20]);
@@ -1010,7 +1001,6 @@ mod tests {
                 ((token.clone(), slot_a.clone()), U256::from(1000u64)),
                 ((token.clone(), slot_b.clone()), U256::from(900u64)),
             ],
-            retries: 0,
         }];
 
         // Response returns the original value (unchanged) → slot_a is wrong
@@ -1023,44 +1013,10 @@ mod tests {
 
         // Should schedule a retry with the remaining slot (slot_b)
         assert_eq!(retry_data.len(), 1);
-        assert_eq!(retry_data[0].retries, 1);
         assert_eq!(retry_data[0].all_slots.len(), 1);
         assert_eq!(retry_data[0].all_slots[0].0 .1, slot_b);
         // No final result yet — token is still being retried
         assert!(results.is_empty());
-    }
-
-    #[test]
-    fn test_retries_at_limit_stops_with_error() {
-        let detector = TestFixture::create_slot_detector_without_rpc();
-
-        let token = Address::from([0x11u8; 20]);
-        let slot_a = Bytes::from(vec![0x01u8; 32]);
-        let slot_b = Bytes::from(vec![0x02u8; 32]);
-
-        let slots_to_test = vec![SlotMetadata {
-            token: token.clone(),
-            original_value: U256::from(1000u64),
-            test_value: U256::from(2000u64),
-            all_slots: vec![
-                ((token.clone(), slot_a.clone()), U256::from(1000u64)),
-                ((token.clone(), slot_b.clone()), U256::from(900u64)),
-            ],
-            retries: 4, // One below MAX_SLOT_TEST_RETRIES (5)
-        }];
-
-        // Response returns the original value (unchanged) → slot_a is wrong
-        let responses =
-            vec![Ok(json!("0x00000000000000000000000000000000000000000000000000000000000003e8"))];
-
-        let mut results = HashMap::new();
-        let retry_data =
-            detector.process_slot_test_responses(responses, slots_to_test, &mut results);
-
-        // Should NOT retry — retries hit the limit
-        assert!(retry_data.is_empty());
-        // Should produce a WrongSlotError
-        assert!(matches!(results.get(&token).unwrap(), Err(SlotDetectorError::WrongSlotError(_))));
     }
 
     #[test]
