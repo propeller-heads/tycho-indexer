@@ -1,7 +1,7 @@
 use substreams::hex;
 
-pub const STETH_COMPONENT_ID: &str = "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84";
-pub const WSTETH_COMPONENT_ID: &str = "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0";
+pub const STETH_COMPONENT_ID: &str = "0xae7ab96520de3a18e5e111b5eaab095312d7fe84";
+pub const WSTETH_COMPONENT_ID: &str = "0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0";
 
 pub const STETH_ADDRESS: [u8; 20] = hex!("ae7ab96520de3a18e5e111b5eaab095312d7fe84");
 pub const WSTETH_ADDRESS: [u8; 20] = hex!("7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0");

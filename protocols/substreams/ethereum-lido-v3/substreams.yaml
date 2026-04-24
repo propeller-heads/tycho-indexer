@@ -5,10 +5,10 @@ package:
 
 protobuf:
   files:
-    - tycho/protocols/adapter-integration/evm/v1/common.proto
-    - tycho/protocols/adapter-integration/evm/v1/utils.proto
+    - tycho/evm/v1/common.proto
+    - tycho/evm/v1/utils.proto
   importPaths:
-    - ../../proto
+    - ../../../proto
 
 binaries:
   default:
