@@ -16,6 +16,13 @@ pub struct TracingConfig {
 /// Initialize tracing: apply an `EnvFilter` using the `RUST_LOG` environment variable to define the
 /// log levels, add a formatter layer logging trace events as JSON and on OpenTelemetry layer
 /// exporting trace data.
+///
+/// The OTLP layer uses `RUST_LOG_OTLP` if set, otherwise falls back to `RUST_LOG`. This allows
+/// exporting detailed spans to Tempo without flooding stdout logs:
+///
+/// ```sh
+/// RUST_LOG=info RUST_LOG_OTLP=tycho_storage::postgres=debug
+/// ```
 pub fn init_tracing(config: TracingConfig) -> Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -35,12 +42,28 @@ pub fn init_tracing(config: TracingConfig) -> Result<()> {
         .with_target(false)
         .compact();
 
+    let fmt_filter = EnvFilter::from_default_env();
+    let otlp_filter = otlp_env_filter();
+
     tracing_subscriber::registry()
-        .with(EnvFilter::from_default_env())
-        .with(otlp_layer(config)?)
-        .with(tracing_subscriber::fmt::layer().event_format(format))
+        .with(otlp_layer(config)?.with_filter(otlp_filter))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .event_format(format)
+                .with_filter(fmt_filter),
+        )
         .try_init()
         .context("initialize tracing subscriber")
+}
+
+/// Build the `EnvFilter` for the OTLP layer.
+/// Uses `RUST_LOG_OTLP` if set, otherwise falls back to `RUST_LOG` / default.
+fn otlp_env_filter() -> EnvFilter {
+    if let Ok(val) = std::env::var("RUST_LOG_OTLP") {
+        EnvFilter::new(val)
+    } else {
+        EnvFilter::from_default_env()
+    }
 }
 
 /// Create an OTLP layer exporting tracing data.
