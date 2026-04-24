@@ -1,0 +1,26 @@
+substreams_yaml_path: ./unichain-velodrome.yaml
+protocol_system: "velodrome_slipstreams"
+protocol_type_names:
+  - "velodrome_slipstreams_pool"
+module_name: "map_protocol_changes"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  # These tests are skipped because they require some specific testing logic (see comment in2_store_tick_spacing_fee.rs)
+  # Else we would need to index over 10M blocks, which would take days.
+
+  # - name: test_weth_usdc
+  #   start_block: 9386540
+  #   stop_block: 9941224
+  #   expected_components:
+  #     - id: "0x5438e884c621d5db08fa605b53ca04c5b33a623a"
+  #       tokens:
+  #         - "0x4200000000000000000000000000000000000006" # weth
+  #         - "0x078d782b760474a361dda0af3839290b0ef57ad6" # usdc
+  #       static_attributes:
+  #         default_fee: "0x1f4"
+  #         tick_spacing: "0x64"
+  #         pool_address: "0x5438e884c621d5db08fa605b53ca04c5b33a623a"
+  #       creation_tx: "0x484f3df955f08e55ddde343c34ed6ba1b02e7d1e28053493f3baf4ab0e92b48e"
+  #       skip_simulation: false
+  #       skip_execution: true
