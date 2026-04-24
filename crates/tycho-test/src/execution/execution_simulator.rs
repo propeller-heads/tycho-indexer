@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
 use alloy::{
+    eips::BlockNumberOrTag,
     hex,
-    primitives::{keccak256, Bytes},
+    primitives::{keccak256, Bytes, B256},
     rpc::{
         client::ClientBuilder,
         types::{Block, BlockId},
@@ -198,7 +199,13 @@ impl ExecutionSimulator {
         let (simulation_ids, simulation_inputs): (Vec<String>, Vec<SimulationInput>) =
             inputs.into_iter().unzip();
 
-        let block_id = BlockId::from(block.number());
+        // Pending (flashblock) blocks have a zero hash — simulate against the pending state
+        // so the RPC uses the sequencer's pre-confirmed block rather than a specific number.
+        let block_id = if block.header.hash == B256::ZERO {
+            BlockId::from(BlockNumberOrTag::Pending)
+        } else {
+            BlockId::from(block.number())
+        };
 
         let client = ClientBuilder::default().http(self.rpc_url.parse()?);
 

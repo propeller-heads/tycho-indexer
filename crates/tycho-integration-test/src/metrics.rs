@@ -66,9 +66,14 @@ pub fn initialize_metrics() {
     );
 }
 
-/// Record the duration between block timestamp and component receipt
-pub fn record_block_processing_duration(duration_seconds: f64) {
-    histogram!("tycho_integration_block_processing_duration_seconds").record(duration_seconds);
+/// Record the duration between block timestamp and component receipt.
+/// `block_type` is `"full"` for confirmed blocks and `"partial"` for flashblock updates.
+pub fn record_block_processing_duration(duration_seconds: f64, block_type: &str) {
+    histogram!(
+        "tycho_integration_block_processing_duration_seconds",
+        "block_type" => block_type.to_string()
+    )
+    .record(duration_seconds);
 }
 
 /// Record a failed get_limits operation
