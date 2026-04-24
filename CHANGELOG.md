@@ -1,3 +1,18 @@
+## [0.265.0](https://github.com/propeller-heads/tycho-indexer/compare/0.264.2...0.265.0) (2026-04-24)
+
+
+### Features
+
+* add pipeline to run cargo update periodically ([#937](https://github.com/propeller-heads/tycho-indexer/issues/937)) ([0a864a1](https://github.com/propeller-heads/tycho-indexer/commit/0a864a12987362ea811751833807156d122c22ca))
+* add pipeline to update dependencies ([de20fa0](https://github.com/propeller-heads/tycho-indexer/commit/de20fa0d719b3536b5b1a8c8833852e28d1ba717))
+* pin too-recent crates to latest safe version instead of old version ([40f776c](https://github.com/propeller-heads/tycho-indexer/commit/40f776c63a66a0f057e65fdc0ce835ff3b20ac2b))
+
+
+### Bug Fixes
+
+* exclude Cargo.lock from substreams CI trigger ([c47de9c](https://github.com/propeller-heads/tycho-indexer/commit/c47de9cc5a68d26dd51996ac11ed7ac70d44112e))
+* scope cargo-update PR to only Cargo.lock files ([f0dd6f4](https://github.com/propeller-heads/tycho-indexer/commit/f0dd6f4ba31d5e7604cb8823f3f9e5e9a7a3e7b2))
+
 ## [0.264.2](https://github.com/propeller-heads/tycho-indexer/compare/0.264.1...0.264.2) (2026-04-23)
 
 
