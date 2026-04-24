@@ -1,0 +1,10 @@
+[package]
+name = "tycho-router-model"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossbeam-deque = "0.8.6"
+rustc-hash = "2.1.2"
+serde = { version = "1.0.228", features = ["derive", "rc"] }
+serde_yaml = "0.9.34"
