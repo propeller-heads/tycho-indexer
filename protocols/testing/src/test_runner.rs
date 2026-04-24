@@ -69,6 +69,8 @@ static CLONE_TO_BASE_PROTOCOL: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| 
     HashMap::from([
         ("ethereum-sushiswap-v2", "ethereum-uniswap-v2"),
         ("ethereum-pancakeswap-v2", "ethereum-uniswap-v2"),
+        ("base-alienbase-v3", "ethereum-uniswap-v3-logs-only"),
+        ("unichain-curve", "ethereum-curve"),
     ])
 });
 
@@ -122,15 +124,10 @@ impl TestRunner {
         let adapter_contract_builder =
             AdapterContractBuilder::new(evm_path.to_string_lossy().to_string());
 
-        // Calculate config file path based on protocol. If the protocol is a clone of another
-        // protocol, we assume this protocol name will be appended to the integration test filename.
+        // Calculate config file path based on protocol. Clone protocols use their full name
+        // in the integration test filename (e.g. integration_test_unichain_curve.tycho.yaml).
         let config_file_name = if protocol != base_protocol {
-            format!(
-                "integration_test_{}.tycho.yaml",
-                protocol
-                    .replace(format!("{chain}-").as_str(), "")
-                    .replace('-', "_")
-            )
+            format!("integration_test_{}.tycho.yaml", protocol.replace('-', "_"))
         } else {
             "integration_test.tycho.yaml".to_string()
         };

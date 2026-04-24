@@ -7,7 +7,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use tracing::{error, instrument, trace, warn, Level};
+use tracing::{debug_span, error, instrument, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
         protocol::{
@@ -429,10 +429,13 @@ impl PostgresGateway {
             .iter()
             .map(|pc| pc.creation_tx.clone())
             .collect();
-        let tx_hash_id_mapping: HashMap<TxHash, i64> =
+        let tx_hash_id_mapping: HashMap<TxHash, i64> = async {
             orm::Transaction::ids_by_hash(&tx_hashes, conn)
                 .await
-                .map_err(PostgresError::from)?;
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_tx_ids"))
+        .await?;
         let pt_id = orm::ProtocolType::id_by_name(&new[0].protocol_type_name, conn)
             .await
             .map_err(|err| {
@@ -456,25 +459,31 @@ impl PostgresGateway {
         }
 
         // Insert protocol components in batches to avoid exceeding PostgreSQL parameter limit
+        let component_count = values.len();
         let mut inserted_protocol_components: Vec<(i64, String, i64, i64)> = Vec::new();
-        for chunk in values.chunks(orm::NewProtocolComponent::MAX_BATCH_SIZE) {
-            let mut batch_results = diesel::insert_into(protocol_component)
-                .values(chunk)
-                .on_conflict((schema::protocol_component::chain_id, external_id))
-                .do_nothing()
-                .returning((
-                    schema::protocol_component::id,
-                    schema::protocol_component::external_id,
-                    schema::protocol_component::protocol_system_id,
-                    schema::protocol_component::chain_id,
-                ))
-                .get_results(conn)
-                .await
-                .map_err(|err| {
-                    storage_error_from_diesel(err, "ProtocolComponent", "Batch insert", None)
-                })?;
-            inserted_protocol_components.append(&mut batch_results);
+        async {
+            for chunk in values.chunks(orm::NewProtocolComponent::MAX_BATCH_SIZE) {
+                let mut batch_results = diesel::insert_into(protocol_component)
+                    .values(chunk)
+                    .on_conflict((schema::protocol_component::chain_id, external_id))
+                    .do_nothing()
+                    .returning((
+                        schema::protocol_component::id,
+                        schema::protocol_component::external_id,
+                        schema::protocol_component::protocol_system_id,
+                        schema::protocol_component::chain_id,
+                    ))
+                    .get_results(conn)
+                    .await
+                    .map_err(|err| {
+                        storage_error_from_diesel(err, "ProtocolComponent", "Batch insert", None)
+                    })?;
+                inserted_protocol_components.append(&mut batch_results);
+            }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("insert_protocol_components", count = component_count))
+        .await?;
 
         let mut protocol_db_id_map = HashMap::new();
         for (pc_id, ex_id, ps_id, chain_id_db) in inserted_protocol_components {
@@ -523,16 +532,21 @@ impl PostgresGateway {
             })
             .collect::<Vec<(i64, Address, i16)>>();
 
-        let token_add_by_id: HashMap<Address, i64> = token
-            .inner_join(account)
-            .select((schema::account::address, schema::token::id))
-            .filter(schema::account::address.eq_any(token_addresses))
-            .into_boxed()
-            .load::<(Address, i64)>(conn)
-            .await
-            .map_err(|err| storage_error_from_diesel(err, "Token", "Several Chains", None))?
-            .into_iter()
-            .collect();
+        let token_addr_count = token_addresses.len();
+        let token_add_by_id: HashMap<Address, i64> = async {
+            token
+                .inner_join(account)
+                .select((schema::account::address, schema::token::id))
+                .filter(schema::account::address.eq_any(token_addresses))
+                .into_boxed()
+                .load::<(Address, i64)>(conn)
+                .await
+                .map_err(|err| storage_error_from_diesel(err, "Token", "Several Chains", None))
+        }
+        .instrument(debug_span!("resolve_token_ids", count = token_addr_count))
+        .await?
+        .into_iter()
+        .collect();
 
         let protocol_component_token_junction: Result<
             Vec<orm::NewProtocolComponentHoldsToken>,
@@ -551,11 +565,16 @@ impl PostgresGateway {
             })
             .collect();
 
-        diesel::insert_into(protocol_component_holds_token)
-            .values(&protocol_component_token_junction?)
-            .execute(conn)
-            .await
-            .map_err(PostgresError::from)?;
+        async {
+            diesel::insert_into(protocol_component_holds_token)
+                .values(&protocol_component_token_junction?)
+                .execute(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            Ok::<(), StorageError>(())
+        }
+        .instrument(debug_span!("insert_component_token_junction"))
+        .await?;
 
         // establish component-contract junction
         let contract_addresses: HashSet<Address> = new
@@ -585,16 +604,20 @@ impl PostgresGateway {
             })
             .collect::<Vec<(i64, Address)>>();
 
-        let contract_add_by_id: HashMap<Address, i64> = schema::contract_code::table
-            .inner_join(account)
-            .select((schema::account::address, schema::contract_code::id))
-            .filter(schema::account::address.eq_any(contract_addresses))
-            .into_boxed()
-            .load::<(Address, i64)>(conn)
-            .await
-            .map_err(|err| storage_error_from_diesel(err, "Contract", "Several Chains", None))?
-            .into_iter()
-            .collect();
+        let contract_add_by_id: HashMap<Address, i64> = async {
+            schema::contract_code::table
+                .inner_join(account)
+                .select((schema::account::address, schema::contract_code::id))
+                .filter(schema::account::address.eq_any(contract_addresses))
+                .into_boxed()
+                .load::<(Address, i64)>(conn)
+                .await
+                .map_err(|err| storage_error_from_diesel(err, "Contract", "Several Chains", None))
+        }
+        .instrument(debug_span!("resolve_contract_ids"))
+        .await?
+        .into_iter()
+        .collect();
 
         let protocol_component_contract_junction: Result<
             Vec<orm::NewProtocolComponentHoldsContract>,
@@ -612,11 +635,16 @@ impl PostgresGateway {
             })
             .collect();
 
-        diesel::insert_into(protocol_component_holds_contract)
-            .values(&protocol_component_contract_junction?)
-            .execute(conn)
-            .await
-            .map_err(PostgresError::from)?;
+        async {
+            diesel::insert_into(protocol_component_holds_contract)
+                .values(&protocol_component_contract_junction?)
+                .execute(conn)
+                .await
+                .map_err(PostgresError::from)?;
+            Ok::<(), StorageError>(())
+        }
+        .instrument(debug_span!("insert_component_contract_junction"))
+        .await?;
 
         Ok(())
     }
@@ -774,22 +802,29 @@ impl PostgresGateway {
             .map(|(tx, delta)| WithTxHash { entity: delta, tx: Some(tx.to_owned()) })
             .collect::<Vec<_>>();
 
-        let txns: HashMap<TxHash, (i64, i64, NaiveDateTime)> =
+        let txns: HashMap<TxHash, (i64, i64, NaiveDateTime)> = async {
             orm::Transaction::ids_and_ts_by_hash(new.iter().filter_map(|u| u.tx.as_ref()), conn)
                 .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(id, hash, index, ts)| (hash, (id, index, ts)))
-                .collect();
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_tx_ids"))
+        .await?
+        .into_iter()
+        .map(|(id, hash, index, ts)| (hash, (id, index, ts)))
+        .collect();
 
-        let components: HashMap<String, i64> = orm::ProtocolComponent::ids_by_external_ids(
-            new.iter()
-                .map(|state| state.component_id.as_str()),
-            chain_db_id,
-            conn,
-        )
-        .await
-        .map_err(PostgresError::from)?
+        let components: HashMap<String, i64> = async {
+            orm::ProtocolComponent::ids_by_external_ids(
+                new.iter()
+                    .map(|state| state.component_id.as_str()),
+                chain_db_id,
+                conn,
+            )
+            .await
+            .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_component_ids"))
+        .await?
         .into_iter()
         .map(|(id, external_id)| (external_id, id))
         .collect();
@@ -852,66 +887,74 @@ impl PostgresGateway {
                 .map(|b| b.entity)
                 .collect::<Vec<_>>();
             trace!(entries=?&sorted, "protocol state entries ready for versioning.");
+            let state_count = sorted.len();
             let (latest, to_archive, to_delete) =
-                apply_partitioned_versioning(&sorted, self.retention_horizon, conn).await?;
+                async { apply_partitioned_versioning(&sorted, self.retention_horizon, conn).await }
+                    .instrument(debug_span!("apply_versioning", count = state_count))
+                    .await?;
 
-            // Insert to_archive in batches if needed
-            if !to_archive.is_empty() {
-                trace!(records=?&to_archive, "Inserting archival records!");
-                for chunk in to_archive.chunks(orm::NewProtocolState::MAX_BATCH_SIZE) {
-                    diesel::insert_into(schema::protocol_state::table)
-                        .values(chunk)
+            async {
+                // Insert to_archive in batches if needed
+                if !to_archive.is_empty() {
+                    trace!(records=?&to_archive, "Inserting archival records!");
+                    for chunk in to_archive.chunks(orm::NewProtocolState::MAX_BATCH_SIZE) {
+                        diesel::insert_into(schema::protocol_state::table)
+                            .values(chunk)
+                            .execute(conn)
+                            .await
+                            .map_err(PostgresError::from)?;
+                    }
+                }
+
+                // Insert latest in batches if needed
+                let latest: Vec<orm::NewProtocolStateLatest> = latest
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+
+                if !latest.is_empty() {
+                    trace!(new_state=?&latest, "Updating active state!");
+                    for chunk in latest.chunks(orm::NewProtocolStateLatest::MAX_BATCH_SIZE) {
+                        diesel::insert_into(schema::protocol_state_default::table)
+                            .values(chunk)
+                            .on_conflict(on_constraint("protocol_state_default_unique_pk"))
+                            .do_update()
+                            .set((
+                                schema::protocol_state_default::attribute_value
+                                    .eq(excluded(schema::protocol_state_default::attribute_value)),
+                                schema::protocol_state_default::previous_value
+                                    .eq(excluded(schema::protocol_state_default::previous_value)),
+                                schema::protocol_state_default::modify_tx
+                                    .eq(excluded(schema::protocol_state_default::modify_tx)),
+                                schema::protocol_state_default::valid_from
+                                    .eq(excluded(schema::protocol_state_default::valid_from)),
+                            ))
+                            .execute(conn)
+                            .await
+                            .map_err(PostgresError::from)?;
+                    }
+                }
+
+                // remove deleted attributes from the default table
+                if !to_delete.is_empty() {
+                    let mut delete_query =
+                        diesel::delete(schema::protocol_state_default::table).into_boxed();
+                    for (component_id, attr_name) in to_delete {
+                        delete_query = delete_query.or_filter(
+                            schema::protocol_state_default::protocol_component_id
+                                .eq(component_id)
+                                .and(schema::protocol_state_default::attribute_name.eq(attr_name)),
+                        );
+                    }
+                    delete_query
                         .execute(conn)
                         .await
                         .map_err(PostgresError::from)?;
                 }
+                Ok::<(), StorageError>(())
             }
-
-            // Insert latest in batches if needed
-            let latest: Vec<orm::NewProtocolStateLatest> = latest
-                .into_iter()
-                .map(Into::into)
-                .collect();
-
-            if !latest.is_empty() {
-                trace!(new_state=?&latest, "Updating active state!");
-                for chunk in latest.chunks(orm::NewProtocolStateLatest::MAX_BATCH_SIZE) {
-                    diesel::insert_into(schema::protocol_state_default::table)
-                        .values(chunk)
-                        .on_conflict(on_constraint("protocol_state_default_unique_pk"))
-                        .do_update()
-                        .set((
-                            schema::protocol_state_default::attribute_value
-                                .eq(excluded(schema::protocol_state_default::attribute_value)),
-                            schema::protocol_state_default::previous_value
-                                .eq(excluded(schema::protocol_state_default::previous_value)),
-                            schema::protocol_state_default::modify_tx
-                                .eq(excluded(schema::protocol_state_default::modify_tx)),
-                            schema::protocol_state_default::valid_from
-                                .eq(excluded(schema::protocol_state_default::valid_from)),
-                        ))
-                        .execute(conn)
-                        .await
-                        .map_err(PostgresError::from)?;
-                }
-            }
-
-            // remove deleted attributes from the default table
-            if !to_delete.is_empty() {
-                let mut delete_query =
-                    diesel::delete(schema::protocol_state_default::table).into_boxed();
-                for (component_id, attr_name) in to_delete {
-                    delete_query = delete_query.or_filter(
-                        schema::protocol_state_default::protocol_component_id
-                            .eq(component_id)
-                            .and(schema::protocol_state_default::attribute_name.eq(attr_name)),
-                    );
-                }
-                delete_query
-                    .execute(conn)
-                    .await
-                    .map_err(PostgresError::from)?;
-            }
+            .instrument(debug_span!("insert_protocol_states", archive_count = to_archive.len()))
+            .await?;
         }
         Ok(())
     }
@@ -1046,22 +1089,32 @@ impl PostgresGateway {
             .collect::<Result<Vec<_>, StorageError>>()?;
 
         // Insert accounts in batches to avoid exceeding PostgreSQL parameter limit
-        for chunk in new_accounts.chunks(orm::NewAccount::MAX_BATCH_SIZE) {
-            diesel::insert_into(schema::account::table)
-                .values(chunk)
-                .on_conflict((schema::account::address, schema::account::chain_id))
-                .do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "Account", "batch", None))?;
+        let account_count = new_accounts.len();
+        async {
+            for chunk in new_accounts.chunks(orm::NewAccount::MAX_BATCH_SIZE) {
+                diesel::insert_into(schema::account::table)
+                    .values(chunk)
+                    .on_conflict((schema::account::address, schema::account::chain_id))
+                    .do_nothing()
+                    .execute(conn)
+                    .await
+                    .map_err(|err| storage_error_from_diesel(err, "Account", "batch", None))?;
+            }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("insert_accounts", count = account_count))
+        .await?;
 
-        let accounts: Vec<orm::Account> = schema::account::table
-            .filter(schema::account::address.eq_any(addresses))
-            .select(orm::Account::as_select())
-            .get_results::<orm::Account>(conn)
-            .await
-            .map_err(|err| storage_error_from_diesel(err, "Account", "retrieve", None))?;
+        let accounts: Vec<orm::Account> = async {
+            schema::account::table
+                .filter(schema::account::address.eq_any(addresses))
+                .select(orm::Account::as_select())
+                .get_results::<orm::Account>(conn)
+                .await
+                .map_err(|err| storage_error_from_diesel(err, "Account", "retrieve", None))
+        }
+        .instrument(debug_span!("resolve_account_ids", count = account_count))
+        .await?;
 
         let account_map: HashMap<(Vec<u8>, i64), i64> = accounts
             .iter()
@@ -1085,16 +1138,23 @@ impl PostgresGateway {
             .collect::<Result<Vec<_>, StorageError>>()?;
 
         // Insert tokens in batches to avoid exceeding PostgreSQL parameter limit
-        for chunk in new_tokens.chunks(orm::NewToken::MAX_BATCH_SIZE) {
-            diesel::insert_into(schema::token::table)
-                .values(chunk)
-                // .on_conflict(..).do_nothing() is necessary to ignore updating duplicated entries
-                .on_conflict(schema::token::account_id)
-                .do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "Token", "batch", None))?;
+        let token_count = new_tokens.len();
+        async {
+            for chunk in new_tokens.chunks(orm::NewToken::MAX_BATCH_SIZE) {
+                diesel::insert_into(schema::token::table)
+                    .values(chunk)
+                    // .on_conflict(..).do_nothing() is necessary to ignore updating duplicated
+                    // entries
+                    .on_conflict(schema::token::account_id)
+                    .do_nothing()
+                    .execute(conn)
+                    .await
+                    .map_err(|err| storage_error_from_diesel(err, "Token", "batch", None))?;
+            }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("insert_tokens", count = token_count))
+        .await?;
 
         Ok(())
     }
@@ -1110,41 +1170,49 @@ impl PostgresGateway {
                 .iter()
                 .map(|t| t.address.clone())
                 .collect();
-            schema::account::table
-                .inner_join(schema::token::table)
-                .select((schema::account::address, schema::token::id))
-                .filter(schema::account::address.eq_any(token_addresses))
-                .get_results(conn)
-                .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .collect::<HashMap<Bytes, i64>>()
+            async {
+                schema::account::table
+                    .inner_join(schema::token::table)
+                    .select((schema::account::address, schema::token::id))
+                    .filter(schema::account::address.eq_any(token_addresses))
+                    .get_results(conn)
+                    .await
+                    .map_err(PostgresError::from)
+            }
+            .instrument(debug_span!("resolve_token_ids"))
+            .await?
+            .into_iter()
+            .collect::<HashMap<Bytes, i64>>()
         };
         use schema::token::dsl::*;
-        for t in tokens.iter() {
-            if let Some(db_id) = address_to_db_id.get(&t.address) {
-                let gas_val = t
-                    .gas
-                    .iter()
-                    .map(|v| v.map(|g| g as i64))
-                    .collect::<Vec<_>>();
-                diesel::update(schema::token::table)
-                    .set((
-                        symbol.eq(&t.symbol),
-                        decimals.eq(t.decimals as i32),
-                        tax.eq(t.tax as i64),
-                        quality.eq(t.quality as i32),
-                        gas.eq(gas_val),
-                    ))
-                    .filter(id.eq(db_id))
-                    .execute(conn)
-                    .await
-                    .map_err(PostgresError::from)?;
-            } else {
-                // TODO: add address as attribute
-                warn!(address=?&t.address, "Tried to update non existing token! Consider inserting it first!");
+        async {
+            for t in tokens.iter() {
+                if let Some(db_id) = address_to_db_id.get(&t.address) {
+                    let gas_val = t
+                        .gas
+                        .iter()
+                        .map(|v| v.map(|g| g as i64))
+                        .collect::<Vec<_>>();
+                    diesel::update(schema::token::table)
+                        .set((
+                            symbol.eq(&t.symbol),
+                            decimals.eq(t.decimals as i32),
+                            tax.eq(t.tax as i64),
+                            quality.eq(t.quality as i32),
+                            gas.eq(gas_val),
+                        ))
+                        .filter(id.eq(db_id))
+                        .execute(conn)
+                        .await
+                        .map_err(PostgresError::from)?;
+                } else {
+                    warn!(address=?&t.address, "Tried to update non existing token! Consider inserting it first!");
+                }
             }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("update_token_rows"))
+        .await?;
         Ok(())
     }
 
@@ -1161,30 +1229,39 @@ impl PostgresGateway {
             .iter()
             .map(|component_balance| component_balance.token.clone())
             .collect();
-        let token_ids: HashMap<Address, i64> = token
-            .inner_join(account)
-            .select((schema::account::address, schema::token::id))
-            .filter(schema::account::address.eq_any(&token_addresses))
-            .load::<(Address, i64)>(conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .collect();
+        let token_count = token_addresses.len();
+        let token_ids: HashMap<Address, i64> = async {
+            token
+                .inner_join(account)
+                .select((schema::account::address, schema::token::id))
+                .filter(schema::account::address.eq_any(&token_addresses))
+                .load::<(Address, i64)>(conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_token_ids", count = token_count))
+        .await?
+        .into_iter()
+        .collect();
 
         let modify_txs: HashSet<TxHash> = component_balances
             .iter()
             .map(|component_balance| component_balance.modify_tx.clone())
             .collect();
 
-        let transaction_ids_and_ts: HashMap<TxHash, (i64, i64, NaiveDateTime)> =
+        let tx_count = modify_txs.len();
+        let transaction_ids_and_ts: HashMap<TxHash, (i64, i64, NaiveDateTime)> = async {
             orm::Transaction::ids_and_ts_by_hash(modify_txs.iter(), conn)
                 .await
-                .map_err(PostgresError::from)?
-                .into_iter()
-                .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
-                .collect();
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_tx_ids", count = tx_count))
+        .await?
+        .into_iter()
+        .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
+        .collect();
 
-        let protocol_component_ids: HashMap<String, i64> =
+        let protocol_component_ids: HashMap<String, i64> = async {
             orm::ProtocolComponent::ids_by_external_ids(
                 component_balances
                     .iter()
@@ -1193,10 +1270,13 @@ impl PostgresGateway {
                 conn,
             )
             .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(component_id, external_id)| (external_id, component_id))
-            .collect();
+            .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_component_ids"))
+        .await?
+        .into_iter()
+        .map(|(component_id, external_id)| (external_id, component_id))
+        .collect();
 
         let mut new_component_balances = Vec::new();
         for component_balance in component_balances.iter() {
@@ -1242,53 +1322,62 @@ impl PostgresGateway {
                 .map(|b| b.entity)
                 .collect::<Vec<_>>();
 
+            let balance_count = sorted.len();
             let (latest, to_archive, _) =
-                apply_partitioned_versioning(&sorted, self.retention_horizon, conn).await?;
+                async { apply_partitioned_versioning(&sorted, self.retention_horizon, conn).await }
+                    .instrument(debug_span!("apply_versioning", count = balance_count))
+                    .await?;
 
             // Insert to_archive in batches if needed
-            if !to_archive.is_empty() {
-                for chunk in to_archive.chunks(orm::NewComponentBalance::MAX_BATCH_SIZE) {
-                    diesel::insert_into(schema::component_balance::table)
-                        .values(chunk)
-                        .execute(conn)
-                        .await
-                        .map_err(|err| {
-                            storage_error_from_diesel(err, "ComponentBalance", "batch", None)
-                        })?;
+            async {
+                if !to_archive.is_empty() {
+                    for chunk in to_archive.chunks(orm::NewComponentBalance::MAX_BATCH_SIZE) {
+                        diesel::insert_into(schema::component_balance::table)
+                            .values(chunk)
+                            .execute(conn)
+                            .await
+                            .map_err(|err| {
+                                storage_error_from_diesel(err, "ComponentBalance", "batch", None)
+                            })?;
+                    }
                 }
-            }
 
-            // Insert latest in batches if needed
-            let latest = latest
-                .into_iter()
-                .map(orm::NewComponentBalanceLatest::from)
-                .collect::<Vec<_>>();
+                // Insert latest in batches if needed
+                let latest = latest
+                    .into_iter()
+                    .map(orm::NewComponentBalanceLatest::from)
+                    .collect::<Vec<_>>();
 
-            if !latest.is_empty() {
-                for chunk in latest.chunks(orm::NewComponentBalanceLatest::MAX_BATCH_SIZE) {
-                    diesel::insert_into(schema::component_balance_default::table)
-                        .values(chunk)
-                        .on_conflict(on_constraint("component_balance_default_unique_pk"))
-                        .do_update()
-                        .set((
-                            schema::component_balance_default::new_balance
-                                .eq(excluded(schema::component_balance_default::new_balance)),
-                            schema::component_balance_default::balance_float
-                                .eq(excluded(schema::component_balance_default::balance_float)),
-                            schema::component_balance_default::previous_value
-                                .eq(excluded(schema::component_balance_default::previous_value)),
-                            schema::component_balance_default::modify_tx
-                                .eq(excluded(schema::component_balance_default::modify_tx)),
-                            schema::component_balance_default::valid_from
-                                .eq(excluded(schema::component_balance_default::valid_from)),
-                        ))
-                        .execute(conn)
-                        .await
-                        .map_err(|err| {
-                            storage_error_from_diesel(err, "ComponentBalance", "batch", None)
-                        })?;
+                if !latest.is_empty() {
+                    for chunk in latest.chunks(orm::NewComponentBalanceLatest::MAX_BATCH_SIZE) {
+                        diesel::insert_into(schema::component_balance_default::table)
+                            .values(chunk)
+                            .on_conflict(on_constraint("component_balance_default_unique_pk"))
+                            .do_update()
+                            .set((
+                                schema::component_balance_default::new_balance
+                                    .eq(excluded(schema::component_balance_default::new_balance)),
+                                schema::component_balance_default::balance_float
+                                    .eq(excluded(schema::component_balance_default::balance_float)),
+                                schema::component_balance_default::previous_value.eq(excluded(
+                                    schema::component_balance_default::previous_value,
+                                )),
+                                schema::component_balance_default::modify_tx
+                                    .eq(excluded(schema::component_balance_default::modify_tx)),
+                                schema::component_balance_default::valid_from
+                                    .eq(excluded(schema::component_balance_default::valid_from)),
+                            ))
+                            .execute(conn)
+                            .await
+                            .map_err(|err| {
+                                storage_error_from_diesel(err, "ComponentBalance", "batch", None)
+                            })?;
+                    }
                 }
+                Ok::<(), StorageError>(())
             }
+            .instrument(debug_span!("insert_component_balances", archive_count = to_archive.len()))
+            .await?;
         }
         Ok(())
     }

@@ -11,7 +11,7 @@ use crate::common::HasAddresser;
 /// Utility struct to easily filter events and assign them handlers.
 ///
 /// Usage:
-/// ```
+/// ```ignore
 /// let eh = EventHandler::new(&block);
 /// eh.filter_by_address(store); // This is optional, if omitted it will handle all events that match the type, independently of the emitting contract.
 /// eh.on::<Transfer, _>(&mut on_transfer);
@@ -27,7 +27,7 @@ use crate::common::HasAddresser;
 /// function or by wrapping it in {...})
 ///
 /// Like so:
-/// ```
+/// ```ignore
 /// let mut balances : Vec<Balance> = vec![];
 /// {
 ///     let mut on_transfer = |/*...*/| {
