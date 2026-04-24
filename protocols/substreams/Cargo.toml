@@ -23,6 +23,7 @@ members = [
     "ethereum-fluid",
     "base-aerodrome-slipstreams",
     "ethereum-erc4626",
+    "base-aerodrome-v1",
 ]
 resolver = "2"
 
