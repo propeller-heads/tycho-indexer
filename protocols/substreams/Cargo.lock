@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "ethereum-rocketpool"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "ethabi 18.0.0",
