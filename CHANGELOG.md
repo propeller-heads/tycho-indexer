@@ -1,3 +1,11 @@
+## [0.267.0](https://github.com/propeller-heads/tycho-indexer/compare/0.266.0...0.267.0) (2026-04-24)
+
+
+### Features
+
+* **tracing:** add more debug spans ([e6f52ad](https://github.com/propeller-heads/tycho-indexer/commit/e6f52adc0f52b6705982db225cd179d274c76daa))
+* **tracing:** add more debug spans ([#949](https://github.com/propeller-heads/tycho-indexer/issues/949)) ([853ca1a](https://github.com/propeller-heads/tycho-indexer/commit/853ca1a0d45ac2e72f092d192d6bff5efeb19551))
+
 ## [0.266.0](https://github.com/propeller-heads/tycho-indexer/compare/0.265.0...0.266.0) (2026-04-24)
 
 
