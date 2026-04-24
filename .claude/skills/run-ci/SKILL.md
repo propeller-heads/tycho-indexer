@@ -7,7 +7,7 @@ user-invocable: true
 # Run CI Locally
 
 Run the same checks that GitHub Actions CI runs, locally, to catch failures before they hit the
-remote pipeline. The canonical commands live in `.github/workflows/ci.yaml`.
+remote pipeline. The canonical commands live in `.github/workflows/ci-rust.yaml`.
 
 ## Environment
 
@@ -23,7 +23,7 @@ Environment variables needed for DB tests can be configured in `.claude/settings
 ```
 
 DB tests require both `DATABASE_URL` set AND a running Postgres instance (see
-`tycho-storage/README.md` for setup). Tests marked `#[ignore]` require `RPC_URL` pointing to an
+`crates/tycho-storage/README.md` for setup). Tests marked `#[ignore]` require `RPC_URL` pointing to an
 Ethereum archive node with **debug APIs enabled** (Erigon, Reth with `--http.api debug`) —
 standard providers like Alchemy/Infura do not support `debug_storageRangeAt` and will cause
 failures. These tests are skipped unless `RPC_URL` is set.
@@ -57,13 +57,13 @@ If `DATABASE_URL` is not set, mark DB as unavailable:
 If `DATABASE_URL` IS set, run migrations to ensure the schema is up to date:
 
 ```bash
-diesel migration run --migration-dir ./tycho-storage/migrations
+diesel migration run --migration-dir ./crates/tycho-storage/migrations
 ```
 
 If migrations fail with "already exists" errors (stale schema), reset the database:
 
 ```bash
-diesel database reset --migration-dir ./tycho-storage/migrations
+diesel database reset --migration-dir ./crates/tycho-storage/migrations
 ```
 
 If the reset fails because other connections are active, terminate them first using `psql` then
@@ -84,8 +84,8 @@ checks run). Otherwise, map changed file patterns to check categories:
 
 | File pattern | Category |
 |---|---|
-| `tycho-*/src/**/*.rs`, `Cargo.toml`, `Cargo.lock` | `rust` |
-| `tycho-client-py/**` | `python` |
+| `crates/tycho-*/src/**/*.rs`, `Cargo.toml`, `Cargo.lock` | `rust` |
+| `crates/tycho-client-py/**` | `python` |
 | `.github/workflows/**` | `ci` (always run full) |
 
 If only `python` files changed, skip Rust format/clippy/tests entirely and only run Python checks.
@@ -190,7 +190,7 @@ To run the full suite including DB tests:
    a) Per-session:    export DATABASE_URL="postgres://postgres:mypassword@localhost:5431/tycho_indexer_0"
    b) Persistent:     Add to .claude/settings.local.json:
                       { "env": { "DATABASE_URL": "postgres://postgres:mypassword@localhost:5431/tycho_indexer_0" } }
-3. Run migrations:  diesel migration run --migration-dir ./tycho-storage/migrations
+3. Run migrations:  diesel migration run --migration-dir ./crates/tycho-storage/migrations
 4. Re-run:          /run-ci
 ```
 

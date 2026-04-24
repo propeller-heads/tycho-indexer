@@ -14,7 +14,6 @@ num-bigint       = { workspace = true }
 num-traits       = { workspace = true }
 num-rational     = "0.4.2"
 alloy            = { workspace = true, features = ["arbitrary", "json", "dyn-abi", "sol-types", "contract", "provider-http", "providers", "signer-local", "rpc-types-eth", "rpc-types-trace"] }
-reqwest          = { workspace = true }
 tokio            = { workspace = true }
 futures          = { workspace = true }
 serde_json       = { workspace = true }
@@ -27,11 +26,9 @@ postgres         = "0.19.10"
 tokio-postgres   = "0.7"
 serde_yaml       = "0.9.34"
 dotenv           = { workspace = true }
-async-trait      = { workspace = true }
 colored          = "3.0.0"
 similar          = "2.7.0"
 termsize         = "0.1.9"
 itertools        = { workspace = true }
-tokio-retry2     = { version = "0.6.0", features = ["jitter"] }
 regex            = "1.11.1"
 tempfile         = "3.8.1"

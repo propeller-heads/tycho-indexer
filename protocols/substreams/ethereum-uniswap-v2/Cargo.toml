@@ -12,8 +12,6 @@ substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
 prost = "0.11"
 ethabi = "18.0.0"
-anyhow = "1.0.75"
-hex-literal = "0.4.1"
 substreams-helper = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
 tycho-substreams = { git = "https://github.com/propeller-heads/tycho-protocol-sdk.git", rev = "b8aeaa3" }
 num-bigint = "0.4.4"

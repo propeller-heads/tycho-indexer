@@ -602,6 +602,7 @@ where
         Ok(combined_balances)
     }
 
+    #[instrument(skip_all, fields(new_tokens_count))]
     async fn construct_currency_tokens(
         &self,
         msg: &BlockChanges,
@@ -686,6 +687,7 @@ where
             .flatten()
             .map(|t| (t.address.clone(), t));
 
+        tracing::Span::current().record("new_tokens_count", unknown_tokens.len());
         if !unknown_tokens.is_empty() {
             debug!(?unknown_tokens, block_number = msg.block.number, "NewTokens");
         }
@@ -705,6 +707,7 @@ where
     ///
     /// This includes updating the reorg buffer, committing to the database, emitting sync updates
     /// and metrics and aggregating the changes).
+    #[instrument(skip_all, fields(block_number = msg.block.number, final_block_height))]
     async fn process_full_block_message(
         &self,
         msg: BlockChanges,
@@ -749,12 +752,16 @@ where
             let (extractor_name, chain) = (self.name.clone(), self.chain);
 
             if let Some(db_commit_handle_to_join) = commit_handle_guard.take() {
-                let awaited_commit = !db_commit_handle_to_join
+                let needs_await = !db_commit_handle_to_join
                     .inner()
                     .is_finished();
                 let now = chrono::Utc::now().naive_utc();
 
-                match db_commit_handle_to_join.await {
+                let result = db_commit_handle_to_join
+                    .instrument(info_span!("await_previous_commit"))
+                    .await;
+
+                match result {
                     Ok(Ok(())) => {}
                     Ok(Err(storage_err)) => {
                         return Err(storage_err);
@@ -766,7 +773,7 @@ where
                     }
                 }
 
-                if awaited_commit {
+                if needs_await {
                     let wait_time = chrono::Utc::now()
                         .naive_utc()
                         .signed_duration_since(now);
@@ -798,14 +805,17 @@ where
                 .record(now.elapsed().as_millis() as f64);
 
                 Ok(())
-            }).instrument(info_span!(
+            });
+            let commit_span = info_span!(
                 parent: None,
                 "commit_blocks_task",
                 batch_size,
                 block_height = last_block_height,
                 extractor_id = self.name.clone(),
                 chain = %self.chain,
-            ));
+            );
+            commit_span.follows_from(tracing::Span::current().id());
+            let new_handle = new_handle.instrument(commit_span);
 
             *commit_handle_guard = Some(new_handle);
 

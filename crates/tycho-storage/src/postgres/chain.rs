@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use diesel::prelude::*;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use tracing::{instrument, warn};
+use tracing::{debug_span, instrument, warn, Instrument};
 use tycho_common::{
     models::{blockchain::*, BlockHash, TxHash},
     storage::{BlockIdentifier, StorageError},
@@ -39,21 +39,27 @@ impl PostgresGateway {
 
         // Insert in batches to avoid exceeding PostgreSQL parameter limit
         // assumes that block with the same hash will not appear with different values
-        for chunk in new_blocks.chunks(orm::NewBlock::MAX_BATCH_SIZE) {
-            diesel::insert_into(block)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|err| {
-                    storage_error_from_diesel(
-                        err,
-                        "Block",
-                        &format!("Batch: {} and {} more", &chunk[0].hash, chunk.len() - 1),
-                        None,
-                    )
-                })?;
+        let block_count = new_blocks.len();
+        async {
+            for chunk in new_blocks.chunks(orm::NewBlock::MAX_BATCH_SIZE) {
+                diesel::insert_into(block)
+                    .values(chunk)
+                    .on_conflict_do_nothing()
+                    .execute(conn)
+                    .await
+                    .map_err(|err| {
+                        storage_error_from_diesel(
+                            err,
+                            "Block",
+                            &format!("Batch: {} and {} more", &chunk[0].hash, chunk.len() - 1),
+                            None,
+                        )
+                    })?;
+            }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("insert_blocks", count = block_count))
+        .await?;
         Ok(())
     }
 
@@ -101,21 +107,29 @@ impl PostgresGateway {
             .iter()
             .map(|n| n.block_hash.clone())
             .collect_vec();
-        let parent_blocks = schema::block::table
-            .filter(schema::block::hash.eq_any(&block_hashes))
-            .select((schema::block::hash, schema::block::id))
-            .get_results::<(Bytes, i64)>(conn)
-            .await
-            .map_err(|err| {
-                storage_error_from_diesel(
-                    err,
-                    "Transaction",
-                    &format!("Batch: {:x} and {} more", &block_hashes[0], block_hashes.len() - 1),
-                    Some("Block".to_owned()),
-                )
-            })?
-            .into_iter()
-            .collect::<HashMap<_, _>>();
+        let parent_blocks = async {
+            schema::block::table
+                .filter(schema::block::hash.eq_any(&block_hashes))
+                .select((schema::block::hash, schema::block::id))
+                .get_results::<(Bytes, i64)>(conn)
+                .await
+                .map_err(|err| {
+                    storage_error_from_diesel(
+                        err,
+                        "Transaction",
+                        &format!(
+                            "Batch: {:x} and {} more",
+                            &block_hashes[0],
+                            block_hashes.len() - 1
+                        ),
+                        Some("Block".to_owned()),
+                    )
+                })
+        }
+        .instrument(debug_span!("resolve_block_ids", count = block_hashes.len()))
+        .await?
+        .into_iter()
+        .collect::<HashMap<_, _>>();
 
         let orm_txns = new
             .iter()
@@ -142,21 +156,27 @@ impl PostgresGateway {
 
         // Insert in batches to avoid exceeding PostgreSQL parameter limit
         // assumes that tx with the same hash will not appear with different values
-        for chunk in orm_txns.chunks(orm::NewTransaction::MAX_BATCH_SIZE) {
-            diesel::insert_into(transaction)
-                .values(chunk)
-                .on_conflict_do_nothing()
-                .execute(conn)
-                .await
-                .map_err(|err| {
-                    storage_error_from_diesel(
-                        err,
-                        "Transaction",
-                        &format!("Batch {:x} and {} more", &chunk[0].hash, chunk.len() - 1),
-                        None,
-                    )
-                })?;
+        let total_txns = orm_txns.len();
+        async {
+            for chunk in orm_txns.chunks(orm::NewTransaction::MAX_BATCH_SIZE) {
+                diesel::insert_into(transaction)
+                    .values(chunk)
+                    .on_conflict_do_nothing()
+                    .execute(conn)
+                    .await
+                    .map_err(|err| {
+                        storage_error_from_diesel(
+                            err,
+                            "Transaction",
+                            &format!("Batch {:x} and {} more", &chunk[0].hash, chunk.len() - 1),
+                            None,
+                        )
+                    })?;
+            }
+            Ok::<(), StorageError>(())
         }
+        .instrument(debug_span!("insert_transactions", count = total_txns))
+        .await?;
         Ok(())
     }
 
