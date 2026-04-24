@@ -17,8 +17,38 @@ fi
 package=$1
 yaml_name=$2
 
-# Fetch version from Cargo.toml
-cargo_version=$(cargo pkgid -p "$package" | cut -d# -f2 | cut -d: -f2)
+# Resolve package metadata from Cargo.toml (supports nested package paths)
+cargo_toml="./$package/Cargo.toml"
+if [[ ! -f "$cargo_toml" ]]; then
+    echo "Error: Cargo.toml not found at $cargo_toml"
+    exit 1
+fi
+
+cargo_package_name=$(awk '
+    /^\[package\]/ { in_package=1; next }
+    /^\[/ && in_package { in_package=0 }
+    in_package && $1 == "name" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+    }
+' "$cargo_toml")
+
+cargo_version=$(awk '
+    /^\[package\]/ { in_package=1; next }
+    /^\[/ && in_package { in_package=0 }
+    in_package && $1 == "version" {
+        gsub(/"/, "", $3)
+        print $3
+        exit
+    }
+' "$cargo_toml")
+
+if [[ -z "$cargo_package_name" || -z "$cargo_version" ]]; then
+    echo "Error: Unable to parse package name/version from $cargo_toml"
+    exit 1
+fi
+
 version="v${cargo_version}"
 
 # Construct the YAML file path
@@ -55,8 +85,8 @@ fi
 
 set -e  # Exit the script if any command fails
 
-# Build the package
-cargo build --target wasm32-unknown-unknown --release -p "$package"
+# Build the package (using resolved Cargo package name)
+cargo build --target wasm32-unknown-unknown --release -p "$cargo_package_name"
 
 # Create output directory
 mkdir -p ./target/spkg/
