@@ -38,7 +38,7 @@ thiserror  = { workspace = true }
 tokio      = { workspace = true }
 tycho-common = { workspace = true }
 typetag    = { workspace = true, optional = true }
-alloy      = { workspace = true, features = ["providers", "rpc-types-eth", "eip712", "signer-local", "node-bindings"], optional = true }
+alloy      = { workspace = true, features = ["providers", "rpc-types-eth", "eip712", "signer-local", "node-bindings", "sol-types"], optional = true }
 async-trait = { workspace = true, optional = true }
 
 [dev-dependencies]

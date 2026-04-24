@@ -8,6 +8,7 @@ mod ekubo_v3;
 mod erc_4626;
 mod etherfi;
 mod fluid_v1;
+mod fluid_v2;
 mod hashflow;
 mod liquidity_party;
 mod liquorice;
