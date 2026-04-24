@@ -1,3 +1,15 @@
+## [0.270.0](https://github.com/propeller-heads/tycho-indexer/compare/0.269.0...0.270.0) (2026-04-24)
+
+
+### Features
+
+* ekubo_v3 substreams ([#935](https://github.com/propeller-heads/tycho-indexer/issues/935)) ([c424f86](https://github.com/propeller-heads/tycho-indexer/commit/c424f86bb26f48c5c8eff61fcb72048e0940aab6))
+
+
+### Bug Fixes
+
+* address ekubo v3 substreams ci ([2a25b64](https://github.com/propeller-heads/tycho-indexer/commit/2a25b64ed84abd978045caa1c93d416b3ec7e9e1))
+
 ## [0.269.0](https://github.com/propeller-heads/tycho-indexer/compare/0.268.0...0.269.0) (2026-04-24)
 
 
