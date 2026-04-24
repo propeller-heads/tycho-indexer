@@ -1,6 +1,6 @@
 [package]
 name = "ethereum-liquidityparty"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [lib]
@@ -10,16 +10,13 @@ crate-type = ["cdylib"]
 [dependencies]
 substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
-prost = "0.11"
 tycho-substreams =  "0.6.0"
 anyhow = "1.0.95"
 ethabi = "18.0.0"
 num-bigint = "0.4.6"
 hex = "0.4.3"
-itertools = "0.13.0"
 serde = "1.0.217"
 serde_qs = "0.13.0"
-serde-sibor = "0.1.0"
 
 [build-dependencies]
 anyhow = "1"
