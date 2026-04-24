@@ -481,16 +481,28 @@ async fn run(cli: Cli) -> miette::Result<()> {
     Ok(())
 }
 
+enum BlockPollResult {
+    /// Block numbers match; simulation can proceed.
+    Ready(Block),
+    /// Tycho is behind the RPC. Carries the target block's timestamp (if fetchable) so latency
+    /// can still be recorded before the update is skipped.
+    Stale { target_block_timestamp: Option<u64> },
+    /// RPC never reached the target block within the allowed attempts.
+    Timeout,
+}
+
 /// Polls the RPC until it reaches the target block number.
 ///
-/// Returns `Some(block)` when the RPC block matches `target_block`, or `None` if the update
-/// is behind the RPC (stale) or we exhaust all polling attempts (RPC too slow).
+/// Returns [`BlockPollResult::Ready`] when the RPC block matches `target_block`,
+/// [`BlockPollResult::Stale`] if the update is already behind the RPC (includes the target
+/// block's timestamp for latency recording), or [`BlockPollResult::Timeout`] if the RPC never
+/// caught up within `max_attempts`.
 async fn poll_rpc_for_block(
     rpc_tools: &tycho_test::RPCTools,
     target_block: u64,
     max_attempts: u32,
     poll_interval: Duration,
-) -> miette::Result<Option<Block>> {
+) -> miette::Result<BlockPollResult> {
     for attempt in 0..max_attempts {
         let block = match rpc_tools
             .provider
@@ -520,15 +532,26 @@ async fn poll_rpc_for_block(
                  skipping to catch up."
             );
             metrics::record_protocol_update_block_delay(delay);
-            metrics::record_protocol_update_skipped();
-            return Ok(None);
+
+            // Fetch the target block so we can record accurate latency even though simulation
+            // will be skipped — excluding stale blocks would bias the histogram toward
+            // fast updates only.
+            let target_block_timestamp = rpc_tools
+                .provider
+                .get_block_by_number(BlockNumberOrTag::Number(target_block))
+                .await
+                .ok()
+                .flatten()
+                .map(|b| b.header.timestamp);
+
+            return Ok(BlockPollResult::Stale { target_block_timestamp });
         }
 
         if rpc_block == target_block {
             if attempt > 0 {
                 debug!("RPC caught up to block {target_block} after {} poll(s)", attempt);
             }
-            return Ok(Some(block));
+            return Ok(BlockPollResult::Ready(block));
         }
 
         // RPC is behind — wait and retry
@@ -541,7 +564,7 @@ async fn poll_rpc_for_block(
         tokio::time::sleep(poll_interval).await;
     }
 
-    Ok(None)
+    Ok(BlockPollResult::Timeout)
 }
 
 async fn process_update(
@@ -596,7 +619,7 @@ async fn process_update(
         let update_block_number = update.update.block_number_or_timestamp;
         let poll_interval = Duration::from_millis(cli.rpc_poll_interval_ms);
 
-        let block = poll_rpc_for_block(
+        let poll_result = poll_rpc_for_block(
             &rpc_tools,
             update_block_number,
             cli.rpc_poll_attempts,
@@ -604,9 +627,22 @@ async fn process_update(
         )
         .await?;
 
-        let block = match block {
-            Some(b) => Arc::new(b),
-            None => {
+        let block = match poll_result {
+            BlockPollResult::Ready(b) => {
+                let latency_seconds =
+                    update.received_at.as_secs_f64() - b.header.timestamp as f64;
+                metrics::record_block_processing_duration(latency_seconds);
+                Arc::new(b)
+            }
+            BlockPollResult::Stale { target_block_timestamp } => {
+                if let Some(ts) = target_block_timestamp {
+                    let latency_seconds = update.received_at.as_secs_f64() - ts as f64;
+                    metrics::record_block_processing_duration(latency_seconds);
+                }
+                metrics::record_protocol_update_skipped();
+                return Ok(());
+            }
+            BlockPollResult::Timeout => {
                 warn!(
                     "Timed out waiting for RPC to reach update block {update_block_number}, \
                      skipping."
@@ -615,11 +651,6 @@ async fn process_update(
                 return Ok(());
             }
         };
-
-        // Block numbers match — record latency against the correct block
-        let latency_seconds =
-            (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
-        metrics::record_block_processing_duration(latency_seconds);
 
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
