@@ -1,3 +1,20 @@
+## [0.266.0](https://github.com/propeller-heads/tycho-indexer/compare/0.265.0...0.266.0) (2026-04-24)
+
+
+### Features
+
+* add workflow to detect deps with vulnerabilities ([7bd4199](https://github.com/propeller-heads/tycho-indexer/commit/7bd419975d1a57877fd2a957faa4998cdd16488b))
+* add workflow to detect deps with vulnerabilities ([#917](https://github.com/propeller-heads/tycho-indexer/issues/917)) ([f878c36](https://github.com/propeller-heads/tycho-indexer/commit/f878c365b56ce27c5497c33e9f6a17cc79fcf2cf))
+
+
+### Bug Fixes
+
+* add cargo audit exception for tracing-subscriber ([07e8886](https://github.com/propeller-heads/tycho-indexer/commit/07e8886c116b57c7d11328735abea6a298e608f4))
+* bump dependency with vulnerability ([a4164b9](https://github.com/propeller-heads/tycho-indexer/commit/a4164b960ace5de8ba921c190cbc9b15a2e71ce1))
+* ignore doctests ([6c9cbbe](https://github.com/propeller-heads/tycho-indexer/commit/6c9cbbe4aad441858b85586dbf8a76f4bd4498a4))
+* remove unused dependencies ([ea46bad](https://github.com/propeller-heads/tycho-indexer/commit/ea46bad476c285cec4e06e8ee9d71a9433c96fec))
+* update alloy version with known vulnerabilities ([1cd4231](https://github.com/propeller-heads/tycho-indexer/commit/1cd423107b631171952c79ee6fa91e5cb863ec38))
+
 ## [0.265.0](https://github.com/propeller-heads/tycho-indexer/compare/0.264.2...0.265.0) (2026-04-24)
 
 
