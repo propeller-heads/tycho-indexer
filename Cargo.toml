@@ -11,6 +11,7 @@ members = [
     "crates/tycho-test",
     "crates/tycho-integration-test",
     "crates/tycho-execution",
+    "crates/tycho-execution/model",
     "protocols/testing",
 ]
 # protocols/substreams/ is intentionally excluded — separate WASM workspace, different toolchain
