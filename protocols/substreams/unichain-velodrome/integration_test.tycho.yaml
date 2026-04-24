@@ -5,9 +5,9 @@ protocol_type_names:
 module_name: "map_protocol_changes"
 skip_balance_check: true
 initialized_accounts:
-tests:
-  # These tests are skipped because they require some specific testing logic (see comment in2_store_tick_spacing_fee.rs)
-  # Else we would need to index over 10M blocks, which would take days.
+# These tests are skipped because they require some specific testing logic (see comment in 2_store_tick_spacing_fee.rs)
+# Else we would need to index over 10M blocks, which would take days.
+tests: []
 
   # - name: test_weth_usdc
   #   start_block: 9386540

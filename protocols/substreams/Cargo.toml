@@ -25,6 +25,7 @@ members = [
     "ethereum-erc4626",
     "ethereum-rocketpool",
     "unichain-velodrome",
+    "ethereum-liquidityparty",
 ]
 resolver = "2"
 
