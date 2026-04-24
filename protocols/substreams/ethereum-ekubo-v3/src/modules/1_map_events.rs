@@ -103,7 +103,8 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     delta1,
                 }),
             )
-        } else if let Some(ev) = core_events::PoolInitialized::match_and_decode(log) {
+        } else {
+            let ev = core_events::PoolInitialized::match_and_decode(log)?;
             let extension = EvmPoolConfig::try_from(FixedBytes(ev.pool_key.2))
                 .expect("pool config to parse successfully")
                 .extension;
@@ -123,8 +124,6 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                         .contains(&extension),
                 }),
             )
-        } else {
-            return None;
         }
     } else if emitter == TWAMM_ADDRESS {
         if log.topics.is_empty() {
@@ -139,7 +138,8 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     token1_rate: data[46..60].to_vec(),
                 }),
             )
-        } else if let Some(ev) = twamm_events::OrderUpdated::match_and_decode(log) {
+        } else {
+            let ev = twamm_events::OrderUpdated::match_and_decode(log)?;
             let order_key = EvmOrderKey {
                 token0: Address::from_slice(&ev.order_key.0),
                 token1: Address::from_slice(&ev.order_key.1),
@@ -164,8 +164,6 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     token1_rate_delta,
                 }),
             )
-        } else {
-            return None;
         }
     } else if emitter == BOOSTED_FEES_CONCENTRATED_ADDRESS {
         if log.topics.is_empty() {
@@ -180,7 +178,8 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     token1_rate: data[46..60].to_vec(),
                 }),
             )
-        } else if let Some(ev) = boosted_fees_events::PoolBoosted::match_and_decode(log) {
+        } else {
+            let ev = boosted_fees_events::PoolBoosted::match_and_decode(log)?;
             (
                 ev.pool_id.to_vec(),
                 Event::RateUpdated(RateUpdated {
@@ -190,8 +189,6 @@ fn maybe_pool_log(log: &Log) -> Option<PoolLog> {
                     token1_rate_delta: ev.rate1.to_signed_bytes_be(),
                 }),
             )
-        } else {
-            return None;
         }
     } else {
         return None;
