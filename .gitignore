@@ -79,6 +79,9 @@ Temporary Items
 !tycho-indexer/test/spkg/*
 
 .env
+.substreams.env
+
+*/.env
 .vscode
 .idea
 *.log
