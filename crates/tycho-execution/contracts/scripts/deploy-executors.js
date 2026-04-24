@@ -72,6 +72,13 @@ const executors_to_deploy = {
         {
             exchange: "WethExecutor", args: ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"]
         },
+        // Args: stETH address, wstETH address
+        {
+            exchange: "LidoV3Executor", args: [
+                "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+                "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
+            ]
+        },
 
         // Args: Liquorice settlement, Liquorice balance manager
         {
