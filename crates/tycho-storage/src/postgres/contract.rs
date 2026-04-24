@@ -10,7 +10,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use tracing::{debug, error, instrument, Level};
+use tracing::{debug, debug_span, error, instrument, Instrument, Level};
 use tycho_common::{
     keccak256,
     models::{
@@ -1103,18 +1103,22 @@ impl PostgresGateway {
             .map(|(tx, delta)| WithTxHash { entity: delta, tx: Some(tx.to_owned()) })
             .collect::<Vec<_>>();
 
-        let txns: HashMap<Bytes, (i64, NaiveDateTime, i64)> = schema::transaction::table
-            .inner_join(schema::block::table)
-            .filter(schema::transaction::hash.eq_any(new.iter().filter_map(|u| u.tx.as_ref())))
-            .select((
-                schema::transaction::hash,
-                (schema::transaction::id, schema::block::ts, schema::transaction::index),
-            ))
-            .get_results::<(Bytes, (i64, NaiveDateTime, i64))>(conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .collect();
+        let txns: HashMap<Bytes, (i64, NaiveDateTime, i64)> = async {
+            schema::transaction::table
+                .inner_join(schema::block::table)
+                .filter(schema::transaction::hash.eq_any(new.iter().filter_map(|u| u.tx.as_ref())))
+                .select((
+                    schema::transaction::hash,
+                    (schema::transaction::id, schema::block::ts, schema::transaction::index),
+                ))
+                .get_results::<(Bytes, (i64, NaiveDateTime, i64))>(conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_tx_ids"))
+        .await?
+        .into_iter()
+        .collect();
 
         let addresses: Result<Vec<Bytes>, StorageError> = new
             .iter()
@@ -1131,15 +1135,19 @@ impl PostgresGateway {
             })
             .collect();
 
-        let accounts: HashMap<_, _> = schema::account::table
-            .filter(schema::account::chain_id.eq(chain_id))
-            .filter(schema::account::address.eq_any(addresses?))
-            .select((schema::account::address, schema::account::id))
-            .get_results::<(Bytes, i64)>(conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .collect();
+        let accounts: HashMap<_, _> = async {
+            schema::account::table
+                .filter(schema::account::chain_id.eq(chain_id))
+                .filter(schema::account::address.eq_any(addresses?))
+                .select((schema::account::address, schema::account::id))
+                .get_results::<(Bytes, i64)>(conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_account_ids"))
+        .await?
+        .into_iter()
+        .collect();
 
         let mut balance_data = Vec::new();
         let mut code_data = Vec::new();
@@ -1210,34 +1218,45 @@ impl PostgresGateway {
         }
 
         if !balance_data.is_empty() {
-            balance_data.sort_by_cached_key(|b| b.ordinal);
-            let mut sorted = balance_data
-                .into_iter()
-                .map(|b| b.entity)
-                .collect::<Vec<_>>();
-            apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
-            diesel::insert_into(schema::account_balance::table)
-                .values(&sorted)
-                .execute(conn)
-                .await
-                .map_err(PostgresError::from)?;
+            async {
+                balance_data.sort_by_cached_key(|b| b.ordinal);
+                let mut sorted = balance_data
+                    .into_iter()
+                    .map(|b| b.entity)
+                    .collect::<Vec<_>>();
+                apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
+                diesel::insert_into(schema::account_balance::table)
+                    .values(&sorted)
+                    .execute(conn)
+                    .await
+                    .map_err(PostgresError::from)?;
+                Ok::<(), StorageError>(())
+            }
+            .instrument(debug_span!("insert_native_balances"))
+            .await?;
         }
         if !code_data.is_empty() {
-            code_data.sort_by_cached_key(|b| b.ordinal);
-            let mut sorted = code_data
-                .into_iter()
-                .map(|b| b.entity)
-                .collect::<Vec<_>>();
-            apply_versioning::<_, orm::ContractCode>(&mut sorted, conn).await?;
-            diesel::insert_into(schema::contract_code::table)
-                .values(&sorted)
-                .execute(conn)
-                .await
-                .map_err(PostgresError::from)?;
+            async {
+                code_data.sort_by_cached_key(|b| b.ordinal);
+                let mut sorted = code_data
+                    .into_iter()
+                    .map(|b| b.entity)
+                    .collect::<Vec<_>>();
+                apply_versioning::<_, orm::ContractCode>(&mut sorted, conn).await?;
+                diesel::insert_into(schema::contract_code::table)
+                    .values(&sorted)
+                    .execute(conn)
+                    .await
+                    .map_err(PostgresError::from)?;
+                Ok::<(), StorageError>(())
+            }
+            .instrument(debug_span!("insert_contract_code"))
+            .await?;
         }
 
         if !slot_data.is_empty() {
             self.upsert_slots(slot_data, conn)
+                .instrument(debug_span!("upsert_slots"))
                 .await?;
         }
         Ok(())
@@ -1414,39 +1433,52 @@ impl PostgresGateway {
             .iter()
             .map(|b| b.token.clone())
             .collect::<Vec<_>>();
-        let token_ids: HashMap<Address, i64> = schema::token::table
-            .inner_join(schema::account::table)
-            .select((schema::account::address, schema::token::id))
-            .filter(schema::account::address.eq_any(&token_addresses))
-            .load::<(Address, i64)>(conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .collect();
+        let token_count = token_addresses.len();
+        let token_ids: HashMap<Address, i64> = async {
+            schema::token::table
+                .inner_join(schema::account::table)
+                .select((schema::account::address, schema::token::id))
+                .filter(schema::account::address.eq_any(&token_addresses))
+                .load::<(Address, i64)>(conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_token_ids", count = token_count))
+        .await?
+        .into_iter()
+        .collect();
 
         // fetch linked transactions
         let modify_txs = account_balances
             .iter()
             .map(|b| b.modify_tx.clone())
             .collect::<Vec<_>>();
-        let transaction_ids_and_ts = orm::Transaction::ids_and_ts_by_hash(modify_txs.iter(), conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
-            .collect::<HashMap<TxHash, (i64, i64, NaiveDateTime)>>();
+        let transaction_ids_and_ts = async {
+            orm::Transaction::ids_and_ts_by_hash(modify_txs.iter(), conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_tx_ids"))
+        .await?
+        .into_iter()
+        .map(|(db_id, hash, index, ts)| (hash, (db_id, index, ts)))
+        .collect::<HashMap<TxHash, (i64, i64, NaiveDateTime)>>();
 
         // fetch linked accounts
         let account_addresses = account_balances
             .iter()
             .map(|b| b.account.clone())
             .collect::<Vec<_>>();
-        let account_ids = orm::Account::ids_by_addresses(account_addresses.iter(), chain_id, conn)
-            .await
-            .map_err(PostgresError::from)?
-            .into_iter()
-            .map(|(id, address)| (address, id))
-            .collect::<HashMap<Address, i64>>();
+        let account_ids = async {
+            orm::Account::ids_by_addresses(account_addresses.iter(), chain_id, conn)
+                .await
+                .map_err(PostgresError::from)
+        }
+        .instrument(debug_span!("resolve_account_ids"))
+        .await?
+        .into_iter()
+        .map(|(id, address)| (address, id))
+        .collect::<HashMap<Address, i64>>();
 
         // collect account balance updates
         let mut new_account_balances = Vec::new();
@@ -1485,23 +1517,28 @@ impl PostgresGateway {
 
         // insert account balances
         if !account_balances.is_empty() {
-            new_account_balances.sort_by_cached_key(|b| b.ordinal);
-            let mut sorted = new_account_balances
-                .into_iter()
-                .map(|b| b.entity)
-                .collect::<Vec<_>>();
-            apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
+            async {
+                new_account_balances.sort_by_cached_key(|b| b.ordinal);
+                let mut sorted = new_account_balances
+                    .into_iter()
+                    .map(|b| b.entity)
+                    .collect::<Vec<_>>();
+                apply_versioning::<_, orm::AccountBalance>(&mut sorted, conn).await?;
 
-            // Insert in batches to avoid exceeding PostgreSQL parameter limit
-            for chunk in sorted.chunks(orm::NewAccountBalance::MAX_BATCH_SIZE) {
-                diesel::insert_into(schema::account_balance::table)
-                    .values(chunk)
-                    .execute(conn)
-                    .await
-                    .map_err(|err| {
-                        storage_error_from_diesel(err, "AccountBalance", "batch", None)
-                    })?;
+                // Insert in batches to avoid exceeding PostgreSQL parameter limit
+                for chunk in sorted.chunks(orm::NewAccountBalance::MAX_BATCH_SIZE) {
+                    diesel::insert_into(schema::account_balance::table)
+                        .values(chunk)
+                        .execute(conn)
+                        .await
+                        .map_err(|err| {
+                            storage_error_from_diesel(err, "AccountBalance", "batch", None)
+                        })?;
+                }
+                Ok::<(), StorageError>(())
             }
+            .instrument(debug_span!("insert_account_balances"))
+            .await?;
         }
 
         Ok(())

@@ -31,6 +31,14 @@ TychoStreamBuilder (stream.rs)
 ## Sync Lifecycle
 
 1. `WsDeltasClient` subscribes; first message determines snapshot block
-2. `HttpRPCClient` fetches snapshot at that block; deltas buffer until it arrives
+2. `HttpRPCClient` fetches snapshot at that block; deltas buffer until it arrives.
+   When `partial_blocks` is enabled, components created on a partial block cannot be snapshotted
+   immediately — their snapshots are deferred (`deferred_snapshot_components`) until the first
+   message of the next block arrives, then fetched at the previous block's height.
 3. `BlockSynchronizer` waits for all synchronizers, then emits a `FeedMessage` per block
 4. Synchronizers classified as `Started | Ready | Delayed | Stale | Advanced | Ended`; stale ones are kept but skipped
+
+## CLI
+
+The `tycho-client` binary accepts `--blocklist-config <PATH>` pointing to a TOML file of the
+form `ids = ["0x...", ...]`. Components in that list are excluded from tracking.

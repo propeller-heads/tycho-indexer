@@ -101,6 +101,24 @@ contract CurveExecutorTest is Test, TestUtils, Constants {
         assertEq(outputToRouter, true);
     }
 
+    function testRevertTokenInAddressZero() public {
+        bytes memory data = abi.encodePacked(
+            address(0), USDC_ADDR, TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
+        );
+
+        vm.expectRevert(CurveExecutor__TokenAddressZero.selector);
+        curveExecutorExposed.swap(1 ether, data, ALICE);
+    }
+
+    function testRevertTokenOutAddressZero() public {
+        bytes memory data = abi.encodePacked(
+            WETH_ADDR, address(0), TRICRYPTO_POOL, uint8(3), uint8(2), uint8(0)
+        );
+
+        vm.expectRevert(CurveExecutor__TokenAddressZero.selector);
+        curveExecutorExposed.swap(1 ether, data, ALICE);
+    }
+
     function testTriPool() public {
         // Swapping DAI -> USDC on TriPool 0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7
         uint256 amountIn = 1 ether;

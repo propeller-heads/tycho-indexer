@@ -1,4 +1,3 @@
-use alloy::transports::http::reqwest;
 use serde::Deserialize;
 use tracing::info;
 
