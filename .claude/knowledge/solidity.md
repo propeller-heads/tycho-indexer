@@ -13,7 +13,9 @@ forge fmt --check                # format check (CI)
 forge snapshot                   # update gas snapshots
 ```
 
-Static analysis:
+Static analysis (requires Python env — see
+[contributing guidelines](https://docs.propellerheads.xyz/tycho/for-dexs/protocol-integration/contributing-guidelines#contract-analysis)
+for setup):
 
 ```bash
 slither .                        # run from contracts/
@@ -26,14 +28,18 @@ After a task is done, run the `/run-ci` skill. It runs the Foundry CI checks mat
 
 ### Naming
 
-- Private/internal state variables prefixed with underscore: `_feeCalculator`, `_ALLOWED_DUST`
-- Custom errors are contract-prefixed: `TychoRouter__EmptySwaps`, `Vault__AmountZero`
-- Transient storage slot constants use `keccak256` of a descriptive name string
+- Private/internal state variables: prefixed `_`: `_feeCalculator`, `_ALLOWED_DUST`
+- Input parameters that clash with a state variable: suffixed `_`: `token_`, `amount_`
+- Public variables and non-clashing parameters: no prefix or suffix
+- Custom errors: contract-prefixed with double underscore: `TychoRouter__EmptySwaps`, `Vault__AmountZero`
+- Transient storage slot constants: `keccak256` of a descriptive name string
 
 ### Formatting
 
 - `forge fmt` enforced in CI; line length 80 chars
 - Suppress Slither false positives with `// slither-disable-next-line` and a comment
+- Avoid assembly (`assembly { ... }`) unless there is no viable alternative — prefer high-level
+  Solidity
 
 ### Executor conventions
 
@@ -60,6 +66,5 @@ Rust-encoded calldata end-to-end.
 
 ## Project Config
 
-- EVM target: Cancun; `via_ir` enabled; optimizer 200 runs (default), 1000 runs (production)
 - Solidity dependencies managed as git submodules under `contracts/lib/` — always clone with
   `--recursive`
