@@ -9,7 +9,8 @@ use tycho_client::feed::SynchronizerState;
 pub fn initialize_metrics() {
     describe_histogram!(
         "tycho_integration_block_processing_duration_seconds",
-        "Time between block timestamp and when protocol components are received"
+        "Latency from block timestamp to protocol component receipt: positive = Tycho was slower \
+         than the block, negative = Tycho was faster (clock skew or pre-delivery)"
     );
     describe_counter!(
         "tycho_integration_simulation_get_limits_failures_total",
@@ -65,9 +66,14 @@ pub fn initialize_metrics() {
     );
 }
 
-/// Record the duration between block timestamp and component receipt
-pub fn record_block_processing_duration(duration_seconds: f64) {
-    histogram!("tycho_integration_block_processing_duration_seconds").record(duration_seconds);
+/// Record the duration between block timestamp and component receipt.
+/// `block_type` is `"full"` for confirmed blocks and `"partial"` for flashblock updates.
+pub fn record_block_processing_duration(duration_seconds: f64, block_type: &str) {
+    histogram!(
+        "tycho_integration_block_processing_duration_seconds",
+        "block_type" => block_type.to_string()
+    )
+    .record(duration_seconds);
 }
 
 /// Record a failed get_limits operation
@@ -195,7 +201,10 @@ pub async fn create_metrics_exporter(port: u16) -> Result<tokio::task::JoinHandl
     let exporter_builder = PrometheusBuilder::new()
         .set_buckets_for_metric(
             Matcher::Full("tycho_integration_block_processing_duration_seconds".to_string()),
-            &[0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0, 20.0],
+            &[
+                -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 15.0,
+                20.0,
+            ],
         )
         .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
         .set_buckets_for_metric(
