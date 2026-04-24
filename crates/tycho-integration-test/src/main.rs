@@ -108,6 +108,17 @@ struct Cli {
     #[arg(long, default_value_t = 600)]
     skip_messages_duration: u64,
 
+    /// Maximum number of attempts to poll the RPC when the update block is ahead of the RPC.
+    /// Each attempt is separated by --rpc-poll-interval-ms. Adjust for faster chains (e.g. Base,
+    /// Unichain) where blocks arrive more frequently.
+    #[arg(long, default_value_t = 10)]
+    rpc_poll_attempts: u32,
+
+    /// Interval in milliseconds between RPC polling attempts when waiting for the RPC to reach
+    /// the update block number.
+    #[arg(long, default_value_t = 500)]
+    rpc_poll_interval_ms: u64,
+
     /// List of component IDs to always include in tests every block if not already selected
     #[arg(long, value_delimiter = ',')]
     always_test_components: Vec<String>,
@@ -253,8 +264,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
     .map_err(|e| miette!("Failed to load tokens: {e:?}"))?;
     info!("Loaded {} tokens", all_tokens.len());
 
-    // Run streams in background tasks
-    let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+    // Run streams in background tasks with separate channels so RFQ processing
+    // cannot block protocol update consumption
+    let (protocol_tx, mut protocol_rx) =
+        tokio::sync::mpsc::channel::<miette::Result<StreamUpdate>>(64);
+    let (rfq_tx, mut rfq_rx) = tokio::sync::mpsc::channel::<miette::Result<StreamUpdate>>(64);
     let mut protocol_handle = None;
     let mut rfq_handle = None;
 
@@ -270,7 +284,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         ) {
             protocol_handle = Some(
                 protocol_stream_processor
-                    .run_stream(&all_tokens, tx.clone())
+                    .run_stream(&all_tokens, protocol_tx)
                     .await?,
             );
         }
@@ -284,7 +298,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
         ) {
             rfq_handle = Some(
                 rfq_stream_processor
-                    .run_stream(&all_tokens, tx)
+                    .run_stream(&all_tokens, rfq_tx)
                     .await?,
             );
         }
@@ -305,9 +319,17 @@ async fn run(cli: Cli) -> miette::Result<()> {
         info!("Running integration test indefinitely");
     }
     info!("Waiting for first protocol update...");
-    let semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let protocol_semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let rfq_semaphore = Arc::new(Semaphore::new(cli.parallel_updates as usize));
+    let mut protocol_stream_open = true;
+    let mut rfq_stream_open = !cli.disable_rfq;
 
     loop {
+        if !protocol_stream_open && !rfq_stream_open {
+            info!("All streams closed, exiting");
+            break;
+        }
+
         tokio::select! {
             // Monitor protocol stream termination
             result = async {
@@ -349,8 +371,8 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             }
 
-            // Process incoming updates
-            update = rx.recv() => {
+            // Process protocol updates
+            update = protocol_rx.recv(), if protocol_stream_open => {
                 match update {
                     Some(update) => {
                         let update = match update {
@@ -361,7 +383,6 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             }
                         };
 
-                        // Check if we've reached max blocks (only when stats are enabled)
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {
                                 let stats = stats
@@ -372,19 +393,16 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                     info!("Reached max blocks ({}), stopping...", cli.max_blocks);
                                     break;
                                 }
-                                // Also check if this update's block would exceed our limit
-                                if update.update_type == UpdateType::Protocol {
-                                    let block_num = update.update.block_number_or_timestamp;
-                                    if !stats.blocks_seen.contains(&block_num)
-                                        && stats.blocks_processed >= cli.max_blocks
-                                    {
-                                        drop(stats);
-                                        info!(
-                                            "Next block would exceed max blocks ({}), stopping...",
-                                            cli.max_blocks
-                                        );
-                                        break;
-                                    }
+                                let block_num = update.update.block_number_or_timestamp;
+                                if !stats.blocks_seen.contains(&block_num)
+                                    && stats.blocks_processed >= cli.max_blocks
+                                {
+                                    drop(stats);
+                                    info!(
+                                        "Next block would exceed max blocks ({}), stopping...",
+                                        cli.max_blocks
+                                    );
+                                    break;
                                 }
                             }
                         }
@@ -393,12 +411,12 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         let rpc_tools = rpc_tools.clone();
                         let tycho_state = tycho_state.clone();
                         let statistics = statistics.clone();
-                        let permit = semaphore
+                        let permit = protocol_semaphore
                             .clone()
                             .acquire_owned()
                             .await
                             .into_diagnostic()
-                            .wrap_err("Failed to acquire permit")?;
+                            .wrap_err("Failed to acquire protocol permit")?;
                         tokio::spawn(async move {
                             if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, statistics, &update).await {
                                 warn!("{}", format_error_chain(&e));
@@ -407,8 +425,44 @@ async fn run(cli: Cli) -> miette::Result<()> {
                         });
                     }
                     None => {
-                        info!("All streams closed, exiting");
-                        break;
+                        info!("Protocol stream closed");
+                        protocol_stream_open = false;
+                    }
+                }
+            }
+
+            // Process RFQ updates independently
+            update = rfq_rx.recv(), if rfq_stream_open => {
+                match update {
+                    Some(update) => {
+                        let update = match update {
+                            Ok(u) => Arc::new(u),
+                            Err(e) => {
+                                warn!("{}", format_error_chain(&e));
+                                continue;
+                            }
+                        };
+
+                        let cli = cli.clone();
+                        let rpc_tools = rpc_tools.clone();
+                        let tycho_state = tycho_state.clone();
+                        let statistics = statistics.clone();
+                        let permit = rfq_semaphore
+                            .clone()
+                            .acquire_owned()
+                            .await
+                            .into_diagnostic()
+                            .wrap_err("Failed to acquire RFQ permit")?;
+                        tokio::spawn(async move {
+                            if let Err(e) = process_update(cli, chain, rpc_tools, tycho_state, statistics, &update).await {
+                                warn!("{}", format_error_chain(&e));
+                            }
+                            drop(permit);
+                        });
+                    }
+                    None => {
+                        info!("RFQ stream closed");
+                        rfq_stream_open = false;
                     }
                 }
             }
@@ -427,6 +481,69 @@ async fn run(cli: Cli) -> miette::Result<()> {
     Ok(())
 }
 
+/// Polls the RPC until it reaches the target block number.
+///
+/// Returns `Some(block)` when the RPC block matches `target_block`, or `None` if the update
+/// is behind the RPC (stale) or we exhaust all polling attempts (RPC too slow).
+async fn poll_rpc_for_block(
+    rpc_tools: &tycho_test::RPCTools,
+    target_block: u64,
+    max_attempts: u32,
+    poll_interval: Duration,
+) -> miette::Result<Option<Block>> {
+    for attempt in 0..max_attempts {
+        let block = match rpc_tools
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to fetch latest block")
+            .ok()
+            .flatten()
+        {
+            Some(b) => b,
+            None => {
+                warn!("Failed to retrieve latest block (attempt {}/{})", attempt + 1, max_attempts);
+                if attempt < max_attempts - 1 {
+                    tokio::time::sleep(poll_interval).await;
+                }
+                continue;
+            }
+        };
+
+        let rpc_block = block.header.number;
+
+        if rpc_block > target_block {
+            let delay = rpc_block - target_block;
+            warn!(
+                "Update block ({target_block}) is behind RPC block ({rpc_block}), \
+                 skipping to catch up."
+            );
+            metrics::record_protocol_update_block_delay(delay);
+            metrics::record_protocol_update_skipped();
+            return Ok(None);
+        }
+
+        if rpc_block == target_block {
+            if attempt > 0 {
+                debug!("RPC caught up to block {target_block} after {} poll(s)", attempt);
+            }
+            return Ok(Some(block));
+        }
+
+        // RPC is behind — wait and retry
+        debug!(
+            "RPC block ({rpc_block}) behind update block ({target_block}), \
+             polling... (attempt {}/{})",
+            attempt + 1,
+            max_attempts
+        );
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    Ok(None)
+}
+
 async fn process_update(
     cli: Arc<Cli>,
     chain: Chain,
@@ -442,23 +559,8 @@ async fn process_update(
         update.update.states.len()
     );
 
-    let block = match rpc_tools
-        .provider
-        .get_block_by_number(BlockNumberOrTag::Latest)
-        .await
-        .into_diagnostic()
-        .wrap_err("Failed to fetch latest block")
-        .ok()
-        .flatten()
-    {
-        Some(b) => Arc::new(b),
-        None => {
-            warn!("Failed to retrieve last block, continuing to next message...");
-            return Ok(());
-        }
-    };
-
-    if let UpdateType::Protocol = update.update_type {
+    let block = if let UpdateType::Protocol = update.update_type {
+        // Update state cache before block alignment check
         {
             let mut current_state = tycho_state
                 .write()
@@ -474,7 +576,6 @@ async fn process_update(
                     .insert(id.clone());
             }
             for (id, state) in update.update.states.iter() {
-                // this overwrites existing entries
                 current_state
                     .states
                     .insert(id.clone(), state.clone());
@@ -490,30 +591,35 @@ async fn process_update(
                     .map(|id_set| id_set.remove(removed_id));
             }
         }
-        // Record block processing latency
+
+        // Poll RPC until it reaches the update's block number
+        let update_block_number = update.update.block_number_or_timestamp;
+        let poll_interval = Duration::from_millis(cli.rpc_poll_interval_ms);
+
+        let block = poll_rpc_for_block(
+            &rpc_tools,
+            update_block_number,
+            cli.rpc_poll_attempts,
+            poll_interval,
+        )
+        .await?;
+
+        let block = match block {
+            Some(b) => Arc::new(b),
+            None => {
+                warn!(
+                    "Timed out waiting for RPC to reach update block {update_block_number}, \
+                     skipping."
+                );
+                metrics::record_protocol_update_skipped();
+                return Ok(());
+            }
+        };
+
+        // Block numbers match — record latency against the correct block
         let latency_seconds =
             (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
         metrics::record_block_processing_duration(latency_seconds);
-
-        let rpc_block_number = block.header.number;
-        let update_block_number = update.update.block_number_or_timestamp;
-        let block_diff = rpc_block_number.abs_diff(update_block_number);
-
-        if block_diff > 0 {
-            if rpc_block_number > update_block_number {
-                warn!(
-                    "Update block ({update_block_number}) is behind the current block ({rpc_block_number}), skipping to catch up.",
-                );
-                metrics::record_protocol_update_block_delay(block_diff);
-            } else {
-                warn!(
-                    "Update block ({update_block_number}) is ahead of the current block ({rpc_block_number}), skipping this update.",
-                );
-                // perf: consider waiting for the block to be mined instead of skipping
-            }
-            metrics::record_protocol_update_skipped();
-            return Ok(());
-        }
 
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
@@ -527,7 +633,26 @@ async fn process_update(
                 .expect("Failed to get write lock for statistics (record block)");
             stats.record_block_processed();
         }
-    }
+
+        block
+    } else {
+        // RFQ updates: fetch latest block without alignment checks
+        match rpc_tools
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .into_diagnostic()
+            .wrap_err("Failed to fetch latest block")
+            .ok()
+            .flatten()
+        {
+            Some(b) => Arc::new(b),
+            None => {
+                warn!("Failed to retrieve latest block, continuing to next message...");
+                return Ok(());
+            }
+        }
+    };
 
     for (protocol, sync_state) in update.update.sync_states.iter() {
         metrics::record_protocol_sync_state(protocol, sync_state);

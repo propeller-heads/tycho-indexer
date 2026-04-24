@@ -1,7 +1,7 @@
 [package]
 name = "tycho-common"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 description = "Contains shared models, traits and helpers used within the Tycho system"
 repository.workspace = true
 homepage.workspace = true

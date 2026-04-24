@@ -1,14 +1,14 @@
-<!-- docs-synced-at: 58d9900b -->
+<!-- docs-synced-at: d7e677248c7d5bc6e340404eb823fac9445c6e0a -->
 # Tycho Codebase Guide
 
-Low-latency, reorg-aware indexer that streams DEX liquidity state from on-chain data to solvers.
+Low-latency, reorg-aware indexer that streams DEX liquidity state from on-chain data to consumers.
 
 ## What is Tycho
 
 Tycho indexes EVM blockchain state for DeFi protocols. It consumes Substreams (blockchain data
 pipelines), processes fork-aware messages through extractors, persists finalized state to Postgres,
 and serves real-time deltas over WebSocket plus snapshots over HTTP RPC. Consumers reconstruct
-protocol component state to simulate swaps.
+protocol component state for simulation, pricing, and execution.
 
 Key properties:
 - **Reorg-aware**: blocks stay in a memory buffer until finalized; reverts never reach the DB
@@ -18,43 +18,60 @@ Key properties:
 
 ## Workspace Module Map
 
-### Shared Domain
+The monorepo is organized into four layers: **Foundation** (shared types), **Indexer** (on-chain data
+pipeline), **Simulation & Execution** (solver tooling), and **Consumer SDK** (connecting to Tycho).
+Protocol Substreams modules live under `protocols/` as a separate WASM workspace.
+
+### Foundation
 
 | Crate | Description |
 |---|---|
-| [`tycho-common`](../tycho-common/CLAUDE.md) | Domain types (`Chain`, `Block`, `ProtocolComponent`, `Token`), DTOs, async gateway/extraction traits, simulation abstractions (`SwapQuoter`) |
+| [`tycho-common`](../crates/tycho-common/CLAUDE.md) | Domain types (`Chain`, `Block`, `ProtocolComponent`, `Token`), DTOs, async gateway/extraction traits, simulation abstractions (`SwapQuoter`) |
+| `tycho` | Meta-crate re-exporting a compatible, versioned set of ecosystem crates for downstream consumers |
 
-**Features**: `diesel` (Diesel derives), `test-utils` (mockall mocks).
+**Features on `tycho-common`**: `diesel` (Diesel derives), `test-utils` (mockall mocks).
 
-### Ingestion & Extraction
+### Indexer
 
 | Crate / Module | Description |
 |---|---|
-| [`tycho-indexer/extractor`](../tycho-indexer/CLAUDE.md) | `ProtocolExtractor` processes Substreams messages, `ReorgBuffer` handles finality, `ProtocolMemoryCache` for in-process state, DCI plugin for VM tracing |
-| [`tycho-ethereum`](../tycho-ethereum/CLAUDE.md) | Ethereum RPC client (alloy), `AccountExtractor`, `TokenPreProcessor`, `TokenAnalyzer`, `EntryPointTracer` |
+| [`tycho-indexer/extractor`](../crates/tycho-indexer/CLAUDE.md) | `ProtocolExtractor` processes Substreams messages, `ReorgBuffer` handles finality, `ProtocolMemoryCache` for in-process state, DCI plugin for VM tracing |
+| [`tycho-indexer/services`](../crates/tycho-indexer/CLAUDE.md) | HTTP RPC endpoints, WebSocket broadcaster, `PendingDeltasBuffer` for RPC consistency, access control, plan restrictions, compression |
+| [`tycho-ethereum`](../crates/tycho-ethereum/CLAUDE.md) | Ethereum RPC client (alloy), `AccountExtractor`, `TokenPreProcessor`, `TokenAnalyzer`, `EntryPointTracer` |
+| [`tycho-storage`](../crates/tycho-storage/CLAUDE.md) | Postgres backend (Diesel): `CachedGateway` (buffered writes), `DirectGateway` (testing), temporal versioning, FK-safe write ordering |
 
-### Services (HTTP + WS)
-
-| Crate / Module | Description |
-|---|---|
-| [`tycho-indexer/services`](../tycho-indexer/CLAUDE.md) | HTTP RPC endpoints, WebSocket broadcaster, `PendingDeltasBuffer` for RPC consistency, access control, plan restrictions, compression |
-
-### Storage
+### Simulation & Execution
 
 | Crate | Description |
 |---|---|
-| [`tycho-storage`](../tycho-storage/CLAUDE.md) | Postgres backend (Diesel): `CachedGateway` (buffered writes), `DirectGateway` (testing), temporal versioning, FK-safe write ordering |
+| `tycho-simulation` | DEX swap simulation library: protocol-specific state machines (`ProtocolSim`) for 20+ DEXs; `evm` module for EVM storage-based protocols, `protocol` module for custom implementations, `rfq` for request-for-quote protocols |
+| `tycho-execution` | Swap encoding and execution: Solidity TychoRouter contract + Rust encoding library; multi-hop swaps with fee-taking, vault-based accounting, delegatecall executor dispatch |
 
-### Consumer
+### Consumer SDK
 
 | Crate | Description |
 |---|---|
-| [`tycho-client`](../tycho-client/CLAUDE.md) | Rust library + CLI: `TychoStreamBuilder`, snapshot+delta sync, block alignment across extractors, TVL/ID filtering |
-| `tycho-client-py` | Python bindings (maturin/PyO3) wrapping tycho-client |
+| [`tycho-client`](../crates/tycho-client/CLAUDE.md) | Rust library + CLI: `TychoStreamBuilder`, snapshot+delta sync, block alignment across extractors, TVL/ID filtering |
+| `tycho-client-py` | Python bindings (maturin/PyO3) wrapping tycho-client (separate workspace, not a `[workspace.members]` entry) |
 
-### End-to-End Data Flow
+### Protocols
 
-#### Ingestion
+| Path | Description |
+|---|---|
+| `protocols/substreams/` | Substreams modules (WASM) producing the protobuf messages consumed by `tycho-indexer`; **separate WASM workspace** with its own toolchain — not in `[workspace.members]` |
+| `protocols/testing/` (`protocol-testing`) | Simulation accuracy test harness: runs protocol state through `tycho-simulation` and compares against on-chain results |
+| `protocols/adapter-integration/` | EVM adapter integration tests |
+
+### Testing Infrastructure
+
+| Crate | Description |
+|---|---|
+| `tycho-test` | Shared test helpers and fixtures used across crates |
+| `tycho-integration-test` | End-to-end integration runner: subscribes to a live Tycho instance, syncs protocol state via `tycho-client`, and validates simulation accuracy against on-chain prices |
+
+## End-to-End Data Flow
+
+### Ingestion
 
 1. Substreams gRPC delivers `BlockScopedData` (protobuf) to `ProtocolExtractor`
 2. `ProtocolExtractor` deserializes into `BlockChanges` (tx-level state/balance/token deltas)
@@ -67,7 +84,7 @@ Key properties:
 5. DB write via `CachedGateway` → Postgres (upsert blocks, tokens, components, state, balances); sets `db_committed_block_height` on outgoing message
 6. Broadcast `BlockAggregatedChanges` on internal channel (all blocks, including pending/non-committed)
 
-#### Server
+### Server
 
 7. WebSocket subscribers (`services/ws.rs`) receive broadcast directly; revert flag signals chain reorg
 8. `PendingDeltasBuffer` (`services/deltas_buffer.rs`) receives broadcast
@@ -75,7 +92,7 @@ Key properties:
    - Auto-drains blocks ≤ `db_committed_block_height` (already in DB, no longer "pending")
    - RPC handlers query DB snapshot + pending deltas = consistent view of latest state
 
-#### Client (tycho-client)
+### Client (tycho-client)
 
 9. `StateSynchronizer` (one per extractor subscription):
    - Subscribes to WebSocket stream via `WsDeltasClient`
@@ -85,6 +102,17 @@ Key properties:
     - Tracks state per synchronizer: `Ready` / `Delayed` / `Stale`
     - Delayed synchronizers consume buffered messages to catch up
     - When all synchronizers reach the same block: emits `FeedMessage` (unified view of all protocol state at that block) to consumer
+
+### Simulation & Execution (tycho-simulation / tycho-execution)
+
+11. Consumer applies `FeedMessage` deltas to in-memory `ProtocolSim` instances (one per component)
+    - Custom protocols: update decoded state fields directly
+    - VM protocols: patch EVM storage slots, code, balances in a local `SimulationDB`
+12. Consumer queries `ProtocolSim::get_amount_out` / `spot_price` to price swap routes
+13. `tycho-execution` encodes a chosen route into calldata for `TychoRouter`
+    - Selects the appropriate executor contract for each DEX hop
+    - Constructs `SwapSequence` with per-hop amounts, tokens, and executor addresses
+14. Consumer submits the encoded transaction to the chain via `TychoRouter.swap()`
 
 ## Key Architectural Patterns
 
@@ -141,7 +169,7 @@ Configurable via `EXTRACTION_WORKER_THREADS` (default 2) and `MAIN_WORKER_THREAD
 |---|---|
 | `index` | Run all extractors from `extractors.yaml` + HTTP/WS server |
 | `run` | Run a single extractor (testing / debugging) |
-| `analyze-tokens` | Token quality analysis cron job |
+| `analyze-tokens` | Token quality analysis cron job; accepts `--settlement-contract <ADDRESS>` (default: CoW Swap settlement `0xc9f2e6ea1637E499406986ac50ddC92401ce1f58`) |
 | `rpc` | HTTP RPC server only (no extractors) |
 
 ### Feature flags
@@ -162,8 +190,3 @@ No other crate-level features. Runtime behavior controlled via CLI args, env var
 - Lint: `cargo clippy --workspace --lib --all-targets --all-features`
 - Format: `cargo +nightly fmt --check`
 
-## Related Repositories
-
-- **tycho-protocol-sdk**: Substreams modules producing the protobuf messages Tycho consumes
-- **tycho-simulation**: Protocol-specific swap simulators (consumed via tycho-client)
-- **tycho-execution**: Swap encoding and execution against Tycho router contracts
