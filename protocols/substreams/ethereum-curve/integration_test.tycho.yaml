@@ -1,4 +1,4 @@
-substreams_yaml_path: ./substreams.yaml
+substreams_yaml_path: ./ethereum-curve.yaml
 protocol_system: "vm:curve"
 module_name: "map_protocol_changes"
 protocol_type_names:
@@ -38,12 +38,12 @@ tests:
     initialized_accounts:
       - "0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf" # CurveStableSwapNG
       - "0xc4ad29ba4b3c580e6d59105fff484999997675ff"
+      - "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f"
     expected_components:
       - id: "0xdb74dfdd3bb46be8ce6c33dc9d82777bcfc3ded5"
         tokens:
           - "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2" # WETH
           - "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee" # weETH
-          - "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f" # Factory, needed for implementations contracts queries
         static_attributes:
           factory_name: "0x63727970746f5f737761705f6e675f666163746f7279"
           pool_type: "0x706c61696e5f706f6f6c"
@@ -55,7 +55,7 @@ tests:
           coins: "0x5b22307863303261616133396232323366653864306130653563346632376561643930383363373536636332222c22307863643566653233633835383230663762373264303932366663396230356234336533353962376565225d"
         creation_tx: "0xa9a1456b3ed12054f37e3191047bad998c3817ddbd6009dcf3651e1b39340492"
         skip_simulation: false
-        skip_execution: false
+        skip_execution: true # token storage slots overwrites is not working for weETH
 
   - name: test_rETH_osETH_pool
     start_block: 18593061
@@ -81,7 +81,7 @@ tests:
         skip_simulation: false
         skip_execution: true
 
-# case-2: rebasing token
+  # case-2: rebasing token
   - name: test_ETH_stETH_ng_pool
     start_block: 17272519
     stop_block: 17292519
@@ -104,46 +104,48 @@ tests:
         skip_simulation: false
         skip_execution: true # the contract is before the Dencun upgrade(19426587)
 
-  - name: test_FRAX_stETH_pool
-    start_block: 16683219
-    stop_block: 17266005 # stETH upgrade
-    initialized_accounts:
-      - "0xf18056bbd320e96a48e3fbf8bc061322531aac99" # Cryptopool Factory
-      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
-    expected_components:
-      - id: "0x4d9f9D15101EEC665F77210cB999639f760F831E"
-        tokens:
-          - "0x5E8422345238F34275888049021821E8E08CAa1f" # FRAX
-          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84" # stETH
-        static_attributes:
-          factory_name: "0x4e41"
-          name: "0x7374657468"
-          factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030"
-          coins: "0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
-          rebase_tokens: "0x5b22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
-        creation_tx: "0x2237849c181a04a4211b26dc7fe18b32c799e49c9f7d418c72037a668cc4d7c4"
-        skip_simulation: false
-        skip_execution: true # the contract is before the Dencun upgrade(19426587)
+  # This test is commented out because it needs to index more than 500k blocks
+  #  - name: test_FRAX_stETH_pool
+  #    start_block: 16683219
+  #    stop_block: 17266005 # stETH upgrade
+  #    initialized_accounts:
+  #      - "0xf18056bbd320e96a48e3fbf8bc061322531aac99" # Cryptopool Factory
+  #      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
+  #    expected_components:
+  #      - id: "0x4d9f9D15101EEC665F77210cB999639f760F831E"
+  #        tokens:
+  #          - "0x5E8422345238F34275888049021821E8E08CAa1f" # FRAX
+  #          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84" # stETH
+  #        static_attributes:
+  #          factory_name: "0x4e41"
+  #          name: "0x7374657468"
+  #          factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434"
+  #          coins: "0x5b22307861653761623936353230646533613138653565313131623565616162303935333132643766653834222c22307835653834323233343532333866333432373538383830343930323138323165386530386361613166225d"
+  #          rebase_tokens: "0x5b22307861653761623936353230646533613138653565313131623565616162303935333132643766653834222c22307835653834323233343532333866333432373538383830343930323138323165386530386361613166225d"
+  #        creation_tx: "0x2237849c181a04a4211b26dc7fe18b32c799e49c9f7d418c72037a668cc4d7c4"
+  #        skip_simulation: false
+  #        skip_execution: true # the contract is before the Dencun upgrade(19426587)
+  #
+  # This test is commented out because it needs to index more than 5M blocks
+  #  - name: test_ETH_stETH_pool
+  #    start_block: 11592551
+  #    stop_block: 17266005 # stETH upgrade
+  #    expected_components:
+  #      - id: "0xdc24316b9ae028f1497c275eb9192a3ea0f67022"
+  #        tokens:
+  #          - "0x0000000000000000000000000000000000000000" # ETH
+  #          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84" # stETH
+  #        static_attributes:
+  #          factory_name: "0x4e41"
+  #          name: "0x7374657468"
+  #          factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030"
+  #          coins: "0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
+  #          rebase_tokens: "0x5b22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
+  #        creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
+  #        skip_simulation: true # InvalidFEOpcode for old implementation contract 0x20dC62D5904633cC6a5E34bEc87A048E80C92e97, new impl: 0x17144556fd3424edc8fc8a4c940b2d04936d17eb
+  #        skip_execution: true # the contract is before the Dencun upgrade(19426587)
 
-  - name: test_ETH_stETH_pool
-    start_block: 11592551
-    stop_block: 17266005 # stETH upgrade
-    expected_components:
-      - id: "0xdc24316b9ae028f1497c275eb9192a3ea0f67022"
-        tokens:
-          - "0x0000000000000000000000000000000000000000" # ETH
-          - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84" # stETH
-        static_attributes:
-          factory_name: "0x4e41"
-          name: "0x7374657468"
-          factory: "0x307830303030303030303030303030303030303030303030303030303030303030303030303030303030"
-          coins: "0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
-          rebase_tokens: "0x5b22307861653761623936353230646533613138653565313131623565616162303935333132643766653834225d"
-        creation_tx: "0xfac67ecbd423a5b915deff06045ec9343568edaec34ae95c43d35f2c018afdaa"
-        skip_simulation: true # InvalidFEOpcode for old implementation contract 0x20dC62D5904633cC6a5E34bEc87A048E80C92e97, new impl: 0x17144556fd3424edc8fc8a4c940b2d04936d17eb
-        skip_execution: true # the contract is before the Dencun upgrade(19426587)
-
-# case-3: ERC4626
+  # case-3: ERC4626
   - name: test_erc4626_pool
     start_block: 19262782
     stop_block: 19263782
@@ -192,9 +194,9 @@ tests:
         skip_simulation: false
         skip_execution: false
 
-# case-4: specific pools
+  # case-4: specific pools
 
-# Two Crypto Factory NG, impl id: 110827960954786879070795645317684308345156454977361180728234664032152099907574, need stateless VIEW & MATH contract
+  # Two Crypto Factory NG, impl id: 110827960954786879070795645317684308345156454977361180728234664032152099907574, need stateless VIEW & MATH contract
   - name: test_yieldbasis_pool
     start_block: 23433451
     stop_block: 23435451
@@ -215,35 +217,39 @@ tests:
         skip_simulation: false
         skip_execution: false
 
-  # set_oracle & rebase token
-  - name: test_ETHx_ETH_pool
-    start_block: 18008576
-    stop_block: 18228576
-    initialized_accounts:
-       - "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
-       - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
-    expected_components:
-      - id: "0x59ab5a5b5d617e478a2479b0cad80da7e2831492"
-        tokens:
-          - "0x0000000000000000000000000000000000000000" # ETH
-          - "0xA35b1B31Ce002FBF2058D22F30f95D405200A15b" # ETHx
-        static_attributes:
-          factory_name: "0x6d6574615f706f6f6c5f666163746f7279"
-          pool_type: "0x706c61696e5f706f6f6c"
-          name: "0x455448782d455448"
-          factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434"
-          coins: "0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861333562316233316365303032666266323035386432326633306639356434303532303061313562225d"
-          set_oracle: "0x01"
-          rebase_tokens: "0x5b22307861333562316233316365303032666266323035386432326633306639356434303532303061313562225d"
-        creation_tx: "0x4404dcef7b8a37aae11ba49e0e53da49ef9e0fcc8497e9f01d1c4da48a5de6eb"
-        skip_simulation: false
-        skip_execution: true
+  # This test is commented out because it needs to index more than 200k blocks
+  #  # set_oracle & rebase token
+  #  - name: test_ETHx_ETH_pool
+  #    start_block: 18008576
+  #    stop_block: 18228576
+  #    initialized_accounts:
+  #      - "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
+  #      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
+  #    expected_components:
+  #      - id: "0x59ab5a5b5d617e478a2479b0cad80da7e2831492"
+  #        tokens:
+  #          - "0x0000000000000000000000000000000000000000" # ETH
+  #          - "0xA35b1B31Ce002FBF2058D22F30f95D405200A15b" # ETHx
+  #        static_attributes:
+  #          factory_name: "0x6d6574615f706f6f6c5f666163746f7279"
+  #          pool_type: "0x706c61696e5f706f6f6c"
+  #          name: "0x455448782d455448"
+  #          factory: "0x307862396663313537333934616638303461333537383133346136353835633064633963633939306434"
+  #          coins: "0x5b22307865656565656565656565656565656565656565656565656565656565656565656565656565656565222c22307861333562316233316365303032666266323035386432326633306639356434303532303061313562225d"
+  #          set_oracle: "0x01"
+  #          rebase_tokens: "0x5b22307861333562316233316365303032666266323035386432326633306639356434303532303061313562225d"
+  #        creation_tx: "0x4404dcef7b8a37aae11ba49e0e53da49ef9e0fcc8497e9f01d1c4da48a5de6eb"
+  #        skip_simulation: false
+  #        skip_execution: true
 
   - name: test_ng_meta_pool
     start_block: 20414774
     stop_block: 20424774
     initialized_accounts:
       - "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
+      - "0x6a8cbed756804b16e05e741edabd5cb544ae21bf"
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff"
+      - "0xf18056bbd320e96a48e3fbf8bc061322531aac99"
     expected_components:
       - id: "0x057c658dfbbcbb96c361fb4e66b86cca081b6c6a"
         tokens:
@@ -279,6 +285,7 @@ tests:
         creation_tx: "0x218b251e99534136300599c8d88944bc6ab922e004eeb3c5d4496a67356b854c"
         skip_simulation: false
         skip_execution: true # the contract is before the Dencun upgrade(19426587)
+
 
   - name: test_tricrypto2
     start_block: 12821118 #This pool was created at 12821148, but it requires some contracts that were created shortly before.
@@ -322,6 +329,8 @@ tests:
   - name: test_fraxusdc
     start_block: 14939588
     stop_block: 14939712
+    initialized_accounts:
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff"
     expected_components:
       - id: "0xdcef968d416a41cdac0ed8702fac8128a64241a2"
         tokens:
@@ -514,6 +523,30 @@ tests:
           name: "0x5577552f57455448" # UwU/WETH
           coins: "0x5b22307863303261616133396232323366653864306130653563346632376561643930383363373536636332222c22307835356330386361353234393765326631353334623539653239313762663532346434373635323537225d" # ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2","0x55c08ca52497e2f1534b59e2917bf524d4765257"]
         creation_tx: "0x61d563e2627437da172fdd60ab54e5cc955fcb75829fd819486e857bac31cad2"
+        skip_simulation: false
+        skip_execution: false
+
+  # Twocrypto factory 0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f
+  - name: test_twocrypto_custom_view
+    start_block: 23588550
+    stop_block: 23638550
+    initialized_accounts:
+      - "0x0c0e5f2ff0ff18a3be9b835635039256dc4b4963"
+      - "0x98ee851a00abee0d95d08cf4ca2bdce32aeaaf7f" # Factory, needed for implementations contracts queries
+      - "0xc4ad29ba4b3c580e6d59105fff484999997675ff" # Needed by another component that is created within this block range
+      - "0x6a8cbed756804b16e05e741edabd5cb544ae21bf" # Factory, needed for implementations contrats queries
+    expected_components:
+      - id: "0x027b40f5917fcd0eac57d7015e120096a5f92ca9"
+        tokens:
+          - "0xb58e61c3098d85632df34eecfb899a1ed80921cb"
+          - "0xf939e0a03fb07f59a73314e73794be0e57ac1b4e"
+        static_attributes:
+          factory: "0x307839386565383531613030616265653064393564303863663463613262646365333261656161663766" # 0x98ee851a00abee0d95d08cf4ca2bdce32aea7f7f
+          pool_type: "0x74776f63727970746f" # twocrypto
+          factory_name: "0x74776f63727970746f5f666163746f7279" # twocrypto_factory
+          name: "0x5a4348462f435256555344" # ZCHF/CRVUSD
+          coins: "0x5b22307866393339653061303366623037663539613733333134653733373934626530653537616331623465222c22307862353865363163333039386438353633326466333465656366623839396131656438303932316362225d"
+        creation_tx: "0x9140c12c7b56988275e4c837d4661b8783e4cd16340dba40d6d1a5dd2d1d4f78"
         skip_simulation: false
         skip_execution: false
 
