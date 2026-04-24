@@ -1,3 +1,20 @@
+## [0.269.0](https://github.com/propeller-heads/tycho-indexer/compare/0.268.0...0.269.0) (2026-04-24)
+
+
+### Features
+
+* arbitrum substreams configs ([40f498b](https://github.com/propeller-heads/tycho-indexer/commit/40f498b39fa65c0b282ae1fde9c36a6f0774aedb))
+* arbitrum substreams configs ([#941](https://github.com/propeller-heads/tycho-indexer/issues/941)) ([b720fef](https://github.com/propeller-heads/tycho-indexer/commit/b720fef2bf3c257e83405e2c594010665c4198ae))
+* bsc substreams configs ([56c3699](https://github.com/propeller-heads/tycho-indexer/commit/56c369968a95ac812bf0b137a003f3d40658e0e4))
+* bsc substreams configs ([#942](https://github.com/propeller-heads/tycho-indexer/issues/942)) ([a53ce59](https://github.com/propeller-heads/tycho-indexer/commit/a53ce5915ee2620fc60a5ffcea5473d5ef63a69a))
+* curve substreams ([9161740](https://github.com/propeller-heads/tycho-indexer/commit/9161740386fc7f6e1a5380e62c7ce91f8c3dbc68))
+* curve substreams ([#940](https://github.com/propeller-heads/tycho-indexer/issues/940)) ([a193b2c](https://github.com/propeller-heads/tycho-indexer/commit/a193b2c3b939945b155da47c0ef3bd26e32dafda))
+
+
+### Bug Fixes
+
+* bump curve substreams package versions ([9a9eeb6](https://github.com/propeller-heads/tycho-indexer/commit/9a9eeb63a21da51a655f3a15aa8c874d2bdaa7dd))
+
 ## [0.268.0](https://github.com/propeller-heads/tycho-indexer/compare/0.267.0...0.268.0) (2026-04-24)
 
 
