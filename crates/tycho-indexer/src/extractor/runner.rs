@@ -356,6 +356,7 @@ impl ExtractorRunner {
     /// Processes block-scoped data from the stream: always sends the input to the extractor,
     /// then optionally adds a partial copy of the message (for full blocks with partials enabled)
     /// and/or the result of collect_and_process_full_block (for final partials).
+    #[instrument(skip_all, fields(partial_blocks_enabled, is_partial = data.is_partial))]
     async fn process_block_data(
         extractor: &dyn Extractor,
         data: &BlockScopedData,
@@ -410,7 +411,7 @@ impl ExtractorRunner {
     }
 
     // TODO: add message tracing_id to the log
-    #[instrument(skip_all)]
+    #[instrument(skip_all, fields(subscriber_count))]
     async fn propagate_msg(subscribers: &Arc<Mutex<SubscriptionsMap>>, message: ExtractorMsg) {
         trace!(msg = %message, "Propagating message to subscribers.");
         // TODO: rename variable here instead
@@ -420,6 +421,7 @@ impl ExtractorRunner {
 
         // Lock the subscribers HashMap for exclusive access
         let mut subscribers = subscribers.lock().await;
+        tracing::Span::current().record("subscriber_count", subscribers.len());
 
         for (counter, sender) in subscribers.iter_mut() {
             match sender.send(arced_message.clone()).await {

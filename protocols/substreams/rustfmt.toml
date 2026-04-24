@@ -25,4 +25,5 @@ ignore = [
     "ethereum-liquidityparty/src/abi",
     "base-aerodrome-slipstreams/src/abi",
     "ethereum-erc4626/src/abi",
+    "ethereum-rocketpool/src/abi",
 ]
