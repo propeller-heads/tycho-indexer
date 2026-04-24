@@ -80,9 +80,9 @@ type FilterFn = fn(&ComponentWithState) -> bool;
 /// - Supports registering exchanges and their associated filters for specific protocol components.
 /// - Allows the addition of client-side filters for custom conditions.
 ///
-/// **Note:** The tokens provided during configuration will be used for decoding, ensuring
-/// efficient handling of protocol components. Protocol components containing tokens which are not
-/// included in this initial list, or added when applying deltas, will not be decoded.
+/// **Note:** Tokens provided via [`set_tokens`](Self::set_tokens) are used to decode startup
+/// snapshots and initialize protocol states. This is not an ongoing filter — components arriving
+/// after startup include their own token metadata.
 pub struct TychoStreamDecoder<H>
 where
     H: HeaderLike,
@@ -117,10 +117,10 @@ where
         }
     }
 
-    /// Sets the currently known tokens which will be considered during decoding.
+    /// Provides token metadata used to decode startup snapshots and initialize protocol states.
     ///
-    /// Protocol components containing tokens which are not included in this initial list, or
-    /// added when applying deltas, will not be decoded.
+    /// This is not an ongoing stream filter. Components arriving after startup include their
+    /// own token metadata for decoding.
     pub async fn set_tokens(&self, tokens: HashMap<Bytes, Token>) {
         let mut guard = self.state.write().await;
         guard.tokens = tokens;

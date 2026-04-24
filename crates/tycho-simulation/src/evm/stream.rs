@@ -39,9 +39,11 @@
 //! Select which protocols to synchronize.
 //!
 //! ### Tokens & Minimum Token Quality
-//! Provide an initial set of tokens of interest. The first message includes only
-//! components whose tokens match this set. The stream adds new tokens automatically
-//! when a component is deployed and its quality exceeds `min_token_quality`.
+//! Provide token metadata up front so the decoder can initialize protocol states from startup
+//! snapshots. `set_tokens` does not act as an ongoing filter — components arriving after startup
+//! include their own token metadata. To restrict processing to specific tokens, apply that filter
+//! in your consumer when reading `new_components`. New tokens arriving via stream deltas are added
+//! automatically when their quality exceeds `min_token_quality`.
 //!
 //! ### StreamEndPolicy
 //! Control when the stream ends based on worker states. By default, it ends when all
@@ -391,10 +393,11 @@ impl ProtocolStreamBuilder {
         self
     }
 
-    /// Sets the initial tokens to consider during decoding.
+    /// Provides token metadata used to decode startup snapshots and initialize protocol states.
     ///
-    /// Only components containing these tokens will be decoded initially.
-    /// New tokens may be added automatically if they meet the quality threshold.
+    /// This is not a stream filter — components arriving after startup include their own token
+    /// metadata. To restrict to specific tokens, filter in your consumer logic. New tokens
+    /// arriving via stream deltas are added automatically if they meet the quality threshold.
     pub async fn set_tokens(self, tokens: HashMap<Bytes, Token>) -> Self {
         self.decoder.set_tokens(tokens).await;
         self
