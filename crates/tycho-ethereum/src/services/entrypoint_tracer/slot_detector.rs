@@ -33,6 +33,9 @@ type SlotValues = Vec<((Address, Bytes), U256)>;
 /// Type alias for the cache
 type ThreadSafeCache<K, V> = Arc<std::sync::RwLock<HashMap<K, V>>>;
 
+/// Maximum number of slot candidates to test per token before giving up.
+const MAX_SLOT_CANDIDATES: usize = 5;
+
 #[derive(Debug, Clone)]
 pub(crate) struct SlotMetadata {
     token: Address,
@@ -446,6 +449,7 @@ impl<S: SlotDetectionStrategy> SlotDetector<S> {
                         detected_results.insert(token, Err(SlotDetectorError::TokenNotInTrace));
                     } else {
                         Self::sort_slots_by_priority(&mut all_slots, original_value);
+                        all_slots.truncate(MAX_SLOT_CANDIDATES);
 
                         slots_to_test.push(SlotMetadata {
                             token,
@@ -642,7 +646,9 @@ mod tests {
         rpc::EthereumRpcClient,
         services::entrypoint_tracer::{
             balance_slot_detector::BalanceStrategy,
-            slot_detector::{SlotDetectionStrategy, SlotDetector, SlotDetectorError, SlotMetadata},
+            slot_detector::{
+                SlotDetectionStrategy, SlotDetector, SlotDetectorError, SlotMetadata, SlotValues,
+            },
         },
         test_fixtures::TestFixture,
         BytesCodec,
@@ -950,5 +956,87 @@ mod tests {
         // Verify no additional RPC calls were made (counts unchanged)
         trace_mock.assert();
         slot_test_mock.assert();
+    }
+
+    #[test]
+    fn test_sort_slots_by_priority() {
+        let addr = Address::from([0x11u8; 20]);
+        let slot_a = Bytes::from(vec![0x01u8; 32]);
+        let slot_b = Bytes::from(vec![0x02u8; 32]);
+        let slot_c = Bytes::from(vec![0x03u8; 32]);
+
+        let original_value = U256::from(1000u64);
+
+        // Slot values at different distances from original_value (1000):
+        //   slot_a: 5000 → distance 4000
+        //   slot_b: 999  → distance 1
+        //   slot_c: 1500 → distance 500
+        let mut slots: SlotValues = vec![
+            ((addr.clone(), slot_a.clone()), U256::from(5000u64)),
+            ((addr.clone(), slot_b.clone()), U256::from(999u64)),
+            ((addr.clone(), slot_c.clone()), U256::from(1500u64)),
+        ];
+
+        SlotDetector::<TestFixtureStrategy>::sort_slots_by_priority(&mut slots, original_value);
+
+        // Expected order: slot_b (dist 1), slot_c (dist 500), slot_a (dist 4000)
+        assert_eq!(slots[0].0 .1, slot_b);
+        assert_eq!(slots[1].0 .1, slot_c);
+        assert_eq!(slots[2].0 .1, slot_a);
+    }
+
+    #[test]
+    fn test_failed_slot_schedules_retry_with_remaining() {
+        let detector = TestFixture::create_slot_detector_without_rpc();
+
+        let token = Address::from([0x11u8; 20]);
+        let slot_a = Bytes::from(vec![0x01u8; 32]);
+        let slot_b = Bytes::from(vec![0x02u8; 32]);
+
+        let slots_to_test = vec![SlotMetadata {
+            token: token.clone(),
+            original_value: U256::from(1000u64),
+            test_value: U256::from(2000u64),
+            all_slots: vec![
+                ((token.clone(), slot_a.clone()), U256::from(1000u64)),
+                ((token.clone(), slot_b.clone()), U256::from(900u64)),
+            ],
+        }];
+
+        // Response returns the original value (unchanged) → slot_a is wrong
+        let responses =
+            vec![Ok(json!("0x00000000000000000000000000000000000000000000000000000000000003e8"))];
+
+        let mut results = HashMap::new();
+        let retry_data =
+            detector.process_slot_test_responses(responses, slots_to_test, &mut results);
+
+        // Should schedule a retry with the remaining slot (slot_b)
+        assert_eq!(retry_data.len(), 1);
+        assert_eq!(retry_data[0].all_slots.len(), 1);
+        assert_eq!(retry_data[0].all_slots[0].0 .1, slot_b);
+        // No final result yet — token is still being retried
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_sort_slots_by_priority_stable_on_equal_distance() {
+        let addr = Address::from([0x11u8; 20]);
+        let slot_a = Bytes::from(vec![0x01u8; 32]);
+        let slot_b = Bytes::from(vec![0x02u8; 32]);
+
+        let original_value = U256::from(1000u64);
+
+        // Both slots equidistant from original_value: 900 and 1100, both distance 100
+        let mut slots: SlotValues = vec![
+            ((addr.clone(), slot_a.clone()), U256::from(900u64)),
+            ((addr.clone(), slot_b.clone()), U256::from(1100u64)),
+        ];
+
+        SlotDetector::<TestFixtureStrategy>::sort_slots_by_priority(&mut slots, original_value);
+
+        // Stable sort preserves original order for equal keys
+        assert_eq!(slots[0].0 .1, slot_a);
+        assert_eq!(slots[1].0 .1, slot_b);
     }
 }
