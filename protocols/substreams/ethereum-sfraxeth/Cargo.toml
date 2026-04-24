@@ -9,9 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ethabi = "17"
-hex-literal = "0.4.1"
 num-bigint = "0.4"
-num-traits = "0.2.15"
 prost = "0.11"
 prost-types = "0.11"
 substreams = "0.5.22"

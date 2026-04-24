@@ -40,7 +40,7 @@ permissions:
 jobs:
   # ── tycho-indexer ──────────────────────────────────────────────────────────
   build-and-push-tycho-indexer:
-    if: inputs.application == 'tycho-indexer'
+    if: ${{ inputs.application == 'tycho-indexer' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
     permissions:
       id-token: write
@@ -59,7 +59,7 @@ jobs:
 
   deploy-dev-tycho-indexer:
     needs: build-and-push-tycho-indexer
-    if: inputs.application == 'tycho-indexer'
+    if: ${{ inputs.application == 'tycho-indexer' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/deploy-any-branch-dev.yaml@main
     permissions:
       id-token: write
@@ -77,7 +77,7 @@ jobs:
 
   # ── tycho-integration-test ─────────────────────────────────────────────────
   build-and-push-tycho-integration-test:
-    if: inputs.application == 'tycho-integration-test'
+    if: ${{ inputs.application == 'tycho-integration-test' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/build-and-push-docker-image.yaml@main
     permissions:
       id-token: write
@@ -96,7 +96,7 @@ jobs:
 
   deploy-dev-tycho-integration-test:
     needs: build-and-push-tycho-integration-test
-    if: inputs.application == 'tycho-integration-test'
+    if: ${{ inputs.application == 'tycho-integration-test' }}
     uses: propeller-heads/ci-cd-templates/.github/workflows/deploy-any-branch-dev.yaml@main
     permissions:
       id-token: write

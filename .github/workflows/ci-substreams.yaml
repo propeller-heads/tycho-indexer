@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'protocols/substreams/**'
+      - '!**/Cargo.lock'
   workflow_dispatch:
 
 permissions:

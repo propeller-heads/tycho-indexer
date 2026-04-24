@@ -1,0 +1,17 @@
+# Dockerfile-specific ignore for integration test builds.
+# Less restrictive than root .dockerignore because this build needs
+# protocols/substreams/ and EVM adapter sources.
+
+# Rust build artifacts
+target/
+**/target/
+
+# Git history (not needed — forge deps are installed in-Dockerfile)
+.git/
+
+# IDE and local dev files
+.claude/
+.idea/
+.env
+docker-compose*.yml
+*.swp

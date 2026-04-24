@@ -1,3 +1,207 @@
+## [0.270.0](https://github.com/propeller-heads/tycho-indexer/compare/0.269.0...0.270.0) (2026-04-24)
+
+
+### Features
+
+* ekubo_v3 substreams ([#935](https://github.com/propeller-heads/tycho-indexer/issues/935)) ([c424f86](https://github.com/propeller-heads/tycho-indexer/commit/c424f86bb26f48c5c8eff61fcb72048e0940aab6))
+
+
+### Bug Fixes
+
+* address ekubo v3 substreams ci ([2a25b64](https://github.com/propeller-heads/tycho-indexer/commit/2a25b64ed84abd978045caa1c93d416b3ec7e9e1))
+
+## [0.269.0](https://github.com/propeller-heads/tycho-indexer/compare/0.268.0...0.269.0) (2026-04-24)
+
+
+### Features
+
+* arbitrum substreams configs ([40f498b](https://github.com/propeller-heads/tycho-indexer/commit/40f498b39fa65c0b282ae1fde9c36a6f0774aedb))
+* arbitrum substreams configs ([#941](https://github.com/propeller-heads/tycho-indexer/issues/941)) ([b720fef](https://github.com/propeller-heads/tycho-indexer/commit/b720fef2bf3c257e83405e2c594010665c4198ae))
+* bsc substreams configs ([56c3699](https://github.com/propeller-heads/tycho-indexer/commit/56c369968a95ac812bf0b137a003f3d40658e0e4))
+* bsc substreams configs ([#942](https://github.com/propeller-heads/tycho-indexer/issues/942)) ([a53ce59](https://github.com/propeller-heads/tycho-indexer/commit/a53ce5915ee2620fc60a5ffcea5473d5ef63a69a))
+* curve substreams ([9161740](https://github.com/propeller-heads/tycho-indexer/commit/9161740386fc7f6e1a5380e62c7ce91f8c3dbc68))
+* curve substreams ([#940](https://github.com/propeller-heads/tycho-indexer/issues/940)) ([a193b2c](https://github.com/propeller-heads/tycho-indexer/commit/a193b2c3b939945b155da47c0ef3bd26e32dafda))
+
+
+### Bug Fixes
+
+* bump curve substreams package versions ([9a9eeb6](https://github.com/propeller-heads/tycho-indexer/commit/9a9eeb63a21da51a655f3a15aa8c874d2bdaa7dd))
+
+## [0.268.0](https://github.com/propeller-heads/tycho-indexer/compare/0.267.0...0.268.0) (2026-04-24)
+
+
+### Features
+
+* Add Aerodrome V1 substreams integration for Base chain ([a49fa30](https://github.com/propeller-heads/tycho-indexer/commit/a49fa307791400ac7436331730652f0519cadc67))
+* add attributes for RocketPool Queue to compute the getEffectiveCapacity in simulation ([d1b60d4](https://github.com/propeller-heads/tycho-indexer/commit/d1b60d4257ec30e82968cd4b540a25d19a9d3a68))
+* add deposit_assign_enabled attribute for simulation ([3b0f397](https://github.com/propeller-heads/tycho-indexer/commit/3b0f3972f4b1f8885a009374addf2e1c9f603540))
+* add deposit_assign_maximum and deposit_assign_socialised_maximum constants ([98f9084](https://github.com/propeller-heads/tycho-indexer/commit/98f9084aed0e3f65653167503d45b42023ce2e38))
+* add reth_collateral_target tracking, use v4 network balances ABI ([71ecbc8](https://github.com/propeller-heads/tycho-indexer/commit/71ecbc8e42cf833199561fe4a5a038a669080bd9))
+* Add Rocketpool ABI path to rustfmt configuration ([70d1810](https://github.com/propeller-heads/tycho-indexer/commit/70d181083cdf0e47685d22ee0cedb5b94b8b785b))
+* add RocketpoolState support in protocol mapping and update dependencies ([add13e6](https://github.com/propeller-heads/tycho-indexer/commit/add13e687165cf3caa75eeeb06fba62cb5dff13d))
+* add Saturn v4 dual-version support for RocketPool substreams ([ef630c2](https://github.com/propeller-heads/tycho-indexer/commit/ef630c29988884a01458ebd34b0408c03c1138d1))
+* add script to compute initial state values for substreams.yaml parameters ([a51d847](https://github.com/propeller-heads/tycho-indexer/commit/a51d8476960b16bf57f7a055701c16b694c386a0))
+* add target_reth_collateral_rate storage slot tracking ([d5f6743](https://github.com/propeller-heads/tycho-indexer/commit/d5f674391f8ff360cd5e3f499c390768da0768fc))
+* aerodrome v1 substreams ([#930](https://github.com/propeller-heads/tycho-indexer/issues/930)) ([eebd577](https://github.com/propeller-heads/tycho-indexer/commit/eebd577f86a7a40dc6157c2ce766981930b7471a))
+* do vault liquidity tracking by using deposit pool events and storage slots instead of deltas ([dff4d9b](https://github.com/propeller-heads/tycho-indexer/commit/dff4d9b0170b552b950753806cf01db2ac726dd9))
+* enhance minipool queue handling with queue_id based storage slot mapping ([433276f](https://github.com/propeller-heads/tycho-indexer/commit/433276f3a33e9b1aa5f8300d21d16567b823e891))
+* finish updated execution integration, and explain why we will not be running execution integration tests due to reasons explain in the integration_test ([dda708c](https://github.com/propeller-heads/tycho-indexer/commit/dda708c612a6019f9f6da9afb48652aadcd78a93))
+* Implement Ethereum Rocketpool integration with protocol components and balance management (tests do not pass) ([b8c514a](https://github.com/propeller-heads/tycho-indexer/commit/b8c514a175c565e1efa0c7a56684146f23a07cd9))
+* init velodrome ([7989ce3](https://github.com/propeller-heads/tycho-indexer/commit/7989ce3527a9afb0f7f53d231d29baad313f006b))
+* initialize protocol component with initial state values at creation ([91c3261](https://github.com/propeller-heads/tycho-indexer/commit/91c3261e00dc9ff7e03dfc502ef0c7446d135fcd))
+* integrate RocketTokenRETH contract and update liquidity indexing ([11b22eb](https://github.com/propeller-heads/tycho-indexer/commit/11b22eb1f0b06ef7450117dd2066579e9564e0ab))
+* liquidity party substreams ([#933](https://github.com/propeller-heads/tycho-indexer/issues/933)) ([9852f12](https://github.com/propeller-heads/tycho-indexer/commit/9852f12963bacfcd308bc9f5627f0fc06f7c8fad))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) ([5194d52](https://github.com/propeller-heads/tycho-indexer/commit/5194d523679910339d145e21dbe8cb1d32c9fa71))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) added generated abi files ([1ed8d8f](https://github.com/propeller-heads/tycho-indexer/commit/1ed8d8f265234b9f7d6c7586e8ddab7440ff7a5d))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) added generated abi files ([848190d](https://github.com/propeller-heads/tycho-indexer/commit/848190d6de9cdef6190fafc6c8245f8509380049))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) clippy lint ([987ca5a](https://github.com/propeller-heads/tycho-indexer/commit/987ca5ac3a04fff84d2a56d999bbc5227dc813f3))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) factory update ([ba65aa6](https://github.com/propeller-heads/tycho-indexer/commit/ba65aa6cb3b160e87582060a4f07970ec17ad17c))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) helper contract rewind ([bab40e5](https://github.com/propeller-heads/tycho-indexer/commit/bab40e51cc99ccf66341a3cbd7c41daea91ef84b))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) license update ([78a2f08](https://github.com/propeller-heads/tycho-indexer/commit/78a2f089e843ca8980ab64463d4d12c663b37bc0))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) missing helper contract fix ([a2ea2af](https://github.com/propeller-heads/tycho-indexer/commit/a2ea2afeb7baa04a3a9e4101f22ffaf835596f4d))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) substreams Cargo.toml fix ([a87f530](https://github.com/propeller-heads/tycho-indexer/commit/a87f53041a0c9d7db45d8ed6dc2513e15a6c30e3))
+* LiquidityParty adapter ([#296](https://github.com/propeller-heads/tycho-indexer/issues/296)) substreams yaml fix ([751023d](https://github.com/propeller-heads/tycho-indexer/commit/751023d906232c34412b801f6c7ae2ab5d629856))
+* Refactor protocol component updates to use try_for_each and simplify error handling ([5c3fc04](https://github.com/propeller-heads/tycho-indexer/commit/5c3fc04e145f412a70dbf63ec4f96afc0bf13dfe))
+* rename deposit contract liquidity to deposit contract balance for clarity ([ce12bef](https://github.com/propeller-heads/tycho-indexer/commit/ce12bef989e3e16f4c5d11eefcfd4b1250405966))
+* rename deposit_assign_enabled to deposit_assigning_enabled for clarity ([3095b95](https://github.com/propeller-heads/tycho-indexer/commit/3095b95f84b1dff9e8b7ad01312323164b9929d8))
+* Rename function to map_relative_component_liquidity and remove Result ([7f79ee0](https://github.com/propeller-heads/tycho-indexer/commit/7f79ee0577425072ace26291716bbba330adb3b4))
+* rename max_deposit_amount to maximum_deposit_pool_size for clarity ([7bf860e](https://github.com/propeller-heads/tycho-indexer/commit/7bf860e19e1a7d2f1af4e2c39db7fa74f72c8126))
+* rename maximum_deposit_pool_size to max_deposit_pool_size for consistency ([a5e216f](https://github.com/propeller-heads/tycho-indexer/commit/a5e216f8bec402d158a5c381d97337bea12b0e82))
+* Replace dynamic fee module with custom fee module for Velodrome ([0d6fa25](https://github.com/propeller-heads/tycho-indexer/commit/0d6fa257f31ba1e742b1be2afe22859cea1666e9))
+* rocketpool substreams ([#934](https://github.com/propeller-heads/tycho-indexer/issues/934)) ([60e090a](https://github.com/propeller-heads/tycho-indexer/commit/60e090a9c4681acbc69f46c79bbff745ed227816))
+* simplify queue handling by removing legacy queue storage slots and asserting variable queue IDs ([99b238c](https://github.com/propeller-heads/tycho-indexer/commit/99b238cbfadbb9571b664865355e81a6b79d5448))
+* start indexing from the RocketDepositPool_V1_2 deployment instead of V1_0 ([c7dc708](https://github.com/propeller-heads/tycho-indexer/commit/c7dc7085556c53e0a93711793f5723758641c5d9))
+* unichain velodrome substreams ([#932](https://github.com/propeller-heads/tycho-indexer/issues/932)) ([12766b7](https://github.com/propeller-heads/tycho-indexer/commit/12766b7f12bbe8bae079ad217284d68d77fc70c2))
+* unify ABI generation by reading from directory and converting names to snake case ([b2ae85e](https://github.com/propeller-heads/tycho-indexer/commit/b2ae85eb468a13add92e659befbcab226671bf61))
+* Update protocol type name to 'rocketpool_pool' ([21c6cd1](https://github.com/propeller-heads/tycho-indexer/commit/21c6cd190ef9952aa28dca7cbb9c1260a3f2ba8d))
+* Update Rocket Deposit Pool addresses to collect historical event information ([86a61c9](https://github.com/propeller-heads/tycho-indexer/commit/86a61c9c0b4b8ea9b906398a83414d0383b43c2f))
+
+
+### Bug Fixes
+
+* adapt aerodrome v1 manifest for monorepo ([fe4564a](https://github.com/propeller-heads/tycho-indexer/commit/fe4564ac3128d94a8c2b8a78a528eb65c6cdf5b4))
+* adapt rocketpool manifest for monorepo ([d225995](https://github.com/propeller-heads/tycho-indexer/commit/d225995d9bf79d36c0ca740bb4048423c29a2dba))
+* adapt unichain-velodrome manifest for monorepo ([589766d](https://github.com/propeller-heads/tycho-indexer/commit/589766d1150f72cfb3e7156bcb3d8bb780bd970a))
+* correct logic for filtering ProposalExecuted events in protocol mapping ([9f06133](https://github.com/propeller-heads/tycho-indexer/commit/9f0613389a1c3ebf272f77b75d804ef706cecc29))
+* downgrade heck to 0.4 to deduplicate dependency ([6f439ad](https://github.com/propeller-heads/tycho-indexer/commit/6f439ad9f3302445438f872f6b38ddff9fcba6b0))
+* filter out reverted calls in protocol mapping for accurate data retrieval ([bf083bc](https://github.com/propeller-heads/tycho-indexer/commit/bf083bc4f29d50eaaac59da8b328349bbe25702e))
+* Filter protocol settings storage updates by RocketStorage address ([8e4b276](https://github.com/propeller-heads/tycho-indexer/commit/8e4b276c2dd769672303444301b85ae910fec680))
+* have liquidity as a attribute, and total eth as a component balance ([5ec7738](https://github.com/propeller-heads/tycho-indexer/commit/5ec7738582afb40c1ec39c312710111174828ec7))
+* Ignore rustfmt for unichain-velodrome abi ([fde042e](https://github.com/propeller-heads/tycho-indexer/commit/fde042e5ec8a3aa27f688b39f83d9af81ee02d26))
+* make unichain velodrome tests list explicit ([3f4a2b4](https://github.com/propeller-heads/tycho-indexer/commit/3f4a2b4866677a506feb2ec46037ca2589f393cb))
+* remove unuse param and update module name ([9873bea](https://github.com/propeller-heads/tycho-indexer/commit/9873bea8381f5f85c8bad89e93c978a2cc5d3b16))
+* restore skip-on-creation semantics, fix script default block ([cc3be8f](https://github.com/propeller-heads/tycho-indexer/commit/cc3be8fef005083bc28224b09080dfd7b2081518))
+* restore swap adapter error types for liquidityparty ([4e75616](https://github.com/propeller-heads/tycho-indexer/commit/4e756160ab4ace227b7f737880570cee5d85673a))
+* support both rocket_network_balances v2 and v3, update references in protocol mapping ([1203b3e](https://github.com/propeller-heads/tycho-indexer/commit/1203b3e7ae102db93dd63146968c1a65a4391969))
+* Update CustomSwapFeeModule ABI ([d659a42](https://github.com/propeller-heads/tycho-indexer/commit/d659a42fde6e44fd5a91f83c76fca0870218bb3d))
+* update documentation to clarify minipool queue behavior post V1.2 upgrade ([b359516](https://github.com/propeller-heads/tycho-indexer/commit/b359516f1372b9ab5cffb41816fc0b9d3eb67a34))
+* Update liquidity attribute to use u128 instead of BigInt ([bac8032](https://github.com/propeller-heads/tycho-indexer/commit/bac80324254e5b23a997381d1daddf76c768518b))
+* update liquidityparty substreams lockfile ([2e03af9](https://github.com/propeller-heads/tycho-indexer/commit/2e03af9e22b6b4b8efc7cb5805227642723eec76))
+* update mapping logic to find the transaction that activated the Rocket Pool Deposit Pool V1.2 ([6253943](https://github.com/propeller-heads/tycho-indexer/commit/6253943f240ed602e568a5a5e1320ba3282aaf1d))
+* update Rocket Deposit Pool to start indexing from the V1.2 contract was activated and not from the point the V1.2 contract was deployed ([ee75fdb](https://github.com/propeller-heads/tycho-indexer/commit/ee75fdb685694817cced6e5a44d17dbd1b52ecd9))
+* Update storage slot mappings for Unichain Velodrome pools ([eaba018](https://github.com/propeller-heads/tycho-indexer/commit/eaba0185b7b85c1f210e996d24361648db1e0123))
+* update substreams lockfile for liquidityparty ([f5783c9](https://github.com/propeller-heads/tycho-indexer/commit/f5783c9eed975fa9020ef7b0f82e4ee0b41ce25d))
+* update substreams lockfile for rocketpool ([f318019](https://github.com/propeller-heads/tycho-indexer/commit/f318019c210b492c064408e96cf2f9815620060c))
+* update substreams.yaml to be correctly parsed ([80f0c08](https://github.com/propeller-heads/tycho-indexer/commit/80f0c0837fdeaf1da8d484483f3eef31b6c96c33))
+* Update tick attribute to use i32 to_be_bytes ([c69e0f1](https://github.com/propeller-heads/tycho-indexer/commit/c69e0f19a03ae291e46fa143b19b8639f979562f))
+* use first tx in starting block for component creation ([163e213](https://github.com/propeller-heads/tycho-indexer/commit/163e2131f443915f4aa884d471f97c7d0e62e81d))
+* use raw pool fee ([8dcbb0e](https://github.com/propeller-heads/tycho-indexer/commit/8dcbb0e55267eb7c3afec307488525e14509768b))
+* use verified initial state, run handlers on creation block ([9ef3b74](https://github.com/propeller-heads/tycho-indexer/commit/9ef3b743a69c04e7196c348707795c9ac437faed))
+
+
+### Reverts
+
+* remove reth_collateral_target — doesn't affect swap output ([0d5e986](https://github.com/propeller-heads/tycho-indexer/commit/0d5e9869521ce74cedc939bc9775eac1bb4e2577))
+
+## [0.267.0](https://github.com/propeller-heads/tycho-indexer/compare/0.266.0...0.267.0) (2026-04-24)
+
+
+### Features
+
+* **tracing:** add more debug spans ([e6f52ad](https://github.com/propeller-heads/tycho-indexer/commit/e6f52adc0f52b6705982db225cd179d274c76daa))
+* **tracing:** add more debug spans ([#949](https://github.com/propeller-heads/tycho-indexer/issues/949)) ([853ca1a](https://github.com/propeller-heads/tycho-indexer/commit/853ca1a0d45ac2e72f092d192d6bff5efeb19551))
+
+## [0.266.0](https://github.com/propeller-heads/tycho-indexer/compare/0.265.0...0.266.0) (2026-04-24)
+
+
+### Features
+
+* add workflow to detect deps with vulnerabilities ([7bd4199](https://github.com/propeller-heads/tycho-indexer/commit/7bd419975d1a57877fd2a957faa4998cdd16488b))
+* add workflow to detect deps with vulnerabilities ([#917](https://github.com/propeller-heads/tycho-indexer/issues/917)) ([f878c36](https://github.com/propeller-heads/tycho-indexer/commit/f878c365b56ce27c5497c33e9f6a17cc79fcf2cf))
+
+
+### Bug Fixes
+
+* add cargo audit exception for tracing-subscriber ([07e8886](https://github.com/propeller-heads/tycho-indexer/commit/07e8886c116b57c7d11328735abea6a298e608f4))
+* bump dependency with vulnerability ([a4164b9](https://github.com/propeller-heads/tycho-indexer/commit/a4164b960ace5de8ba921c190cbc9b15a2e71ce1))
+* ignore doctests ([6c9cbbe](https://github.com/propeller-heads/tycho-indexer/commit/6c9cbbe4aad441858b85586dbf8a76f4bd4498a4))
+* remove unused dependencies ([ea46bad](https://github.com/propeller-heads/tycho-indexer/commit/ea46bad476c285cec4e06e8ee9d71a9433c96fec))
+* update alloy version with known vulnerabilities ([1cd4231](https://github.com/propeller-heads/tycho-indexer/commit/1cd423107b631171952c79ee6fa91e5cb863ec38))
+
+## [0.265.0](https://github.com/propeller-heads/tycho-indexer/compare/0.264.2...0.265.0) (2026-04-24)
+
+
+### Features
+
+* add pipeline to run cargo update periodically ([#937](https://github.com/propeller-heads/tycho-indexer/issues/937)) ([0a864a1](https://github.com/propeller-heads/tycho-indexer/commit/0a864a12987362ea811751833807156d122c22ca))
+* add pipeline to update dependencies ([de20fa0](https://github.com/propeller-heads/tycho-indexer/commit/de20fa0d719b3536b5b1a8c8833852e28d1ba717))
+* pin too-recent crates to latest safe version instead of old version ([40f776c](https://github.com/propeller-heads/tycho-indexer/commit/40f776c63a66a0f057e65fdc0ce835ff3b20ac2b))
+
+
+### Bug Fixes
+
+* exclude Cargo.lock from substreams CI trigger ([c47de9c](https://github.com/propeller-heads/tycho-indexer/commit/c47de9cc5a68d26dd51996ac11ed7ac70d44112e))
+* scope cargo-update PR to only Cargo.lock files ([f0dd6f4](https://github.com/propeller-heads/tycho-indexer/commit/f0dd6f4ba31d5e7604cb8823f3f9e5e9a7a3e7b2))
+
+## [0.264.2](https://github.com/propeller-heads/tycho-indexer/compare/0.264.1...0.264.2) (2026-04-23)
+
+
+### Bug Fixes
+
+* Don't allow Curve tokens to be zero address ([5648058](https://github.com/propeller-heads/tycho-indexer/commit/56480585f5aefa32def0d45234f143976f0d58ec))
+* Don't allow Curve tokens to be zero address ([#943](https://github.com/propeller-heads/tycho-indexer/issues/943)) ([fb31205](https://github.com/propeller-heads/tycho-indexer/commit/fb31205095dedc8100ac362ff65c34429d8adf04))
+
+## [0.264.1](https://github.com/propeller-heads/tycho-indexer/compare/0.264.0...0.264.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **docker:** bump Rust base image to 1.91 to support cargo-chef ([0a5bebd](https://github.com/propeller-heads/tycho-indexer/commit/0a5bebd73dcbe08f4ce161d1d9beb64ab0d63b3e))
+* **docker:** copy extractors.yaml from build context to avoid kaniko path bug ([365b7dd](https://github.com/propeller-heads/tycho-indexer/commit/365b7ddd2a2e887fe60b74c25ae072433ec9effc))
+* **docker:** fix build workflows ([#936](https://github.com/propeller-heads/tycho-indexer/issues/936)) ([fa94247](https://github.com/propeller-heads/tycho-indexer/commit/fa94247a6f194f52f76696adb4d7f273a4f4fa88))
+
+## [0.264.0](https://github.com/propeller-heads/tycho-indexer/compare/0.263.3...0.264.0) (2026-04-22)
+
+
+### Features
+
+* add unichain-curve clone integration test config ([a9aab7a](https://github.com/propeller-heads/tycho-indexer/commit/a9aab7aa07793d6786edbe1877a13ec71a57ca43)), closes [#423](https://github.com/propeller-heads/tycho-indexer/issues/423)
+
+
+### Bug Fixes
+
+* build tycho-indexer from monorepo source instead of GitHub clone ([2bd72fe](https://github.com/propeller-heads/tycho-indexer/commit/2bd72fef2dc60a22a309b1ede986552d9a8b423b))
+* clone and other chain protocol tests CI running ([f2593a2](https://github.com/propeller-heads/tycho-indexer/commit/f2593a23cc3a1dfb8d262c6a2a36ae11e93092cc))
+* clone and other chain protocol tests CI running ([#918](https://github.com/propeller-heads/tycho-indexer/issues/918)) ([9f62b96](https://github.com/propeller-heads/tycho-indexer/commit/9f62b961f32adcb3ec3ca4d1dd6046c211bdc2d6))
+* handle missing git in protocol-testing build script ([038e441](https://github.com/propeller-heads/tycho-indexer/commit/038e44167d9b8602e14cba9290d11416c1b534a6))
+* install forge deps in Dockerfile and add build-specific dockerignore ([947db32](https://github.com/propeller-heads/tycho-indexer/commit/947db327d75907aab52b0fdb4837aba551223152))
+* match Docker image directory layout to test runner expectations ([5f311d9](https://github.com/propeller-heads/tycho-indexer/commit/5f311d935bebbedffbf52fc74f8d76d92a0339cf))
+* update docker-compose path in substreams-docker-single action ([3a72d91](https://github.com/propeller-heads/tycho-indexer/commit/3a72d912d6ea29f0e61b265ca922b45fe7559233))
+* use --no-git flag for forge install ([3e96aac](https://github.com/propeller-heads/tycho-indexer/commit/3e96aacdca6cc0b1f6a42a07d4684f53a85fe8ee))
+
+## [0.263.3](https://github.com/propeller-heads/tycho-indexer/compare/0.263.2...0.263.3) (2026-04-22)
+
+
+### Bug Fixes
+
+* **cd:** pin Rust image and fix if-condition syntax on reusable workflow jobs ([e50400a](https://github.com/propeller-heads/tycho-indexer/commit/e50400a07effca18dd3d3a8e4f983fd053b33926))
+* **docker:** copy extractors.yaml from build context instead of builder stage ([705f6ab](https://github.com/propeller-heads/tycho-indexer/commit/705f6ab6bccc7a582ac24688cdd0b6f81acf32a8))
+* **docker:** work around Kaniko path resolution bug for extractors.yaml ([12d646b](https://github.com/propeller-heads/tycho-indexer/commit/12d646b05faed7bb5e938a81dc234945165a2037))
+* **integration-test:** Fix block processing latency metric ([#931](https://github.com/propeller-heads/tycho-indexer/issues/931)) ([9142284](https://github.com/propeller-heads/tycho-indexer/commit/91422840111dffb64e82b4fefffcc8214d6c189d))
+* **integration-test:** make RPC poll attempts and interval configurable ([0a53997](https://github.com/propeller-heads/tycho-indexer/commit/0a53997b82b65b7bde80f8e317ae04ecdd93f705))
+* **integration-test:** poll RPC until it reaches update block number ([4e271cf](https://github.com/propeller-heads/tycho-indexer/commit/4e271cf8b034a06c447c21b8610f4aecfdc3a940))
+* **integration-test:** separate RFQ and protocol update channels ([e3183ca](https://github.com/propeller-heads/tycho-indexer/commit/e3183cae880bcd830bc871823c241b84d49c1a85))
+
 ## [0.263.2](https://github.com/propeller-heads/tycho-indexer/compare/0.263.1...0.263.2) (2026-04-22)
 
 ## [0.263.1](https://github.com/propeller-heads/tycho-indexer/compare/0.263.0...0.263.1) (2026-04-21)

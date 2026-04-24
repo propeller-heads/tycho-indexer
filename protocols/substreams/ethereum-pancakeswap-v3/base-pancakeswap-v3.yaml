@@ -2,10 +2,10 @@ specVersion: v0.1.0
 package:
   name: "base_pancakeswap_v3"
   version: v0.1.2
+  url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-pancakeswap-v3"
 
 protobuf:
   files:
-    - tycho/evm/v1/entity.proto
     - tycho/evm/v1/common.proto
     - tycho/evm/v1/utils.proto
     - pancakeswap.proto

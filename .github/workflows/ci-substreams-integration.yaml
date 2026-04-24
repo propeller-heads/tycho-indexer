@@ -2,6 +2,11 @@ name: Substreams Integration Tests
 
 env:
   RPC_URL: ${{ secrets.RPC_URL_ARCHIVE }}
+  BASE_RPC_URL: ${{ secrets.BASE_RPC_URL_ARCHIVE }}
+  ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL_ARCHIVE }}
+  UNICHAIN_RPC_URL: ${{ secrets.UNICHAIN_RPC_URL_ARCHIVE }}
+  BSC_RPC_URL: ${{ secrets.BSC_RPC_URL_ARCHIVE }}
+  POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL_ARCHIVE }}
   SUBSTREAMS_API_TOKEN: ${{ secrets.SUBSTREAMS_API_TOKEN }}
   AUTH_API_KEY: ${{ secrets.AUTH_API_KEY }}
   EXCLUDED_SUBSTREAMS: target|crates|ethereum-template-factory|ethereum-template-singleton|ethereum-fluid
@@ -63,25 +68,67 @@ jobs:
         with:
           files: protocols/testing/Cargo.toml
 
+      - name: Parse clone protocol mappings from test_runner.rs
+        id: clone_mappings
+        run: |
+          # Extract CLONE_TO_BASE_PROTOCOL from Rust source (single source of truth).
+          MAPPINGS=$(awk '/static CLONE_TO_BASE_PROTOCOL/,/}\);/' \
+            protocols/testing/src/test_runner.rs | \
+            grep '("' | grep -oP '"[^"]*"' | paste - - | tr -d '"')
+          CLONE_NAMES=$(echo "$MAPPINGS" | awk '{print $1}' | tr '\n' ' ' | sed 's/ *$//')
+          echo "clone_names=$CLONE_NAMES" >> "$GITHUB_OUTPUT"
+          echo "Clone protocols: $CLONE_NAMES"
+          # Store full mappings for the changes step (clone=base format).
+          echo "$MAPPINGS" | awk '{print $1 "=" $2}' > /tmp/clone_mappings.txt
+
       - name: Get all substreams folders
         id: all_substreams
         run: |
+          CLONE_NAMES="${{ steps.clone_mappings.outputs.clone_names }}"
           FOLDERS=$(find protocols/substreams -mindepth 1 -maxdepth 1 -type d \
             -exec basename {} \; | sort | \
             grep -v -E "^(${EXCLUDED_SUBSTREAMS})$" | \
             tr '\n' ' ')
-          echo "all_substreams=$FOLDERS" >> "$GITHUB_OUTPUT"
-          echo "Substreams folders: $FOLDERS"
+          ALL="$FOLDERS $CLONE_NAMES"
+          ALL=$(echo $ALL | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ *$//')
+          if [ -z "$ALL" ]; then
+            echo "No substreams folders found"
+          else
+            echo "Substreams folders (including clones): $ALL"
+          fi
+          echo "all_substreams=$ALL" >> "$GITHUB_OUTPUT"
 
       - name: Get changed substreams folders
         id: changes
         if: steps.substreams-files-changed.outputs.any_changed == 'true'
         run: |
+          # Read clone-to-base mappings parsed from test_runner.rs.
+          declare -A CLONE_TO_BASE
+          while IFS='=' read -r clone base; do
+            CLONE_TO_BASE["$clone"]="$base"
+          done < /tmp/clone_mappings.txt
+
           VALID="${{ steps.all_substreams.outputs.all_substreams }}"
-          CHANGED=$(git diff --name-only --diff-filter=d origin/main ${{ github.sha }} | \
-            grep '^protocols/substreams/' | awk -F'/' '{print $3}' | sort -u | \
+
+          # Detect changed top-level substreams directories from git diff.
+          CHANGED_DIRS=$(git diff --name-only --diff-filter=d origin/main \
+            ${{ github.sha }} | \
+            grep '^protocols/substreams/' | awk -F'/' '{print $3}' | sort -u)
+
+          # Match against known protocols (base dirs and clone names).
+          CHANGED=$(echo "$CHANGED_DIRS" | \
             grep -Fx "$(printf '%s\n' ${VALID})" | \
             tr '\n' ' ' | sed 's/ *$//')
+
+          # When a base directory changes, also add any clone protocols that use it.
+          for clone in "${!CLONE_TO_BASE[@]}"; do
+            base="${CLONE_TO_BASE[$clone]}"
+            if echo "$CHANGED_DIRS" | grep -qx "$base"; then
+              CHANGED="$CHANGED $clone"
+            fi
+          done
+
+          CHANGED=$(echo $CHANGED | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed 's/ *$//')
           echo "changed_substreams=$CHANGED" >> "$GITHUB_OUTPUT"
           echo "Changed substreams: $CHANGED"
 
