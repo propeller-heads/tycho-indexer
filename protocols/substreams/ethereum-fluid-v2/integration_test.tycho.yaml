@@ -1,0 +1,41 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_system: "fluid_v2"
+protocol_type_names:
+  - "fluid_v2_pool"
+module_name: "map_protocol_changes"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  - name: test_polygon_usdc_usdt0
+    start_block: 79889913
+    stop_block: 80217047
+    expected_components:
+      - id: "0x8d1b5f8da63fa29b191672231d3845740a11fcbef6c76e077cfffe56cc27c707"
+        tokens:
+          - "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" # usdc
+          - "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" # usdt0
+        static_attributes:
+          dex_type: "0x04"
+          fee: "0x64"
+          tick_spacing: "0x01"
+          controller: "0x0000000000000000000000000000000000000000"
+        creation_tx: "0x7678b0eab3d6c97c2eb2d1588f47e85094afd2185b2215812ab629e16f6655a8"
+        skip_simulation: false
+        skip_execution: true
+
+  - name: test_polygon_usdc_eth
+    start_block: 79889915
+    stop_block: 80217047
+    expected_components:
+      - id: "0xbc4435ed6fcf5fe373cdb243a3e5685f49dbde7d3d91bff4806cc064f9efd11e"
+        tokens:
+          - "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" # usdc
+          - "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" # eth
+        static_attributes:
+          dex_type: "0x04"
+          fee: "0x01f4"
+          tick_spacing: "0x0a"
+          controller: "0x0000000000000000000000000000000000000000"
+        creation_tx: "0x8da5294ba92f7118615e842da3d2559997aece28b0acfc415870988c46fcb82d"
+        skip_simulation: false
+        skip_execution: true
