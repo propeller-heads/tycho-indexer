@@ -1,0 +1,129 @@
+
+syntax = "proto3";
+
+package cowamm;
+
+message CowPool {
+  bytes address = 1;
+  bytes token_a = 2;
+  bytes token_b = 3;
+  bytes lp_token = 4;
+  bytes weight_a = 5;
+  bytes weight_b = 6;
+  uint64 fee = 7;
+  bytes created_tx_hash = 8;
+} 
+
+message CowPools {
+  repeated CowPool pools = 1;
+} 
+
+message Transaction {
+  bytes hash = 1;
+  bytes from = 2;
+  bytes to = 3;
+  uint64 index = 4;
+}
+
+message CowPoolBind {
+  bytes address = 1;
+  bytes token = 2;
+  bytes weight = 3;
+  //Amount of the token bound to the pool
+  bytes amount = 4;
+  //tx that the bind happened
+  Transaction tx = 5;
+  //ordinal of the event the bind was recorded in the block
+  uint64 ordinal = 6;
+}
+
+message CowPoolBinds {
+   repeated CowPoolBind binds = 1;
+}
+
+message CowPoolCreation {
+  bytes address = 1;
+  bytes lp_token = 2;
+  bytes created_tx_hash = 3;
+}
+
+message CowPoolCreations {
+  repeated CowPoolCreation pools = 1;
+}
+
+enum ChangeType {
+  CHANGE_TYPE_UNSPECIFIED = 0;
+  CHANGE_TYPE_UPDATE = 1;
+  CHANGE_TYPE_CREATION = 2;
+  CHANGE_TYPE_DELETION = 3;
+}
+
+message Attribute {
+  // The name of the attribute.
+  string name = 1;
+  // The value of the attribute.
+  bytes value = 2;
+  // The type of change the attribute underwent.
+  ChangeType change = 3;
+}
+
+enum FinancialType {
+  SWAP = 0;
+  LEND = 1;
+  LEVERAGE = 2;
+  PSM = 3;
+}
+
+enum ImplementationType {
+  VM = 0;
+  CUSTOM = 1;
+}
+
+message ProtocolType {
+  string name = 1;
+  FinancialType financial_type = 2;
+  repeated Attribute attribute_schema = 3;
+  ImplementationType implementation_type = 4;
+}
+
+message CowProtocolComponent {
+  string id = 1;
+  repeated bytes tokens = 2;
+  repeated bytes contracts = 3;
+  repeated Attribute static_att = 4;
+  ChangeType change = 5;
+  ProtocolType protocol_type = 6;
+}
+
+// A message containing protocol components that were created by a single tx.
+message TransactionProtocolComponents {
+  Transaction tx = 1;
+  repeated CowProtocolComponent components = 2;
+}
+
+// All protocol components that were created within a block with their corresponding tx.
+message BlockTransactionProtocolComponents {
+  repeated TransactionProtocolComponents tx_components = 1;
+}
+
+message CowBalanceDelta {
+  uint64 ord = 1;
+  Transaction tx = 2;
+  bytes token = 3;
+  bytes delta = 4;
+  bytes component_id = 5;
+}
+
+// A set of balances deltas, usually a group of changes within a single block.
+message BlockBalanceDeltas {
+  repeated CowBalanceDelta balance_deltas = 1;
+}
+
+//set of new components added in the block and deltas 
+message BlockPoolChanges {
+  BlockTransactionProtocolComponents tx_protocol_components = 1;
+  
+  BlockBalanceDeltas block_balance_deltas = 2;
+}
+
+
