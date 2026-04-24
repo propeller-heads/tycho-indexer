@@ -1,3 +1,17 @@
+## [0.271.0](https://github.com/propeller-heads/tycho-indexer/compare/0.270.0...0.271.0) (2026-04-24)
+
+
+### Features
+
+* cowamm substreams ([4a3c362](https://github.com/propeller-heads/tycho-indexer/commit/4a3c3627b68e15768a8644649894a203bd754610))
+* cowamm substreams ([#939](https://github.com/propeller-heads/tycho-indexer/issues/939)) ([98b6d61](https://github.com/propeller-heads/tycho-indexer/commit/98b6d61f51770061586085eb4e7ca85528511a7b))
+
+
+### Bug Fixes
+
+* remove non-ethereum cowamm manifests ([bc33221](https://github.com/propeller-heads/tycho-indexer/commit/bc33221abdefb2c412a3490b90178a2c046e3506))
+* remove unused cowamm dependency ([5428fb7](https://github.com/propeller-heads/tycho-indexer/commit/5428fb78f527f49d5bae9bbd53e91de1a04ad293))
+
 ## [0.270.0](https://github.com/propeller-heads/tycho-indexer/compare/0.269.0...0.270.0) (2026-04-24)
 
 
