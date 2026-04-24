@@ -1,7 +1,9 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use alloy::{
-    primitives::{keccak256, map::AddressHashMap, Address, FixedBytes, Keccak256, U256},
+    eips::BlockNumberOrTag,
+    primitives::{keccak256, map::AddressHashMap, Address, FixedBytes, Keccak256, B256, U256},
+    providers::Provider,
     rpc::types::{state::AccountOverride, Block, TransactionRequest},
     sol_types::SolValue,
 };
@@ -210,9 +212,26 @@ pub(crate) async fn detect_token_slots(
         return token_slots;
     }
 
+    // Pending (flashblock) blocks have a zero hash — slot layouts are immutable so any
+    // valid confirmed block hash works for detection.
+    let detection_hash = if block.header.hash == B256::ZERO {
+        let latest = rpc_tools
+            .provider
+            .get_block_by_number(BlockNumberOrTag::Latest)
+            .await
+            .ok()
+            .flatten();
+        match latest {
+            Some(b) => b.header.hash,
+            None => return HashMap::new(),
+        }
+    } else {
+        block.header.hash
+    };
+
     let balance_results = rpc_tools
         .evm_balance_slot_detector
-        .detect_balance_slots(&erc20_tokens, (**user_address).into(), (*block.header.hash).into())
+        .detect_balance_slots(&erc20_tokens, (**user_address).into(), (*detection_hash).into())
         .await;
 
     let allowance_results = rpc_tools
@@ -221,7 +240,7 @@ pub(crate) async fn detect_token_slots(
             &erc20_tokens,
             (**user_address).into(),
             to_address.clone(),
-            (*block.header.hash).into(),
+            (*detection_hash).into(),
         )
         .await;
 
