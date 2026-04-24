@@ -626,11 +626,8 @@ async fn process_update(
 
         // Flashblocks-capable endpoints expose sequencer pre-confirmed state under `pending`;
         // standard endpoints use `latest` (confirmed blocks only).
-        let block_tag = if cli.partial_blocks {
-            BlockNumberOrTag::Pending
-        } else {
-            BlockNumberOrTag::Latest
-        };
+        let block_tag =
+            if cli.partial_blocks { BlockNumberOrTag::Pending } else { BlockNumberOrTag::Latest };
         let poll_interval = Duration::from_millis(cli.rpc_poll_interval_ms);
 
         let poll_result = poll_rpc_for_block(
@@ -645,8 +642,7 @@ async fn process_update(
         let block_type = if block_tag == BlockNumberOrTag::Pending { "partial" } else { "full" };
         let block = match poll_result {
             BlockPollResult::Ready(b) => {
-                let latency_seconds =
-                    update.received_at.as_secs_f64() - b.header.timestamp as f64;
+                let latency_seconds = update.received_at.as_secs_f64() - b.header.timestamp as f64;
                 metrics::record_block_processing_duration(latency_seconds, block_type);
                 Arc::new(*b)
             }
