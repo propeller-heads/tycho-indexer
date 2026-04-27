@@ -88,6 +88,9 @@ pub(super) fn has_custom_retry_code<T>(e: &ErrorPayload<T>) -> bool {
         -32602 => false, // "invalid params" - wrong parameters
         -32604 => false, // "method not supported" - not supported by this node
 
+        // Other non EIP-1474 errors
+        3 => false, // "execution reverted" - special error for `eth_call` and `eth_estimateGas`
+
         // Default: retry unknown error codes (conservative approach)
         // perf: consider being less conservative to reduce unnecessary retries
         _ => true,
@@ -199,7 +202,7 @@ impl RetryPolicy {
     }
 
     /// Executes an RPC request with automatic retry on transient failures.
-    pub(crate) async fn retry_request<F, Fut, T, E>(&self, mut operation: F) -> Result<T, E>
+    pub(crate) async fn call_with_retry<F, Fut, T, E>(&self, mut operation: F) -> Result<T, E>
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Result<T, E>>,
@@ -319,6 +322,8 @@ pub(crate) mod tests {
     #[case::method_not_found(-32601, false, "method not found", "method doesn't exist")]
     #[case::invalid_params(-32602, false, "invalid params", "wrong parameters")]
     #[case::method_not_supported(-32604, false, "method not supported", "not supported by node")]
+    // EVM execution errors (EIP-1474)
+    #[case::execution_reverted(3, false, "execution reverted", "contract reverted")]
     // Unknown error codes (should be retryable by default for safety)
     #[case::unknown_error(-99999, true, "unknown error", "should be retryable by default")]
     fn test_json_rpc_error_code_classification(
@@ -457,7 +462,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -485,7 +490,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -507,7 +512,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -551,7 +556,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -598,7 +603,7 @@ pub(crate) mod tests {
         let policy = RetryPolicy::new(exp_policy, max_retries);
 
         let result = policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 request_count_clone.fetch_add(1, Ordering::SeqCst);
                 client
                     .request_noparams::<String>("eth_blockNumber")
@@ -650,7 +655,7 @@ pub(crate) mod tests {
 
         // First request - should succeed after retries
         let result1 = shared_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -663,7 +668,7 @@ pub(crate) mod tests {
         // Second request - should also succeed after retries
         // This verifies that the first request didn't exhaust the policy's retry attempts
         let result2 = shared_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 client
                     .request_noparams::<String>("eth_blockNumber")
                     .await
@@ -693,7 +698,7 @@ pub(crate) mod tests {
 
         // Simulate a batch operation that makes multiple calls
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 let mut batch = client.new_batch();
                 let call1 = batch.add_call::<_, String>("eth_blockNumber", &())?;
                 let call2 = batch.add_call::<_, String>("eth_blockNumber", &())?;
@@ -725,7 +730,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 let mut batch = client.new_batch();
                 let call1 = batch.add_call::<_, String>("eth_blockNumber", &())?;
                 let call2 = batch.add_call::<_, String>("eth_blockNumber", &())?;
@@ -769,7 +774,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 let mut batch = client.new_batch();
                 let call1 = batch.add_call::<_, String>("eth_blockNumber", &())?;
                 let call2 = batch.add_call::<_, String>("eth_blockNumber", &())?;
@@ -811,7 +816,7 @@ pub(crate) mod tests {
         let client = ClientBuilder::default().http(server.url().parse().unwrap());
 
         let result = mock_retry_policy()
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 let mut batch = client.new_batch();
                 let call1 = batch.add_call::<_, String>("eth_blockNumber", &())?;
                 let call2 = batch.add_call::<_, String>("eth_blockNumber", &())?;
