@@ -111,7 +111,7 @@ fn build_scenarios() -> Vec<BenchScenario> {
     let pairs: Vec<(&str, Token, Token, f32)> =
         vec![("WETH/USDC", weth(), usdc(), 3000.0), ("WBTC/USDC", wbtc(), usdc(), 65000.0)];
 
-    let level_counts = [3, 10, 50];
+    let level_counts = [3, 10, 200];
 
     let mut rng = rand::rng();
 
