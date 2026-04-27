@@ -15,13 +15,10 @@ use substreams_ethereum::{pb::eth, Function};
 use crate::{
     abi,
     abi::set_oracle_implementation::functions::SetOracle,
-    consts::{
-        CONTRACTS_TO_INDEX, NEW_SUSD, OLD_SUSD, RUSDY_ADDRESS, RUSDY_BLOCKLIST_ADDRESS,
-        STETH_ADDRESS,
-    },
+    consts::ZERO_ADDRESS,
+    params::{emit_specific_pools, parse_curve_params},
     pool_changes::emit_eth_deltas,
     pool_factories,
-    pools::emit_specific_pools,
 };
 use tycho_substreams::{
     attributes::json_deserialize_address_list,
@@ -31,8 +28,6 @@ use tycho_substreams::{
     entrypoint::create_entrypoint,
     prelude::{entry_point_params::TraceData, *},
 };
-
-pub const ZERO_ADDRESS: &[u8] = &[0u8; 20];
 
 /// This struct purely exists to spoof the `PartialEq` trait for `Transaction` so we can use it in
 ///  a later groupby operation.
@@ -48,6 +43,7 @@ impl PartialEq for TransactionWrapper {
 #[substreams::handlers::map]
 // Map all created components and their related entity changes.
 pub fn map_components(params: String, block: eth::v2::Block) -> Result<BlockChanges> {
+    let curve_params = parse_curve_params(&params)?;
     let changes = block
         .transactions()
         .filter_map(|tx| {
@@ -59,6 +55,7 @@ pub fn map_components(params: String, block: eth::v2::Block) -> Result<BlockChan
                 .filter(|(_, call)| !call.call.state_reverted)
             {
                 if let Some((component, mut state)) = pool_factories::address_map(
+                    &curve_params,
                     call.call
                         .address
                         .as_slice()
@@ -169,9 +166,11 @@ pub fn store_set_oracle_components(map: BlockChanges, store: StoreSetInt64) {
 ///  store to be able to tally up final balances for tokens in a pool.
 #[substreams::handlers::map]
 pub fn map_relative_balances(
+    params: String,
     block: eth::v2::Block,
     tokens_store: StoreGetString,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
+    let curve_param = parse_curve_params(&params)?;
     Ok(BlockBalanceDeltas {
         balance_deltas: {
             let mut deltas: Vec<_> = block
@@ -183,8 +182,10 @@ pub fn map_relative_balances(
                             extract_balance_deltas_from_tx(tx, |token, transactor| {
                                 let pool_key = format!("pool:0x{}", hex::encode(transactor));
                                 if let Some(tokens) = tokens_store.get_last(pool_key) {
-                                    let token_id = if token == OLD_SUSD {
-                                        hex::encode(NEW_SUSD)
+                                    let token_id = if token != ZERO_ADDRESS &&
+                                        token == curve_param.protocol_params.old_susd
+                                    {
+                                        hex::encode(curve_param.protocol_params.new_susd)
                                     } else {
                                         hex::encode(token)
                                     };
@@ -195,8 +196,13 @@ pub fn map_relative_balances(
                             })
                             .into_iter()
                             .map(|mut balance| {
-                                if balance.token == OLD_SUSD {
-                                    balance.token = NEW_SUSD.into();
+                                if balance.token != ZERO_ADDRESS &&
+                                    balance.token == curve_param.protocol_params.old_susd
+                                {
+                                    balance.token = curve_param
+                                        .protocol_params
+                                        .new_susd
+                                        .into();
                                 }
                                 balance
                             })
@@ -207,7 +213,8 @@ pub fn map_relative_balances(
 
             // Keep it consistent with how it's inserted in the store. This step is important
             // because we use a zip on the store deltas and balance deltas later.
-            deltas.sort_unstable_by_key(|a| a.ord);
+            #[allow(clippy::unnecessary_sort_by)]
+            deltas.sort_unstable_by(|a, b| a.ord.cmp(&b.ord));
 
             deltas
         },
@@ -226,9 +233,10 @@ pub fn store_balances(deltas: BlockBalanceDeltas, store: StoreAddBigInt) {
 ///  map. Each block of code will extend the `TransactionChanges` struct with the
 ///  cooresponding changes (balance, component, contract), inserting a new one if it doesn't exist.
 ///  At the very end, the map can easily be sorted by index to ensure the final
-/// `BlockContractChanges` is ordered by transactions properly.
+/// `BlockChanges` is ordered by transactions properly.
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
+    params: String,
     block: eth::v2::Block,
     grouped_components: BlockChanges,
     deltas: BlockBalanceDeltas,
@@ -237,6 +245,7 @@ pub fn map_protocol_changes(
     set_oracle_components_store: StoreGetInt64,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
 ) -> Result<BlockChanges> {
+    let curve_param = parse_curve_params(&params)?;
     // We merge contract changes by transaction (identified by transaction index) making it easy to
     //  sort them at the very end.
     let mut transaction_changes: HashMap<_, TransactionChanges> = HashMap::new();
@@ -439,7 +448,9 @@ pub fn map_protocol_changes(
 
                     if let Some(coins) = &coins {
                         for coin in coins.iter() {
-                            if coin.to_vec() == RUSDY_ADDRESS {
+                            if coin.to_vec() != ZERO_ADDRESS &&
+                                coin.to_vec() == curve_param.protocol_params.rusdy
+                            {
                                 let trace_data = TraceData::Rpc(RpcTraceData {
                                     caller: None,
                                     calldata: [
@@ -452,7 +463,10 @@ pub fn map_protocol_changes(
                                     .concat(),
                                 });
                                 let (entrypoint, entrypoint_param) = create_entrypoint(
-                                    RUSDY_BLOCKLIST_ADDRESS.to_vec(),
+                                    curve_param
+                                        .protocol_params
+                                        .rusdy_blocklist
+                                        .to_vec(),
                                     "isBlocked".to_string(),
                                     component.id.clone(),
                                     trace_data,
@@ -461,7 +475,9 @@ pub fn map_protocol_changes(
                                 entrypoints.insert(entrypoint);
                                 entrypoint_params.insert(entrypoint_param);
                             }
-                            if coin.to_vec() == STETH_ADDRESS {
+                            if coin.to_vec() != ZERO_ADDRESS &&
+                                coin.to_vec() == curve_param.protocol_params.steth
+                            {
                                 let trace_data = TraceData::Rpc(RpcTraceData {
                                     caller: None,
                                     calldata: hex::decode("3f683b6a").unwrap(),
@@ -620,10 +636,12 @@ pub fn map_protocol_changes(
                 non_component_accounts_store
                     .get_last(hex::encode(addr))
                     .is_some() ||
-                CONTRACTS_TO_INDEX.contains(
-                    addr.try_into()
-                        .expect("address should be 20 bytes long"),
-                )
+                curve_param
+                    .contracts_to_index()
+                    .contains(
+                        addr.try_into()
+                            .expect("address should be 20 bytes long"),
+                    )
         },
         &mut transaction_changes,
     );
@@ -642,7 +660,7 @@ pub fn map_protocol_changes(
 
     let block_storage_changes = get_block_storage_changes(&block);
 
-    // Process all `transaction_changes` for final output in the `BlockContractChanges`,
+    // Process all `transaction_changes` for final output in the `BlockChanges`,
     //  sorted by transaction index (the key).
     Ok(BlockChanges {
         block: Some(Block {

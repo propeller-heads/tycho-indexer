@@ -6,15 +6,18 @@ use std::{
 };
 
 use alloy::{
-    primitives::{private::serde, Address, Bytes as AlloyBytes, B256, U256},
+    primitives::{map::AddressHashMap, private::serde, Address, Bytes as AlloyBytes, B256, U256},
     providers::{Provider, ProviderBuilder},
     rpc::{
         client::{ClientBuilder, ReqwestClient},
         types::{
             debug::{StorageMap, StorageRangeResult, StorageResult},
-            state::StateOverride,
+            state::{AccountOverride, StateOverride},
             trace::{
-                geth::GethTrace,
+                geth::{
+                    GethDebugBuiltInTracerType, GethDebugTracerType, GethDebugTracingCallOptions,
+                    GethDebugTracingOptions, GethTrace,
+                },
                 parity::{TraceResults, TraceType},
             },
             AccessListResult, Block, BlockId, BlockNumberOrTag, TransactionRequest,
@@ -114,7 +117,7 @@ impl EthereumRpcClient {
     pub async fn get_block_number(&self) -> Result<u64, RPCError> {
         let block_number = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request_noparams("eth_blockNumber")
                     .await
@@ -176,7 +179,7 @@ impl EthereumRpcClient {
         // Fall back to legacy eth_gasPrice for non-EIP-1559 chains or if priority fee fetch fails
         let gas_price: U256 = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request_noparams("eth_gasPrice")
                     .await
@@ -201,7 +204,7 @@ impl EthereumRpcClient {
     #[instrument(level = "debug", skip(self))]
     async fn eth_max_priority_fee_per_gas(&self) -> Result<U256, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request_noparams("eth_maxPriorityFeePerGas")
                     .await
@@ -219,7 +222,7 @@ impl EthereumRpcClient {
 
         let result: Option<Block> = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getBlockByNumber", (block_id, full_tx_objects))
                     .await
@@ -241,7 +244,7 @@ impl EthereumRpcClient {
         address: Address,
     ) -> Result<U256, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getBalance", (address, block_id))
                     .await
@@ -262,7 +265,7 @@ impl EthereumRpcClient {
         address: Address,
     ) -> Result<Bytes, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_getCode", (address, block_id))
                     .await
@@ -314,7 +317,7 @@ impl EthereumRpcClient {
         // Use the wrapper type to handle nodes that return null instead of {} for empty storage
         let wrapper: StorageRangeResultWrapper = self
             .retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("debug_storageRangeAt", params)
                     .await
@@ -462,7 +465,7 @@ impl EthereumRpcClient {
             // 1. Only retry failed requests, not successful ones
             // 2. Fail fast if any request has a non-retryable error (currently we only check the
             //    first error encountered, potentially missing fatal errors in other requests)
-            let chunk_results = self.retry_policy.retry_request(batch_call).await
+            let chunk_results = self.retry_policy.call_with_retry(batch_call).await
             .map_err(|e| {
                     let printable_addresses = chunk_addresses
                         .iter()
@@ -515,7 +518,7 @@ impl EthereumRpcClient {
 
         for slot in slots {
             let storage_value = self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self
                     .inner
                     .request("eth_getStorageAt", (&address, slot, block_id))
@@ -577,7 +580,7 @@ impl EthereumRpcClient {
             //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_res = self
                 .retry_policy
-                .retry_request(batch_call)
+                .call_with_retry(batch_call)
                 .await
                 .map_err(|e| {
                     let printable_slots = slot_batch
@@ -621,7 +624,7 @@ impl EthereumRpcClient {
             .collect();
 
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("trace_callMany", (&trace_requests, block))
                     .await
@@ -643,7 +646,7 @@ impl EthereumRpcClient {
         block: BlockNumberOrTag,
     ) -> Result<Bytes, RPCError> {
         self.retry_policy
-            .retry_request(|| async {
+            .call_with_retry(|| async {
                 self.inner
                     .request("eth_call", (&request, block))
                     .await
@@ -671,7 +674,7 @@ impl EthereumRpcClient {
         let provider = ProviderBuilder::new().connect_client(self.inner.clone());
         let block_id: BlockId = block.into();
         self.retry_policy
-            .retry_request(|| {
+            .call_with_retry(|| {
                 let tx = tx.clone();
                 let overrides = overrides.clone();
                 let provider = provider.clone();
@@ -754,7 +757,7 @@ impl EthereumRpcClient {
             Ok((access_list_data, pre_state_trace))
         };
 
-        self.retry_policy.retry_request(|| async {
+        self.retry_policy.call_with_retry(|| async {
             batch_call().await
         }).await
         .map_err(|e| {
@@ -845,7 +848,7 @@ impl EthereumRpcClient {
             //    first error encountered, potentially missing fatal errors in other requests)
             let chunk_results = self
                 .retry_policy
-                .retry_request(|| async { batch_call().await })
+                .call_with_retry(|| async { batch_call().await })
                 .await
                 .map_err(|e| {
                     RPCError::from_alloy(
@@ -968,11 +971,20 @@ impl EthereumRpcClient {
                     .all(|res| res.is_err());
                 let some_retryable_failed = batch_result.iter().any(|res| {
                     if let Err(RpcError::ErrorResp(e)) = res {
-                        e.is_retry_err() || has_custom_retry_code(e)
+                        if e.is_retry_err() || has_custom_retry_code(e) {
+                            debug!("A slot detector test request in batch failed with retryable error: {e:?}");
+                            true
+                        } else {
+                            false
+                        }
                     } else {
                         false
                     }
                 });
+
+                if all_failed {
+                    debug!("All slot detector test requests in batch failed, will retry the entire batch");
+                }
 
                 all_failed || some_retryable_failed
             };
@@ -1004,6 +1016,69 @@ impl EthereumRpcClient {
         }
 
         Ok(result)
+    }
+
+    #[instrument(level = "debug", skip(self, tx_with_overrides), fields(tx_count = tx_with_overrides.len()))]
+    pub async fn simulate_txs_with_trace(
+        &self,
+        block: BlockNumberOrTag,
+        tx_with_overrides: Vec<(TransactionRequest, Option<AddressHashMap<AccountOverride>>)>,
+    ) -> Result<Vec<TransportResult<Value>>, RPCError> {
+        if matches!(self.batching, RPCBatchingConfig::Disabled) {
+            return Err(RPCError::SetupError(
+                "`simulate_txs_with_trace` requires the `EthereumRpcClient` to have batching enabled. \
+                Either use a suitable RPC provider and enable batching in the `EthereumRpcClient`, \
+                or implement a non-batched version of this method.".to_string(),
+            ));
+        }
+
+        // use callTracer for better formatted results
+        let tracing_options = GethDebugTracingOptions {
+            tracer: Some(GethDebugTracerType::BuiltInTracer(
+                GethDebugBuiltInTracerType::CallTracer,
+            )),
+            config: Default::default(),
+            tracer_config: Default::default(),
+            timeout: None,
+        };
+
+        let batch_call = || async {
+            let mut batch = self.inner.new_batch();
+
+            // Add eth_createAccessList call
+            let futures = tx_with_overrides
+                .iter()
+                .map(|(tx, overrides)| {
+                    let trace_options = GethDebugTracingCallOptions {
+                        tracing_options: tracing_options.clone(),
+                        state_overrides: overrides.clone(),
+                        block_overrides: None,
+                        tx_index: None,
+                    };
+                    batch.add_call::<_, Value>(
+                        "debug_traceCall",
+                        &(tx.clone(), block, trace_options),
+                    )
+                })
+                .collect::<Result<Vec<_>, RpcError<TransportErrorKind>>>()?;
+
+            // Send batch
+            batch.send().await?;
+
+            Ok(join_all(futures).await)
+        };
+
+        self.retry_policy
+            .call_with_retry(|| async { batch_call().await })
+            .await
+            .map_err(|e| {
+                RPCError::from_alloy(
+                    format!(
+                        "Failed to send batch request for simulate tx with trace for block {block}"
+                    ),
+                    e,
+                )
+            })
     }
 }
 
@@ -1049,7 +1124,9 @@ fn normalize_access_list_result(
 mod tests {
     use std::str::FromStr;
 
-    use alloy::{rpc::types::TransactionInput, sol_types::SolCall};
+    use alloy::{
+        hex, primitives::map::B256HashMap, rpc::types::TransactionInput, sol_types::SolCall,
+    };
     use mockito::{Mock, Server, ServerGuard};
     use rstest::rstest;
     use tracing::warn;
@@ -2024,6 +2101,17 @@ mod tests {
         priority_fee_mock.assert();
     }
 
+    /// Parses the balance from a callTracer output field
+    fn parse_balance_from_trace(trace_value: &Value) -> U256 {
+        let output = trace_value
+            .as_object()
+            .and_then(|obj| obj.get("output"))
+            .and_then(|v| v.as_str())
+            .expect("trace should have output field");
+        let balance_bytes = hex::decode(&output[2..]).expect("output should be valid hex");
+        U256::from_be_slice(&balance_bytes)
+    }
+
     #[tokio::test]
     #[ignore = "require RPC connection"]
     async fn test_get_gas_price() -> Result<(), RPCError> {
@@ -2107,5 +2195,69 @@ mod tests {
         assert!(result.access_list.0[0]
             .storage_keys
             .is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "require RPC connection"]
+    async fn test_simulate_txs_with_trace_state_override() -> Result<(), RPCError> {
+        let fixture = TestFixture::new();
+        let client = fixture.create_rpc_client(true);
+
+        let usdc = parse_address(USDC_STR);
+        let balance_holder = parse_address(USDC_HOLDER_ADDR);
+
+        // USDC balance storage slot for USDC_HOLDER_ADDR (from test_batch_slot_detector_tests)
+        let balance_slot = B256::from(
+            U256::from_str(
+                "27200642610643119904443225166668021742846989772583561028640892867511244344442",
+            )
+            .unwrap(),
+        );
+
+        // Our test override value - a distinctive balance we can verify
+        let override_balance = B256::from(U256::from_str("123456789000000").unwrap()); // 123,456,789 USDC
+
+        // Create calldata for balanceOf
+        let calldata: alloy::primitives::Bytes = balanceOfCall { _owner: balance_holder }
+            .abi_encode()
+            .into();
+
+        let base_tx = TransactionRequest::default()
+            .to(usdc)
+            .input(TransactionInput::both(calldata));
+
+        // Create state override for the balance slot
+        let mut state_diff = B256HashMap::default();
+        state_diff.insert(balance_slot, override_balance);
+        let mut overrides = AddressHashMap::default();
+        overrides
+            .insert(usdc, AccountOverride { state_diff: Some(state_diff), ..Default::default() });
+
+        // Two requests: without override, with override
+        let tx_requests = vec![(base_tx.clone(), None), (base_tx.clone(), Some(overrides))];
+
+        let results = client
+            .simulate_txs_with_trace(BlockNumberOrTag::Number(TEST_BLOCK_NUMBER), tx_requests)
+            .await?;
+
+        assert_eq!(results.len(), 2);
+
+        // First call: should return real balance
+        let real_balance = parse_balance_from_trace(results[0].as_ref().unwrap());
+        assert_eq!(
+            real_balance,
+            U256::from(USDC_HOLDER_BALANCE),
+            "Without override should return real balance"
+        );
+
+        // Second call: should return overridden balance
+        let overridden_balance = parse_balance_from_trace(results[1].as_ref().unwrap());
+        assert_eq!(
+            B256::from(overridden_balance),
+            override_balance,
+            "With override should return overridden balance"
+        );
+
+        Ok(())
     }
 }

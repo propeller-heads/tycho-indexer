@@ -1,0 +1,16 @@
+[
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "MATH",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}]
+  },
+  {
+    "stateMutability": "view",
+    "type": "function",
+    "name": "VIEW",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}]
+  }
+]

@@ -1,63 +1,81 @@
+import sys
 import json
 from typing import Any
 
-PARAMETERS = "params.json"
 EMPTY = "0x0000000000000000000000000000000000000000"
-INITIAL_BLOCK = 17258001
+
+def encode_protocol_params(protocol: dict[str, Any]) -> list[str]:
+    """
+    protocol_params[key]=value
+    """
+    parts: list[str] = []
+    for k, v in protocol.items():
+        if isinstance(v, list):
+            for item in v:
+                parts.append(f"protocol_params[{k}][]={item}")
+        else:
+            parts.append(f"protocol_params[{k}]={v}")
+    return parts
 
 
-def encode_json_to_query_params(params: list[dict[str, Any]]):
-    encoded_params = []
-    try:
-        for i, param in enumerate(params):
-            address: str = param["address"]
-            contracts: str = param.get("contracts", [])
-            tx_hash: str = param["tx_hash"]
-            tokens: list[str] = param["tokens"]
-            static_attributes: dict[str, str] = param.get("static_attributes", {})
-            static_attributes["name"] = param["name"]
-            static_attributes["factory_name"] = "NA"
-            static_attributes["factory"] = EMPTY
-            attributes: dict[str, str] = param.get("attributes", {})
+def encode_pool(pool: dict[str, Any], index: int) -> list[str]:
+    """
+    pools[index][field]=value
+    """
+    parts: list[str] = []
 
-            encoded_address = f"address={address}"
-            encoded_contracts = (
-                "&" + "&".join([f"contracts[]={contract}" for contract in contracts])
-                if contracts
-                else ""
-            )
-            encoded_tx_hash = f"tx_hash={tx_hash}"
-            encoded_tokens = "&".join([f"tokens[]={token}" for token in tokens])
-            encoded_attributes = "&".join(
-                [
-                    f"attribute_keys[]={key}&attribute_vals[]={value}"
-                    for key, value in attributes.items()
-                ]
-            )
-            encoded_static_attributes = "&".join(
-                [
-                    f"static_attribute_keys[]={key}&static_attribute_vals[]={value}"
-                    for key, value in static_attributes.items()
-                ]
-            )
+    # required fields
+    parts.append(f"pool_params[{index}][address]={pool['address']}")
+    parts.append(f"pool_params[{index}][tx_hash]={pool['tx_hash']}")
 
-            encoded_param = f"{encoded_address}{encoded_contracts}&{encoded_tx_hash}&{encoded_tokens}&{encoded_attributes}&{encoded_static_attributes}"
-            encoded_param = encoded_param.rstrip("&")
-            encoded_params.append(encoded_param)
+    # optional: contracts
+    for contract in pool.get("contracts", []):
+        parts.append(f"pool_params[{index}][contracts][]={contract}")
 
-    except KeyError as err:
-        raise KeyError(
-            f"Missing key in {PARAMETERS}.\n"
-            f"Index `{i}` object missing parameters.\n\n" + err.args[0]
-        )
+    # tokens
+    for token in pool["tokens"]:
+        parts.append(f"pool_params[{index}][tokens][]={token}")
 
-    return "#".join(encoded_params)
+    # static attributes
+    static_attrs = pool.get("static_attributes", {})
+    static_attrs["name"] = pool["name"]
+    static_attrs["factory_name"] = "NA"
+    static_attrs["factory"] = EMPTY
 
+    for k, v in static_attrs.items():
+        parts.append(f"pool_params[{index}][static_attribute_keys][]={k}")
+        parts.append(f"pool_params[{index}][static_attribute_vals][]={v}")
+
+    # dynamic attributes
+    for k, v in pool.get("attributes", {}).items():
+        parts.append(f"pool_params[{index}][attribute_keys][]={k}")
+        parts.append(f"pool_params[{index}][attribute_vals][]={v}")
+
+    return parts
+
+def encode_curve_params(config: dict[str, Any]) -> str:
+    """Encode entire config (protocol + pools)"""
+    parts: list[str] = []
+
+    parts.extend(encode_protocol_params(config["protocol_params"]))
+
+    for i, pool in enumerate(config["pools"]):
+        parts.extend(encode_pool(pool, i))
+
+    return "&".join(parts)
 
 def main():
-    with open(PARAMETERS, "r") as f:
-        params = json.load(f)
-    print(encode_json_to_query_params(params))
+    if len(sys.argv) != 2:
+        print("Usage: python encode.py <config.json>")
+        sys.exit(1)
+
+    json_file = sys.argv[1]
+
+    with open(json_file, "r") as f:
+        config = json.load(f)
+
+    encoded = encode_curve_params(config)
+    print(encoded)
 
 
 if __name__ == "__main__":

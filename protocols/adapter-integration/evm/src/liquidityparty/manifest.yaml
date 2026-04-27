@@ -1,0 +1,22 @@
+author:
+  name: Tim Olson
+  email: tim@dexorder.com
+
+constants:
+  # This is our median gas cost for a 20-asset pool. Gas varies by pool size from 120k to 200k.
+  protocol_gas: 147238
+  capabilities:
+    - SellSide
+    - PriceFunction
+    - MarginalPrice
+
+contract: LiquidityPartySwapAdapter.sol
+
+# Deployment instances used to generate chain specific bytecode.
+instances:
+  - chain:
+      name: mainnet
+      id: 1
+    arguments:
+      - "0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9"  # PartyPlanner
+      - "0xAAb5751696d081bF077793a6d86EddF9DF512Ac2"  # PartyInfo

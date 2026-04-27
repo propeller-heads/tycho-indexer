@@ -61,6 +61,20 @@ interface ISwapAdapterTypes {
     /// available for unexpected reason. E.g. it was paused due to a bug.
     error Unavailable(string reason);
 
+    /// @dev The InvalidOrder error is thrown when the input to a swap is
+    /// not valid: e.g. if the limit price is negative, or below the
+    /// current price; the request amount is 0; the requested swap tokens
+    /// are not part of the pool; etc.
+    error InvalidOrder(string reason);
+
+    /// @dev The TooSmall error is thrown when the requested trade amount
+    /// is too small, causing either zero output or a numerical imprecision
+    /// problem. If lowerLimit is not zero, then it specifies the minimum
+    /// trade size required. If lowerLimit is zero, then the lower bound
+    /// cannot be easily computed, in which case solvers can binary search
+    /// for a precise lower bound.
+    error TooSmall(uint256 lowerLimit);
+
     /// @dev The LimitExceeded error is thrown when a limit has been exceeded.
     /// E.g. the specified amount can't be traded safely.
     error LimitExceeded(uint256 limit);
