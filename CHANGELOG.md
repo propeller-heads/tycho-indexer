@@ -1,3 +1,12 @@
+## [0.272.0](https://github.com/propeller-heads/tycho-indexer/compare/0.271.0...0.272.0) (2026-04-27)
+
+
+### Features
+
+* minor adjustments to `tycho-ethereum` ([#818](https://github.com/propeller-heads/tycho-indexer/issues/818)) ([6353f69](https://github.com/propeller-heads/tycho-indexer/commit/6353f6910d3637a5010f7e6bd53402cc1003ed71))
+* **rpc:** add `simulate_txs_with_trace` method with state overrides and batch tracing ([0552d31](https://github.com/propeller-heads/tycho-indexer/commit/0552d312e20bedc364e7c29f19dc15634fe8374b))
+* **rpc:** handle non-retryable "execution reverted" EVM error in retry logic ([5eefdda](https://github.com/propeller-heads/tycho-indexer/commit/5eefddad51f9685a1d22a4c8ab4ea11a36689597))
+
 ## [0.271.0](https://github.com/propeller-heads/tycho-indexer/compare/0.270.0...0.271.0) (2026-04-24)
 
 
