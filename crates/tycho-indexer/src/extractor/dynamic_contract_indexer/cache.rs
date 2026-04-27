@@ -4,8 +4,9 @@ use std::{
 };
 
 use deepsize::DeepSizeOf;
+use metrics::gauge;
 use thiserror::Error;
-use tracing::{debug, trace, warn};
+use tracing::{debug, info, trace, warn};
 use tycho_common::models::{
     blockchain::{Block, EntryPoint, EntryPointWithTracingParams, TracingParams, TracingResult},
     protocol::ProtocolComponent,
@@ -218,6 +219,118 @@ impl DCICache {
 
         Ok(())
     }
+
+    /// Emits per-sub-cache metrics and logs the top 10 tracked contracts by slot count.
+    pub(super) fn emit_metrics(&self, chain: &str, extractor: &str) {
+        let subcaches: &[(&str, usize, usize)] = &[
+            (
+                "tracked_contracts",
+                self.tracked_contracts.deep_size_of(),
+                self.tracked_contracts
+                    .unique_key_count(),
+            ),
+            ("retriggers", self.retriggers.deep_size_of(), self.retriggers.unique_key_count()),
+            (
+                "entrypoint_results",
+                self.entrypoint_results.deep_size_of(),
+                self.entrypoint_results
+                    .unique_key_count(),
+            ),
+            (
+                "ep_id_to_entrypoint",
+                self.ep_id_to_entrypoint.deep_size_of(),
+                self.ep_id_to_entrypoint
+                    .unique_key_count(),
+            ),
+            (
+                "erc20_addresses",
+                self.erc20_addresses.deep_size_of(),
+                self.erc20_addresses.unique_key_count(),
+            ),
+            (
+                "blacklisted_addresses",
+                self.blacklisted_addresses
+                    .deep_size_of(),
+                self.blacklisted_addresses
+                    .unique_key_count(),
+            ),
+            (
+                "ep_id_to_component_id",
+                self.ep_id_to_component_id
+                    .deep_size_of(),
+                self.ep_id_to_component_id
+                    .unique_key_count(),
+            ),
+            (
+                "component_id_to_entrypoint_params",
+                self.component_id_to_entrypoint_params
+                    .deep_size_of(),
+                self.component_id_to_entrypoint_params
+                    .unique_key_count(),
+            ),
+            (
+                "tracing_retry_counts",
+                self.tracing_retry_counts.deep_size_of(),
+                self.tracing_retry_counts
+                    .unique_key_count(),
+            ),
+        ];
+
+        for &(name, size, count) in subcaches {
+            gauge!(
+                "dci_cache_subcache_size",
+                "chain" => chain.to_owned(),
+                "extractor" => extractor.to_owned(),
+                "subcache" => name.to_string(),
+            )
+            .set(size as f64);
+            gauge!(
+                "dci_cache_subcache_key_count",
+                "chain" => chain.to_owned(),
+                "extractor" => extractor.to_owned(),
+                "subcache" => name.to_string(),
+            )
+            .set(count as f64);
+        }
+
+        gauge!(
+            "dci_cache_pending_layers",
+            "chain" => chain.to_owned(),
+            "extractor" => extractor.to_owned(),
+        )
+        .set(
+            self.tracked_contracts
+                .pending_layer_count() as f64,
+        );
+
+        let snapshot = self.tracked_contracts.iter_latest();
+        let mut by_slots: Vec<_> = snapshot
+            .iter()
+            .map(|(addr, slots)| (*addr, slots.len()))
+            .collect();
+        by_slots.sort_unstable_by_key(|b| std::cmp::Reverse(b.1));
+        by_slots.truncate(10);
+
+        if let Some((_, max_slots)) = by_slots.first() {
+            gauge!(
+                "dci_cache_tracked_contracts_max_slots",
+                "chain" => chain.to_owned(),
+                "extractor" => extractor.to_owned(),
+            )
+            .set(*max_slots as f64);
+        }
+
+        if !by_slots.is_empty() {
+            let top_contracts: Vec<String> = by_slots
+                .iter()
+                .map(|(addr, slots)| format!("{addr}:{slots}"))
+                .collect();
+            info!(
+                top_tracked_contracts = %top_contracts.join(", "),
+                "DCI cache top tracked contracts by slot count"
+            );
+        }
+    }
 }
 
 /// Central data cache used by the Hooks Dynamic Contract Indexer (HooksDCI).
@@ -286,6 +399,40 @@ impl HooksDCICache {
         self.protocol_components
             .validate_and_ensure_block_layer_internal(block)?;
         Ok(())
+    }
+
+    /// Emits per-sub-cache metrics for the hooks DCI cache.
+    pub(super) fn emit_metrics(&self, chain: &str, extractor: &str) {
+        let subcaches: &[(&str, usize, usize)] = &[
+            (
+                "hooks_component_states",
+                self.component_states.deep_size_of(),
+                self.component_states.unique_key_count(),
+            ),
+            (
+                "hooks_protocol_components",
+                self.protocol_components.deep_size_of(),
+                self.protocol_components
+                    .unique_key_count(),
+            ),
+        ];
+
+        for &(name, size, count) in subcaches {
+            gauge!(
+                "dci_cache_subcache_size",
+                "chain" => chain.to_owned(),
+                "extractor" => extractor.to_owned(),
+                "subcache" => name.to_string(),
+            )
+            .set(size as f64);
+            gauge!(
+                "dci_cache_subcache_key_count",
+                "chain" => chain.to_owned(),
+                "extractor" => extractor.to_owned(),
+                "subcache" => name.to_string(),
+            )
+            .set(count as f64);
+        }
     }
 }
 
@@ -433,6 +580,23 @@ where
             }
         }
         self.permanent.contains_key(key)
+    }
+
+    /// Returns the number of pending block layers.
+    pub(super) fn pending_layer_count(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// Returns a snapshot of all unique keys with their latest value.
+    /// Pending layers take precedence over the permanent layer.
+    pub(super) fn iter_latest(&self) -> HashMap<&K, &V> {
+        let mut result: HashMap<&K, &V> = self.permanent.iter().collect();
+        for layer in &self.pending {
+            for (k, v) in &layer.data {
+                result.insert(k, v);
+            }
+        }
+        result
     }
 
     /// Returns the count of all unique keys across permanent and pending layers.

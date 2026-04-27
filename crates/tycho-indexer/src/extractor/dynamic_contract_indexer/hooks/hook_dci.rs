@@ -897,6 +897,13 @@ where
     fn cache_size(&self) -> usize {
         self.cache.deep_size_of() + self.inner_dci.cache_size()
     }
+
+    fn emit_cache_metrics(&self, chain: &str, extractor: &str) {
+        self.cache
+            .emit_metrics(chain, extractor);
+        self.inner_dci
+            .emit_cache_metrics(chain, extractor);
+    }
 }
 
 #[cfg(test)]
