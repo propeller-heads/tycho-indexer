@@ -176,7 +176,6 @@ where
 pub struct Update {
     pub block_number_or_timestamp: u64,
     /// Synchronization state per protocol
-    #[serde(default)]
     pub sync_states: HashMap<String, SynchronizerState>,
     /// The new and updated states of this block.
     /// VM-backed states that can't be serialized are silently skipped during
@@ -186,7 +185,6 @@ pub struct Update {
     /// The new pairs that were added in this block
     pub new_pairs: HashMap<String, ProtocolComponent>,
     /// The pairs that were removed in this block
-    #[serde(default)]
     pub removed_pairs: HashMap<String, ProtocolComponent>,
 }
 
