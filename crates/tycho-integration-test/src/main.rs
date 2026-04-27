@@ -481,29 +481,49 @@ async fn run(cli: Cli) -> miette::Result<()> {
     Ok(())
 }
 
-/// Polls the RPC until it reaches the target block number.
+enum BlockPollResult {
+    /// Block numbers match; simulation can proceed.
+    Ready(Box<Block>),
+    /// Tycho is behind the RPC. Carries the target block's timestamp (if fetchable) so latency
+    /// can still be recorded before the update is skipped.
+    Stale { target_block_timestamp: Option<u64> },
+    /// RPC never reached the target block within the allowed attempts.
+    Timeout,
+}
+
+/// Polls the RPC until the queried block (`Latest` or `Pending`) matches `target_block`.
 ///
-/// Returns `Some(block)` when the RPC block matches `target_block`, or `None` if the update
-/// is behind the RPC (stale) or we exhaust all polling attempts (RPC too slow).
+/// Returns [`BlockPollResult::Ready`] when the block number matches,
+/// [`BlockPollResult::Stale`] if the update is already behind the RPC (includes the target
+/// block's timestamp for latency recording), or [`BlockPollResult::Timeout`] if the RPC never
+/// caught up within `max_attempts`.
+///
+/// Pass `BlockNumberOrTag::Latest` for confirmed-block mode and `BlockNumberOrTag::Pending`
+/// for flashblock mode (requires a flashblocks-capable RPC endpoint).
 async fn poll_rpc_for_block(
     rpc_tools: &tycho_test::RPCTools,
     target_block: u64,
+    block_tag: BlockNumberOrTag,
     max_attempts: u32,
     poll_interval: Duration,
-) -> miette::Result<Option<Block>> {
+) -> miette::Result<BlockPollResult> {
     for attempt in 0..max_attempts {
         let block = match rpc_tools
             .provider
-            .get_block_by_number(BlockNumberOrTag::Latest)
+            .get_block_by_number(block_tag)
             .await
             .into_diagnostic()
-            .wrap_err("Failed to fetch latest block")
+            .wrap_err("Failed to fetch block")
             .ok()
             .flatten()
         {
             Some(b) => b,
             None => {
-                warn!("Failed to retrieve latest block (attempt {}/{})", attempt + 1, max_attempts);
+                warn!(
+                    "Failed to retrieve {block_tag} block (attempt {}/{})",
+                    attempt + 1,
+                    max_attempts
+                );
                 if attempt < max_attempts - 1 {
                     tokio::time::sleep(poll_interval).await;
                 }
@@ -516,24 +536,34 @@ async fn poll_rpc_for_block(
         if rpc_block > target_block {
             let delay = rpc_block - target_block;
             warn!(
-                "Update block ({target_block}) is behind RPC block ({rpc_block}), \
+                "Update block ({target_block}) is behind {block_tag} block ({rpc_block}), \
                  skipping to catch up."
             );
             metrics::record_protocol_update_block_delay(delay);
-            metrics::record_protocol_update_skipped();
-            return Ok(None);
+
+            // Fetch the target block so we can record accurate latency even though simulation
+            // will be skipped — excluding stale blocks would bias the histogram toward
+            // fast updates only.
+            let target_block_timestamp = rpc_tools
+                .provider
+                .get_block_by_number(BlockNumberOrTag::Number(target_block))
+                .await
+                .ok()
+                .flatten()
+                .map(|b| b.header.timestamp);
+
+            return Ok(BlockPollResult::Stale { target_block_timestamp });
         }
 
         if rpc_block == target_block {
             if attempt > 0 {
-                debug!("RPC caught up to block {target_block} after {} poll(s)", attempt);
+                debug!("{block_tag} block caught up to {target_block} after {} poll(s)", attempt);
             }
-            return Ok(Some(block));
+            return Ok(BlockPollResult::Ready(Box::new(block)));
         }
 
-        // RPC is behind — wait and retry
         debug!(
-            "RPC block ({rpc_block}) behind update block ({target_block}), \
+            "{block_tag} block ({rpc_block}) behind update block ({target_block}), \
              polling... (attempt {}/{})",
             attempt + 1,
             max_attempts
@@ -541,7 +571,7 @@ async fn poll_rpc_for_block(
         tokio::time::sleep(poll_interval).await;
     }
 
-    Ok(None)
+    Ok(BlockPollResult::Timeout)
 }
 
 async fn process_update(
@@ -592,35 +622,46 @@ async fn process_update(
             }
         }
 
-        // Poll RPC until it reaches the update's block number
         let update_block_number = update.update.block_number_or_timestamp;
+
+        // Flashblocks-capable endpoints expose sequencer pre-confirmed state under `pending`;
+        // standard endpoints use `latest` (confirmed blocks only).
+        let block_tag =
+            if cli.partial_blocks { BlockNumberOrTag::Pending } else { BlockNumberOrTag::Latest };
         let poll_interval = Duration::from_millis(cli.rpc_poll_interval_ms);
 
-        let block = poll_rpc_for_block(
+        let poll_result = poll_rpc_for_block(
             &rpc_tools,
             update_block_number,
+            block_tag,
             cli.rpc_poll_attempts,
             poll_interval,
         )
         .await?;
 
-        let block = match block {
-            Some(b) => Arc::new(b),
-            None => {
+        let block_type = if block_tag == BlockNumberOrTag::Pending { "partial" } else { "full" };
+        let block = match poll_result {
+            BlockPollResult::Ready(b) => {
+                let latency_seconds = update.received_at.as_secs_f64() - b.header.timestamp as f64;
+                metrics::record_block_processing_duration(latency_seconds, block_type);
+                Arc::new(*b)
+            }
+            BlockPollResult::Stale { target_block_timestamp } => {
+                if let Some(ts) = target_block_timestamp {
+                    let latency_seconds = update.received_at.as_secs_f64() - ts as f64;
+                    metrics::record_block_processing_duration(latency_seconds, block_type);
+                }
+                metrics::record_protocol_update_skipped();
+                return Ok(());
+            }
+            BlockPollResult::Timeout => {
                 warn!(
-                    "Timed out waiting for RPC to reach update block {update_block_number}, \
-                     skipping."
+                    "RPC ({block_tag}) did not reach update block {update_block_number}, skipping."
                 );
                 metrics::record_protocol_update_skipped();
                 return Ok(());
             }
         };
-
-        // Block numbers match — record latency against the correct block
-        let latency_seconds =
-            (update.received_at.as_secs_f64() - block.header.timestamp as f64).abs();
-        metrics::record_block_processing_duration(latency_seconds);
-
         if update.is_first_update {
             info!("Skipping simulation on first protocol update...");
             return Ok(());
