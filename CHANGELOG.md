@@ -1,3 +1,12 @@
+## [0.274.1](https://github.com/propeller-heads/tycho-indexer/compare/0.274.0...0.274.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* **integration-test:** fix flashblock execution simulations ([#948](https://github.com/propeller-heads/tycho-indexer/issues/948)) ([18775c3](https://github.com/propeller-heads/tycho-indexer/commit/18775c30a4ff46834cee65ac62ace3d982090649))
+* **integration-test:** fix flashblock simulation support ([a3dcc8b](https://github.com/propeller-heads/tycho-indexer/commit/a3dcc8bceedbc2e71600e8376214e0e10ef190bc))
+* **integration-test:** record latency for stale blocks and use signed values ([b7a6aac](https://github.com/propeller-heads/tycho-indexer/commit/b7a6aacdbf461e3c8bd0ede440a4ed0bf621b296))
+
 ## [0.274.0](https://github.com/propeller-heads/tycho-indexer/compare/0.273.0...0.274.0) (2026-04-27)
 
 
