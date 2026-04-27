@@ -85,7 +85,7 @@ impl std::fmt::Display for Event {
                 ..
             } => write!(
                 f,
-                "`_updateDeltaAccounting(token={token:?}, deltaChange={delta_change})` after which `_getNonZeroDeletaCount() == {nonzero_delta_count_after}`"
+                "`_updateDeltaAccounting(token={token:?}, deltaChange={delta_change})` after which `_getNonZeroDeltaCount() == {nonzero_delta_count_after}`"
             ),
             Self::CreditVault {
                 owner,
