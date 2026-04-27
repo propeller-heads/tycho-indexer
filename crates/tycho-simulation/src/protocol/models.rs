@@ -184,6 +184,7 @@ pub struct Update {
     #[serde(with = "crate::serde_helpers::protocol_states")]
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
+    #[serde(default)]
     pub new_pairs: HashMap<String, ProtocolComponent>,
     /// The pairs that were removed in this block
     #[serde(default)]

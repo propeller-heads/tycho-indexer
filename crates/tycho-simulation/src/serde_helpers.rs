@@ -77,6 +77,7 @@ pub mod protocol_states {
     use std::collections::HashMap;
 
     use serde::{ser::SerializeMap, Deserialize, Deserializer, Serializer};
+    use tracing::debug;
     use tycho_common::simulation::protocol_sim::ProtocolSim;
 
     /// Serializes a map of `ProtocolSim` trait objects, skipping entries
@@ -90,10 +91,9 @@ pub mod protocol_states {
     {
         let mut map = serializer.serialize_map(None)?;
         for (key, value) in states {
-            // Trial-serialize: if the state can't be serialized (VM-backed),
-            // skip it rather than failing the whole map.
-            if let Ok(json_val) = serde_json::to_value(value.as_ref()) {
-                map.serialize_entry(key, &json_val)?;
+            match serde_json::to_value(value.as_ref()) {
+                Ok(json_val) => map.serialize_entry(key, &json_val)?,
+                Err(err) => debug!(key, %err, "skipping non-serializable ProtocolSim entry"),
             }
         }
         map.end()
@@ -218,9 +218,41 @@ mod tests {
             .contains_key("pool_a"));
     }
 
-    /// Verify that protocol_states::serialize produces valid JSON for a
-    /// map containing serializable states. Non-serializable states are tested
-    /// end-to-end in the integration tests (require full VM protocol setup).
+    #[cfg(feature = "evm")]
+    #[test]
+    fn protocol_states_skips_non_serializable_entries() {
+        use alloy::primitives::U256;
+
+        use crate::evm::protocol::{
+            uniswap_v2::state::UniswapV2State,
+            uniswap_v4::state::{UniswapV4Fees, UniswapV4State},
+        };
+
+        let mut states: HashMap<String, Box<dyn ProtocolSim>> = HashMap::new();
+        states.insert(
+            "serializable".to_string(),
+            Box::new(UniswapV2State::new(U256::from(1000), U256::from(2000))),
+        );
+        states.insert(
+            "non_serializable".to_string(),
+            Box::new(
+                UniswapV4State::new(0, U256::from(1), UniswapV4Fees::new(0, 0, 3000), 0, 1, vec![])
+                    .expect("valid state"),
+            ),
+        );
+
+        let update = Update::new(42, states, HashMap::new());
+        let json = serde_json::to_string(&update).expect("serialization should succeed");
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+
+        let states_map = parsed["states"]
+            .as_object()
+            .expect("states is a map");
+        assert_eq!(states_map.len(), 1, "only the serializable entry should survive");
+        assert!(states_map.contains_key("serializable"));
+        assert!(!states_map.contains_key("non_serializable"));
+    }
+
     #[cfg(feature = "evm")]
     #[test]
     fn protocol_states_serialize_produces_valid_json() {
