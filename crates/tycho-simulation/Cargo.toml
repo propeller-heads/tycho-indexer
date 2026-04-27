@@ -102,6 +102,18 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 unicode-width = "0.1.13"
 tracing-appender = { workspace = true }
 dialoguer          = "0.10.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.9"
+
+[[bench]]
+name = "bebop_local_benchmark"
+harness = false
+required-features = ["rfq"]
+
+[[bench]]
+name = "swap_benchmark"
+harness = false
+required-features = ["evm", "rfq"]
 
 [features]
 default = ["evm", "rfq"]
