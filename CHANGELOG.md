@@ -1,3 +1,11 @@
+## [0.274.0](https://github.com/propeller-heads/tycho-indexer/compare/0.273.0...0.274.0) (2026-04-27)
+
+
+### Features
+
+* **tracing:** upgrade opentelemetry stack and add per-layer OTLP filtering ([ea2b191](https://github.com/propeller-heads/tycho-indexer/commit/ea2b191b06ab0b730638f343afd0be1db8a4c1d1))
+* **tracing:** upgrade opentelemetry stack and add per-layer OTLP filtering ([#952](https://github.com/propeller-heads/tycho-indexer/issues/952)) ([7547074](https://github.com/propeller-heads/tycho-indexer/commit/754707469e19065a2692586354ce5ff941c4bffc))
+
 ## [0.273.0](https://github.com/propeller-heads/tycho-indexer/compare/0.272.0...0.273.0) (2026-04-27)
 
 
