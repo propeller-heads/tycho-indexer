@@ -77,7 +77,7 @@ pub mod protocol_states {
     use std::collections::HashMap;
 
     use serde::{ser::SerializeMap, Deserialize, Deserializer, Serializer};
-    use tracing::debug;
+    use tracing::{debug, warn};
     use tycho_common::simulation::protocol_sim::ProtocolSim;
 
     /// Serializes a map of `ProtocolSim` trait objects, skipping entries
@@ -90,11 +90,18 @@ pub mod protocol_states {
         S: Serializer,
     {
         let mut map = serializer.serialize_map(None)?;
+        let mut skipped = 0u32;
         for (key, value) in states {
             match serde_json::to_value(value.as_ref()) {
                 Ok(json_val) => map.serialize_entry(key, &json_val)?,
-                Err(err) => debug!(key, %err, "skipping non-serializable ProtocolSim entry"),
+                Err(err) => {
+                    debug!(key, %err, "skipping non-serializable ProtocolSim entry");
+                    skipped += 1;
+                }
             }
+        }
+        if skipped > 0 {
+            warn!(skipped, total = states.len(), "skipped non-serializable ProtocolSim entries");
         }
         map.end()
     }
