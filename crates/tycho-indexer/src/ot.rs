@@ -1,7 +1,12 @@
 use anyhow::{Context, Result};
 use opentelemetry::global;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::{propagation::TraceContextPropagator, runtime, trace, Resource};
+use opentelemetry_sdk::{
+    propagation::TraceContextPropagator,
+    runtime,
+    trace::{self, BatchConfigBuilder},
+    Resource,
+};
 use serde::Deserialize;
 use tracing::{debug, error, Subscriber};
 use tracing_subscriber::{
@@ -77,9 +82,10 @@ where
 
     let trace_config = trace::config().with_resource(Resource::default());
 
-    let batch_config = trace::BatchConfig::default()
+    let batch_config = BatchConfigBuilder::default()
         .with_max_queue_size(20_480)
-        .with_max_export_batch_size(2_560);
+        .with_max_export_batch_size(2_560)
+        .build();
 
     let tracer = opentelemetry_otlp::new_pipeline()
         .tracing()
