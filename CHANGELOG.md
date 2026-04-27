@@ -1,3 +1,17 @@
+## [0.275.0](https://github.com/propeller-heads/tycho-indexer/compare/0.274.1...0.275.0) (2026-04-27)
+
+
+### Features
+
+* add Serialize/Deserialize to Update struct ([a7c3859](https://github.com/propeller-heads/tycho-indexer/commit/a7c3859040f47c5971a7e3fb6220467d09cf009c))
+* **simulation:** add Serialize/Deserialize to Update struct ([#954](https://github.com/propeller-heads/tycho-indexer/issues/954)) ([a6ca0b7](https://github.com/propeller-heads/tycho-indexer/commit/a6ca0b7b87df86dc2a48f513b572bba9ab63bb29))
+
+
+### Bug Fixes
+
+* address PR review comments ([a61c7ed](https://github.com/propeller-heads/tycho-indexer/commit/a61c7ed6fa047e1038001d60b0150f3a6c5fa51f))
+* address review feedback for Update serde support ([a00578a](https://github.com/propeller-heads/tycho-indexer/commit/a00578a40b567c81058b99bbc4e202b1977b5db3))
+
 ## [0.274.1](https://github.com/propeller-heads/tycho-indexer/compare/0.274.0...0.274.1) (2026-04-27)
 
 
