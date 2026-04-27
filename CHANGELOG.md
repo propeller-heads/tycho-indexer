@@ -1,3 +1,17 @@
+## [0.273.0](https://github.com/propeller-heads/tycho-indexer/compare/0.272.0...0.273.0) (2026-04-27)
+
+
+### Features
+
+* add limit on number of tries while searching token slots ([77f7dea](https://github.com/propeller-heads/tycho-indexer/commit/77f7deadb1c139260aae4decade9f97180c0ce91))
+* add limit on number of tries while searching token slots ([#946](https://github.com/propeller-heads/tycho-indexer/issues/946)) ([4e88cfa](https://github.com/propeller-heads/tycho-indexer/commit/4e88cfa7bf77479e936b790c0074000a738682be))
+* add tests for sort_slots_by_priority ([50cabfc](https://github.com/propeller-heads/tycho-indexer/commit/50cabfc42aecf8256cf806b37070f10c7a2536e3))
+
+
+### Bug Fixes
+
+* reduce the amount of slots to test instead of retries ([2277893](https://github.com/propeller-heads/tycho-indexer/commit/2277893f6a275694aa1c43a51f1224492c11c1e4))
+
 ## [0.272.0](https://github.com/propeller-heads/tycho-indexer/compare/0.271.0...0.272.0) (2026-04-27)
 
 
