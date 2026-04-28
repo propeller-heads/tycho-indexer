@@ -303,10 +303,10 @@ impl DCICache {
                 .pending_layer_count() as f64,
         );
 
-        let snapshot = self.tracked_contracts.iter_latest();
-        let mut by_slots: Vec<_> = snapshot
-            .iter()
-            .map(|(addr, slots)| (*addr, slots.len()))
+        let mut by_slots: Vec<_> = self
+            .tracked_contracts
+            .iter_latest()
+            .map(|(addr, slots)| (addr, slots.len()))
             .collect();
         by_slots.sort_unstable_by_key(|b| std::cmp::Reverse(b.1));
         by_slots.truncate(10);
@@ -587,16 +587,16 @@ where
         self.pending.len()
     }
 
-    /// Returns a snapshot of all unique keys with their latest value.
+    /// Returns an iterator of all unique keys with their latest value.
     /// Pending layers take precedence over the permanent layer.
-    pub(super) fn iter_latest(&self) -> HashMap<&K, &V> {
+    pub(super) fn iter_latest(&self) -> impl Iterator<Item = (&K, &V)> {
         let mut result: HashMap<&K, &V> = self.permanent.iter().collect();
         for layer in &self.pending {
             for (k, v) in &layer.data {
                 result.insert(k, v);
             }
         }
-        result
+        result.into_iter()
     }
 
     /// Returns the count of all unique keys across permanent and pending layers.
