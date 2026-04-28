@@ -1,16 +1,18 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_bigint::BigUint;
 use rand::Rng;
-use tokio::time::Duration as TokioDuration;
 use tycho_common::{
+    dto::{ChangeType, ProtocolComponent, ResponseProtocolState},
     models::{token::Token, Chain},
     simulation::protocol_sim::ProtocolSim,
     Bytes,
 };
-use tycho_simulation::rfq::protocols::bebop::{
-    client::BebopClient, models::BebopPriceData, state::BebopState,
+use tycho_simulation::{
+    protocol::models::{DecoderContext, TryFromWithBlock},
+    rfq::{models::TimestampHeader, protocols::bebop::state::BebopState},
+    tycho_client::feed::synchronizer::ComponentWithState,
 };
 
 fn weth() -> Token {
@@ -49,49 +51,63 @@ fn wbtc() -> Token {
     )
 }
 
-fn dummy_client() -> BebopClient {
-    BebopClient::new(
-        Chain::Ethereum,
-        HashSet::new(),
-        0.0,
-        String::new(),
-        String::new(),
-        HashSet::new(),
-        TokioDuration::from_secs(5),
-    )
-    .expect("Failed to create dummy BebopClient")
-}
-
-fn generate_order_book(
-    base_addr: &[u8],
-    quote_addr: &[u8],
+fn generate_order_book_snapshot(
+    base_token: &Token,
+    quote_token: &Token,
     mid_price: f32,
     spread_bps: f32,
     num_levels: usize,
-) -> BebopPriceData {
+) -> ComponentWithState {
     let mut rng = rand::rng();
     let half_spread = mid_price * spread_bps / 10_000.0 / 2.0;
 
-    let mut bids = Vec::with_capacity(num_levels * 2);
-    let mut asks = Vec::with_capacity(num_levels * 2);
+    let mut bids: Vec<(f32, f32)> = Vec::with_capacity(num_levels);
+    let mut asks: Vec<(f32, f32)> = Vec::with_capacity(num_levels);
 
     for i in 0..num_levels {
         let bid_price = mid_price - half_spread - (i as f32 * mid_price * 0.001);
         let ask_price = mid_price + half_spread + (i as f32 * mid_price * 0.001);
         let bid_size: f32 = rng.random_range(0.1..5.0);
         let ask_size: f32 = rng.random_range(0.1..5.0);
-        bids.push(bid_price);
-        bids.push(bid_size);
-        asks.push(ask_price);
-        asks.push(ask_size);
+        bids.push((bid_price, bid_size));
+        asks.push((ask_price, ask_size));
     }
 
-    BebopPriceData {
-        base: base_addr.to_vec(),
-        quote: quote_addr.to_vec(),
-        last_update_ts: 1700000000,
-        bids,
-        asks,
+    let mut state_attributes = HashMap::new();
+    state_attributes.insert(
+        "bids".to_string(),
+        serde_json::to_vec(&bids).expect("serialize bids").into(),
+    );
+    state_attributes.insert(
+        "asks".to_string(),
+        serde_json::to_vec(&asks).expect("serialize asks").into(),
+    );
+
+    let component_id = format!(
+        "bebop_{}_{}_{}levels",
+        base_token.symbol, quote_token.symbol, num_levels
+    );
+
+    ComponentWithState {
+        state: ResponseProtocolState {
+            attributes: state_attributes,
+            component_id: component_id.clone(),
+            balances: HashMap::new(),
+        },
+        component: ProtocolComponent {
+            id: component_id,
+            protocol_system: "bebop".to_string(),
+            protocol_type_name: "bebop".to_string(),
+            chain: tycho_common::dto::Chain::Ethereum,
+            tokens: vec![base_token.address.clone(), quote_token.address.clone()],
+            contract_ids: Vec::new(),
+            static_attributes: HashMap::new(),
+            change: ChangeType::Creation,
+            creation_tx: Bytes::default(),
+            created_at: chrono::NaiveDateTime::default(),
+        },
+        component_tvl: None,
+        entrypoints: Vec::new(),
     }
 }
 
@@ -104,33 +120,44 @@ struct BenchScenario {
     amounts_sell_quote: Vec<BigUint>,
 }
 
-fn build_scenarios() -> Vec<BenchScenario> {
-    let client = dummy_client();
+async fn build_scenarios() -> Vec<BenchScenario> {
     let mut scenarios = Vec::new();
 
     let pairs: Vec<(&str, Token, Token, f32)> =
         vec![("WETH/USDC", weth(), usdc(), 3000.0), ("WBTC/USDC", wbtc(), usdc(), 65000.0)];
 
     let level_counts = [3, 10, 200];
+    let timestamp_header = TimestampHeader { timestamp: 1700000000 };
+    let empty_balances = HashMap::new();
+    let decoder_context = DecoderContext::new();
+
+    let mut all_tokens = HashMap::new();
+    for (_, base, quote, _) in &pairs {
+        all_tokens.insert(base.address.clone(), base.clone());
+        all_tokens.insert(quote.address.clone(), quote.clone());
+    }
 
     let mut rng = rand::rng();
 
     for (pair_name, base_token, quote_token, mid_price) in &pairs {
         for &num_levels in &level_counts {
-            let price_data = generate_order_book(
-                &base_token.address,
-                &quote_token.address,
+            let snapshot = generate_order_book_snapshot(
+                base_token,
+                quote_token,
                 *mid_price,
                 10.0,
                 num_levels,
             );
 
-            let state = BebopState::new(
-                base_token.clone(),
-                quote_token.clone(),
-                price_data,
-                client.clone(),
-            );
+            let state = BebopState::try_from_with_header(
+                snapshot,
+                timestamp_header.clone(),
+                &empty_balances,
+                &all_tokens,
+                &decoder_context,
+            )
+            .await
+            .expect("Failed to decode BebopState from snapshot");
 
             let (sell_limit, _) = state
                 .get_limits(base_token.address.clone(), quote_token.address.clone())
@@ -168,7 +195,11 @@ fn build_scenarios() -> Vec<BenchScenario> {
 }
 
 fn bench_get_amount_out(c: &mut Criterion) {
-    let scenarios = build_scenarios();
+    std::env::set_var("BEBOP_USER", "bench_user");
+    std::env::set_var("BEBOP_KEY", "bench_key");
+
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+    let scenarios = rt.block_on(build_scenarios());
 
     let mut group = c.benchmark_group("bebop_get_amount_out");
     group.measurement_time(Duration::from_secs(5));

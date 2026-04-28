@@ -21,23 +21,14 @@ use tycho_simulation::{
         },
         stream::ProtocolStreamBuilder,
     },
-    protocol::models::ProtocolComponent,
+    protocol::models::{DecoderContext, ProtocolComponent, TryFromWithBlock},
     rfq::{
         client::RFQClient,
+        models::TimestampHeader,
         protocols::{
-            bebop::{
-                client_builder::BebopClientBuilder, models::BebopPriceData, state::BebopState,
-            },
-            hashflow::{
-                client_builder::HashflowClientBuilder,
-                models::{HashflowMarketMakerLevels, HashflowPair, HashflowPriceLevel},
-                state::HashflowState,
-            },
-            liquorice::{
-                client_builder::LiquoriceClientBuilder,
-                models::LiquoriceTokenPairPrice,
-                state::LiquoriceState,
-            },
+            bebop::{client_builder::BebopClientBuilder, state::BebopState},
+            hashflow::{client_builder::HashflowClientBuilder, state::HashflowState},
+            liquorice::{client_builder::LiquoriceClientBuilder, state::LiquoriceState},
         },
     },
     tycho_client::feed::component_tracker::ComponentFilter,
@@ -117,14 +108,7 @@ async fn load_all_benchmark_data() -> (BenchmarkDataByProtocol, HashMap<Bytes, T
 
     let mut stream = Box::pin(protocol_stream);
 
-    let protocols = [
-        "uniswap_v2",
-        "uniswap_v3",
-        "uniswap_v4",
-        "balancer_v2",
-        "curve",
-        "ekubo_v2",
-    ];
+    let protocols = ["uniswap_v2", "uniswap_v3", "uniswap_v4", "balancer_v2", "curve", "ekubo_v2"];
 
     let mut protocol_data: BenchmarkDataByProtocol = protocols
         .iter()
@@ -142,15 +126,10 @@ async fn load_all_benchmark_data() -> (BenchmarkDataByProtocol, HashMap<Bytes, T
 
     match stream.next().await {
         Some(Ok(message)) => {
-            info!(
-                "Loaded {} pairs and {} states",
-                message.new_pairs.len(),
-                message.states.len()
-            );
+            info!("Loaded {} pairs and {} states", message.new_pairs.len(), message.states.len());
 
             for (id, component) in message.new_pairs.iter() {
-                let protocol_name =
-                    map_protocol_system_to_protocol(&component.protocol_system);
+                let protocol_name = map_protocol_system_to_protocol(&component.protocol_system);
                 if let Some(data) = protocol_data.get_mut(&protocol_name) {
                     data.pools
                         .insert(id.clone(), component.tokens.clone());
@@ -202,7 +181,10 @@ async fn load_bebop_data(
     .filter_map(|addr| Bytes::from_str(addr).ok())
     .collect();
 
-    let tokens_set = token_addresses.iter().cloned().collect();
+    let tokens_set = token_addresses
+        .iter()
+        .cloned()
+        .collect();
 
     let client = BebopClientBuilder::new(Chain::Ethereum, bebop_user, bebop_key)
         .tokens(tokens_set)
@@ -221,90 +203,50 @@ async fn load_bebop_data(
 
     let (_provider, sync_msg) = msg;
 
-    info!(
-        "Received {} components from Bebop",
-        sync_msg.snapshots.states.len()
-    );
+    info!("Received {} components from Bebop", sync_msg.snapshots.states.len());
+
+    let timestamp_header = TimestampHeader { timestamp: sync_msg.header.timestamp };
+    let empty_balances = HashMap::new();
+    let decoder_context = DecoderContext::new();
 
     let mut pools = HashMap::new();
     let mut states = HashMap::new();
-    let mut bid_depths: Vec<usize> = Vec::new();
-    let mut ask_depths: Vec<usize> = Vec::new();
 
     for (component_id, component_with_state) in sync_msg.snapshots.states {
-        let component = &component_with_state.component;
-
-        if component.tokens.len() != 2 {
+        let token_addrs = component_with_state.component.tokens.clone();
+        if token_addrs.len() != 2 {
             continue;
         }
 
-        let base_addr = &component.tokens[0];
-        let quote_addr = &component.tokens[1];
-
-        let Some(base_token) = all_tokens.get(base_addr) else {
-            warn!("Base token not found: {base_addr}");
+        let Some(base_token) = all_tokens.get(&token_addrs[0]) else {
             continue;
         };
-        let Some(quote_token) = all_tokens.get(quote_addr) else {
-            warn!("Quote token not found: {quote_addr}");
+        let Some(quote_token) = all_tokens.get(&token_addrs[1]) else {
             continue;
         };
 
-        let state_attrs = &component_with_state.state.attributes;
-        let empty_array: Bytes = "[]".as_bytes().to_vec().into();
-        let bids_json = state_attrs.get("bids").unwrap_or(&empty_array);
-        let asks_json = state_attrs.get("asks").unwrap_or(&empty_array);
-
-        let bids: Vec<(f32, f32)> = match serde_json::from_slice(bids_json) {
-            Ok(b) => b,
-            Err(e) => {
-                warn!("Failed to parse bids for {component_id}: {e}");
-                continue;
-            }
-        };
-        let asks: Vec<(f32, f32)> = match serde_json::from_slice(asks_json) {
-            Ok(a) => a,
-            Err(e) => {
-                warn!("Failed to parse asks for {component_id}: {e}");
-                continue;
-            }
-        };
-
-        let price_data = BebopPriceData {
-            base: base_token.address.to_vec(),
-            quote: quote_token.address.to_vec(),
-            last_update_ts: sync_msg.header.timestamp,
-            bids: bids
-                .iter()
-                .flat_map(|(price, size)| [*price, *size])
-                .collect(),
-            asks: asks
-                .iter()
-                .flat_map(|(price, size)| [*price, *size])
-                .collect(),
-        };
-
-        let bench_client = BebopClientBuilder::new(
-            Chain::Ethereum,
-            env::var("BEBOP_USER").unwrap_or_default(),
-            env::var("BEBOP_KEY").unwrap_or_default(),
+        match BebopState::try_from_with_header(
+            component_with_state,
+            timestamp_header.clone(),
+            &empty_balances,
+            all_tokens,
+            &decoder_context,
         )
-        .build()
-        .expect("Failed to build BebopClient for state");
-
-        let state =
-            BebopState::new(base_token.clone(), quote_token.clone(), price_data, bench_client);
-
-        bid_depths.push(state.price_data.bids.len() / 2);
-        ask_depths.push(state.price_data.asks.len() / 2);
-
-        pools.insert(
-            component_id.clone(),
-            (base_token.clone(), quote_token.clone()),
-        );
-        states.insert(component_id, state);
+        .await
+        {
+            Ok(state) => {
+                pools
+                    .insert(component_id.clone(), (base_token.clone(), quote_token.clone()));
+                states.insert(component_id, state);
+            }
+            Err(e) => {
+                warn!("Failed to decode Bebop state for {component_id}: {e}");
+            }
+        }
     }
 
+    let bid_depths: Vec<usize> = states.values().map(|s| s.price_data.get_bids().len()).collect();
+    let ask_depths: Vec<usize> = states.values().map(|s| s.price_data.get_asks().len()).collect();
     let avg_bid = bid_depths.iter().sum::<usize>() as f64 / bid_depths.len().max(1) as f64;
     let avg_ask = ask_depths.iter().sum::<usize>() as f64 / ask_depths.len().max(1) as f64;
     let max_bid = bid_depths.iter().max().copied().unwrap_or(0);
@@ -340,14 +282,16 @@ async fn load_liquorice_data(
     .filter_map(|addr| Bytes::from_str(addr).ok())
     .collect();
 
-    let tokens_set = token_addresses.iter().cloned().collect();
+    let tokens_set = token_addresses
+        .iter()
+        .cloned()
+        .collect();
 
-    let client =
-        LiquoriceClientBuilder::new(Chain::Ethereum, liquorice_user, liquorice_key)
-            .tokens(tokens_set)
-            .tvl_threshold(tvl_threshold)
-            .build()
-            .expect("Failed to build LiquoriceClient");
+    let client = LiquoriceClientBuilder::new(Chain::Ethereum, liquorice_user, liquorice_key)
+        .tokens(tokens_set)
+        .tvl_threshold(tvl_threshold)
+        .build()
+        .expect("Failed to build LiquoriceClient");
 
     info!("Polling Liquorice price levels...");
     let mut stream = client.stream();
@@ -360,85 +304,53 @@ async fn load_liquorice_data(
 
     let (_provider, sync_msg) = msg;
 
-    info!(
-        "Received {} components from Liquorice",
-        sync_msg.snapshots.states.len()
-    );
+    info!("Received {} components from Liquorice", sync_msg.snapshots.states.len());
+
+    let timestamp_header = TimestampHeader { timestamp: sync_msg.header.timestamp };
+    let empty_balances = HashMap::new();
+    let decoder_context = DecoderContext::new();
 
     let mut pools = HashMap::new();
     let mut states = HashMap::new();
-    let mut level_depths: Vec<usize> = Vec::new();
 
     for (component_id, component_with_state) in sync_msg.snapshots.states {
-        let component = &component_with_state.component;
-
-        if component.tokens.len() != 2 {
+        let token_addrs = component_with_state.component.tokens.clone();
+        if token_addrs.len() != 2 {
             continue;
         }
 
-        let base_addr = &component.tokens[0];
-        let quote_addr = &component.tokens[1];
-
-        let Some(base_token) = all_tokens.get(base_addr) else {
-            warn!("Base token not found: {base_addr}");
+        let Some(base_token) = all_tokens.get(&token_addrs[0]) else {
             continue;
         };
-        let Some(quote_token) = all_tokens.get(quote_addr) else {
-            warn!("Quote token not found: {quote_addr}");
+        let Some(quote_token) = all_tokens.get(&token_addrs[1]) else {
             continue;
         };
 
-        let state_attrs = &component_with_state.state.attributes;
-        let empty_prices_map: Bytes = "{}".as_bytes().to_vec().into();
-        let prices_data = state_attrs.get("prices").unwrap_or(&empty_prices_map);
-
-        let prices_by_mm: HashMap<String, LiquoriceTokenPairPrice> =
-            match serde_json::from_slice(prices_data) {
-                Ok(p) => p,
-                Err(e) => {
-                    warn!("Failed to parse prices for {component_id}: {e}");
-                    continue;
-                }
-            };
-
-        if prices_by_mm
-            .values()
-            .all(|p| p.levels.is_empty())
-        {
-            continue;
-        }
-
-        let max_depth = prices_by_mm
-            .values()
-            .map(|p| p.levels.len())
-            .max()
-            .unwrap_or(0);
-        level_depths.push(max_depth);
-
-        let bench_client = LiquoriceClientBuilder::new(
-            Chain::Ethereum,
-            env::var("LIQUORICE_USER").unwrap_or_default(),
-            env::var("LIQUORICE_KEY").unwrap_or_default(),
+        match LiquoriceState::try_from_with_header(
+            component_with_state,
+            timestamp_header.clone(),
+            &empty_balances,
+            all_tokens,
+            &decoder_context,
         )
-        .build()
-        .expect("Failed to build LiquoriceClient for state");
-
-        let state = LiquoriceState::new(
-            base_token.clone(),
-            quote_token.clone(),
-            prices_by_mm,
-            bench_client,
-        );
-
-        pools.insert(
-            component_id.clone(),
-            (base_token.clone(), quote_token.clone()),
-        );
-        states.insert(component_id, state);
+        .await
+        {
+            Ok(state) => {
+                pools
+                    .insert(component_id.clone(), (base_token.clone(), quote_token.clone()));
+                states.insert(component_id, state);
+            }
+            Err(e) => {
+                warn!("Failed to decode Liquorice state for {component_id}: {e}");
+            }
+        }
     }
 
-    let avg_depth =
-        level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
+    let level_depths: Vec<usize> = states
+        .values()
+        .map(|s| s.prices_by_mm.values().map(|p| p.levels.len()).max().unwrap_or(0))
+        .collect();
+    let avg_depth = level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
     let max_depth = level_depths.iter().max().copied().unwrap_or(0);
     info!(
         "Loaded {} Liquorice pools — level depth: avg={avg_depth:.1} max={max_depth}",
@@ -471,14 +383,16 @@ async fn load_hashflow_data(
     .filter_map(|addr| Bytes::from_str(addr).ok())
     .collect();
 
-    let tokens_set = token_addresses.iter().cloned().collect();
+    let tokens_set = token_addresses
+        .iter()
+        .cloned()
+        .collect();
 
-    let client =
-        HashflowClientBuilder::new(Chain::Ethereum, hashflow_user, hashflow_key)
-            .tokens(tokens_set)
-            .tvl_threshold(tvl_threshold)
-            .build()
-            .expect("Failed to build HashflowClient");
+    let client = HashflowClientBuilder::new(Chain::Ethereum, hashflow_user, hashflow_key)
+        .tokens(tokens_set)
+        .tvl_threshold(tvl_threshold)
+        .build()
+        .expect("Failed to build HashflowClient");
 
     info!("Polling Hashflow price levels...");
     let mut stream = client.stream();
@@ -491,90 +405,50 @@ async fn load_hashflow_data(
 
     let (_provider, sync_msg) = msg;
 
-    info!(
-        "Received {} components from Hashflow",
-        sync_msg.snapshots.states.len()
-    );
+    info!("Received {} components from Hashflow", sync_msg.snapshots.states.len());
+
+    let timestamp_header = TimestampHeader { timestamp: sync_msg.header.timestamp };
+    let empty_balances = HashMap::new();
+    let decoder_context = DecoderContext::new();
 
     let mut pools = HashMap::new();
     let mut states = HashMap::new();
-    let mut level_depths: Vec<usize> = Vec::new();
 
     for (component_id, component_with_state) in sync_msg.snapshots.states {
-        let component = &component_with_state.component;
-
-        if component.tokens.len() != 2 {
+        let token_addrs = component_with_state.component.tokens.clone();
+        if token_addrs.len() != 2 {
             continue;
         }
 
-        let base_addr = &component.tokens[0];
-        let quote_addr = &component.tokens[1];
-
-        let Some(base_token) = all_tokens.get(base_addr) else {
-            warn!("Base token not found: {base_addr}");
+        let Some(base_token) = all_tokens.get(&token_addrs[0]) else {
             continue;
         };
-        let Some(quote_token) = all_tokens.get(quote_addr) else {
-            warn!("Quote token not found: {quote_addr}");
+        let Some(quote_token) = all_tokens.get(&token_addrs[1]) else {
             continue;
         };
 
-        let state_attrs = &component_with_state.state.attributes;
-        let empty_levels_array: Bytes = "[]".as_bytes().to_vec().into();
-        let levels_data = state_attrs.get("levels").unwrap_or(&empty_levels_array);
-
-        let price_levels: Vec<HashflowPriceLevel> = match serde_json::from_slice(levels_data) {
-            Ok(l) => l,
-            Err(e) => {
-                warn!("Failed to parse levels for {component_id}: {e}");
-                continue;
-            }
-        };
-
-        if price_levels.is_empty() {
-            continue;
-        }
-
-        let market_maker = state_attrs
-            .get("mm")
-            .and_then(|mm_bytes| String::from_utf8(mm_bytes.to_vec()).ok())
-            .unwrap_or_else(|| "unknown".to_string());
-
-        level_depths.push(price_levels.len());
-
-        let levels = HashflowMarketMakerLevels {
-            pair: HashflowPair {
-                base_token: base_addr.clone(),
-                quote_token: quote_addr.clone(),
-            },
-            levels: price_levels,
-        };
-
-        let bench_client = HashflowClientBuilder::new(
-            Chain::Ethereum,
-            env::var("HASHFLOW_USER").unwrap_or_default(),
-            env::var("HASHFLOW_KEY").unwrap_or_default(),
+        match HashflowState::try_from_with_header(
+            component_with_state,
+            timestamp_header.clone(),
+            &empty_balances,
+            all_tokens,
+            &decoder_context,
         )
-        .build()
-        .expect("Failed to build HashflowClient for state");
-
-        let state = HashflowState::new(
-            base_token.clone(),
-            quote_token.clone(),
-            levels,
-            market_maker,
-            bench_client,
-        );
-
-        pools.insert(
-            component_id.clone(),
-            (base_token.clone(), quote_token.clone()),
-        );
-        states.insert(component_id, state);
+        .await
+        {
+            Ok(state) => {
+                pools
+                    .insert(component_id.clone(), (base_token.clone(), quote_token.clone()));
+                states.insert(component_id, state);
+            }
+            Err(e) => {
+                warn!("Failed to decode Hashflow state for {component_id}: {e}");
+            }
+        }
     }
 
-    let avg_depth =
-        level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
+    let level_depths: Vec<usize> = states.values().map(|s| s.levels.levels.len()).collect();
+    let avg_depth = level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
     let max_depth = level_depths.iter().max().copied().unwrap_or(0);
     info!(
         "Loaded {} Hashflow pools — level depth: avg={avg_depth:.1} max={max_depth}",
@@ -619,8 +493,7 @@ fn benchmark_protocol_swaps(c: &mut Criterion, protocol: &str, data: &ProtocolBe
         if tokens.len() < 2 {
             continue;
         }
-        let Ok((upper, _)) =
-            state.get_limits(tokens[0].address.clone(), tokens[1].address.clone())
+        let Ok((upper, _)) = state.get_limits(tokens[0].address.clone(), tokens[1].address.clone())
         else {
             continue;
         };
@@ -645,8 +518,10 @@ fn benchmark_protocol_swaps(c: &mut Criterion, protocol: &str, data: &ProtocolBe
     }
 
     debug!("Sample swap scenarios for {protocol}:");
-    for (i, (pool_id, amount_in, token_in, token_out, state)) in
-        swap_scenarios.iter().take(5).enumerate()
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in swap_scenarios
+        .iter()
+        .take(5)
+        .enumerate()
     {
         match state.get_amount_out(amount_in.clone(), token_in, token_out) {
             Ok(result) => {
@@ -680,8 +555,7 @@ fn benchmark_protocol_swaps(c: &mut Criterion, protocol: &str, data: &ProtocolBe
         |b, scenarios| {
             let mut scenario_iter = scenarios.iter().cycle();
             b.iter(|| {
-                let (_, amount_in, token_in, token_out, state) =
-                    scenario_iter.next().unwrap();
+                let (_, amount_in, token_in, token_out, state) = scenario_iter.next().unwrap();
                 state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .expect("swap failed");
@@ -735,8 +609,10 @@ fn benchmark_bebop_swaps(c: &mut Criterion, data: &BebopBenchmarkData) {
     }
 
     debug!("Sample swap scenarios for Bebop:");
-    for (i, (pool_id, amount_in, token_in, token_out, state)) in
-        swap_scenarios.iter().take(5).enumerate()
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in swap_scenarios
+        .iter()
+        .take(5)
+        .enumerate()
     {
         match state.get_amount_out(amount_in.clone(), token_in, token_out) {
             Ok(result) => {
@@ -770,8 +646,7 @@ fn benchmark_bebop_swaps(c: &mut Criterion, data: &BebopBenchmarkData) {
         |b, scenarios| {
             let mut scenario_iter = scenarios.iter().cycle();
             b.iter(|| {
-                let (_, amount_in, token_in, token_out, state) =
-                    scenario_iter.next().unwrap();
+                let (_, amount_in, token_in, token_out, state) = scenario_iter.next().unwrap();
                 state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .expect("swap failed");
@@ -825,8 +700,10 @@ fn benchmark_liquorice_swaps(c: &mut Criterion, data: &LiquoriceBenchmarkData) {
     }
 
     debug!("Sample swap scenarios for Liquorice:");
-    for (i, (pool_id, amount_in, token_in, token_out, state)) in
-        swap_scenarios.iter().take(5).enumerate()
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in swap_scenarios
+        .iter()
+        .take(5)
+        .enumerate()
     {
         match state.get_amount_out(amount_in.clone(), token_in, token_out) {
             Ok(result) => {
@@ -860,8 +737,7 @@ fn benchmark_liquorice_swaps(c: &mut Criterion, data: &LiquoriceBenchmarkData) {
         |b, scenarios| {
             let mut scenario_iter = scenarios.iter().cycle();
             b.iter(|| {
-                let (_, amount_in, token_in, token_out, state) =
-                    scenario_iter.next().unwrap();
+                let (_, amount_in, token_in, token_out, state) = scenario_iter.next().unwrap();
                 state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .expect("swap failed");
@@ -915,8 +791,10 @@ fn benchmark_hashflow_swaps(c: &mut Criterion, data: &HashflowBenchmarkData) {
     }
 
     debug!("Sample swap scenarios for Hashflow:");
-    for (i, (pool_id, amount_in, token_in, token_out, state)) in
-        swap_scenarios.iter().take(5).enumerate()
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in swap_scenarios
+        .iter()
+        .take(5)
+        .enumerate()
     {
         match state.get_amount_out(amount_in.clone(), token_in, token_out) {
             Ok(result) => {
@@ -950,8 +828,7 @@ fn benchmark_hashflow_swaps(c: &mut Criterion, data: &HashflowBenchmarkData) {
         |b, scenarios| {
             let mut scenario_iter = scenarios.iter().cycle();
             b.iter(|| {
-                let (_, amount_in, token_in, token_out, state) =
-                    scenario_iter.next().unwrap();
+                let (_, amount_in, token_in, token_out, state) = scenario_iter.next().unwrap();
                 state
                     .get_amount_out(amount_in.clone(), token_in, token_out)
                     .expect("swap failed");
