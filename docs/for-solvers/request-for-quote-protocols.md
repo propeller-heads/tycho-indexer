@@ -9,6 +9,14 @@ You ask for a quote for a specific trade size, and they return a price. Quotes c
 
 Tycho supports streaming, simulating, and executing RFQ quotes as part of multi-protocol swaps.
 
+Currently, Tycho supports the following RFQ protocols:
+
+| Protocol    | Simulation Time |
+| ----------- | --------------- |
+| `bebop`     | 0.5 µs          |
+| `hashflow`  | 0.4 µs          |
+| `liquorice` | 0.4 µs          |
+
 ## Quickstart
 
 The RFQ quickstart is similar to the other protocols [quickstart](../).
