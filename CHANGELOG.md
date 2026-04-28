@@ -1,3 +1,11 @@
+## [0.276.0](https://github.com/propeller-heads/tycho-indexer/compare/0.275.1...0.276.0) (2026-04-28)
+
+
+### Features
+
+* **indexer:** add granular DCI cache metrics ([e859679](https://github.com/propeller-heads/tycho-indexer/commit/e859679e38dde992a07b6543bfe98fec89ddc1c7))
+* **indexer:** add granular DCI cache metrics ([#953](https://github.com/propeller-heads/tycho-indexer/issues/953)) ([c0886ad](https://github.com/propeller-heads/tycho-indexer/commit/c0886ad0ac4b50e7fdb7fa417b4788ff4310d1a0))
+
 ## [0.275.1](https://github.com/propeller-heads/tycho-indexer/compare/0.275.0...0.275.1) (2026-04-28)
 
 
