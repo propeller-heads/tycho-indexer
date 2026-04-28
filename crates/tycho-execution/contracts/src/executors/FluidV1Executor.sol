@@ -132,7 +132,7 @@ contract FluidV1Executor is IExecutor, ICallback {
 
     function getTransferData(bytes calldata data)
         external
-        payable
+        pure
         returns (
             TransferManager.TransferType transferType,
             address receiver,

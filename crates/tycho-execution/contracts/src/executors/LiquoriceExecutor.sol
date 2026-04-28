@@ -155,7 +155,7 @@ contract LiquoriceExecutor is IExecutor {
 
     function getTransferData(bytes calldata data)
         external
-        payable
+        view
         returns (
             TransferManager.TransferType transferType,
             address receiver,
