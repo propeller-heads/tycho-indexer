@@ -11,7 +11,9 @@ use std::{
 };
 
 use alloy::{
-    eips::BlockNumberOrTag, primitives::Address, providers::Provider,
+    eips::BlockNumberOrTag,
+    primitives::Address,
+    providers::Provider,
     rpc::types::{Block, BlockId},
 };
 use clap::Parser;
