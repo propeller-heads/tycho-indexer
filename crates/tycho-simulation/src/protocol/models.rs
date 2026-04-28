@@ -172,12 +172,15 @@ where
         Self: Sized;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Update {
     pub block_number_or_timestamp: u64,
     /// Synchronization state per protocol
     pub sync_states: HashMap<String, SynchronizerState>,
-    /// The new and updated states of this block
+    /// The new and updated states of this block.
+    /// VM-backed states that can't be serialized are silently skipped during
+    /// serialization and will be absent after a roundtrip.
+    #[serde(with = "crate::serde_helpers::protocol_states")]
     pub states: HashMap<String, Box<dyn ProtocolSim>>,
     /// The new pairs that were added in this block
     pub new_pairs: HashMap<String, ProtocolComponent>,

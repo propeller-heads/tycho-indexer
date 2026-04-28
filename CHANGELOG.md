@@ -1,3 +1,34 @@
+## [0.275.1](https://github.com/propeller-heads/tycho-indexer/compare/0.275.0...0.275.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* **integration test:** update validation to handle partial blocks ([#955](https://github.com/propeller-heads/tycho-indexer/issues/955)) ([5ca66da](https://github.com/propeller-heads/tycho-indexer/commit/5ca66da175e69cfed2a4bdf108b15bf494e2f91c))
+* **integration-test:** use pending block ID for validation in partial blocks mode ([e217f40](https://github.com/propeller-heads/tycho-indexer/commit/e217f400440de0fb5680565c5f4259b39171828c))
+
+## [0.275.0](https://github.com/propeller-heads/tycho-indexer/compare/0.274.1...0.275.0) (2026-04-27)
+
+
+### Features
+
+* add Serialize/Deserialize to Update struct ([a7c3859](https://github.com/propeller-heads/tycho-indexer/commit/a7c3859040f47c5971a7e3fb6220467d09cf009c))
+* **simulation:** add Serialize/Deserialize to Update struct ([#954](https://github.com/propeller-heads/tycho-indexer/issues/954)) ([a6ca0b7](https://github.com/propeller-heads/tycho-indexer/commit/a6ca0b7b87df86dc2a48f513b572bba9ab63bb29))
+
+
+### Bug Fixes
+
+* address PR review comments ([a61c7ed](https://github.com/propeller-heads/tycho-indexer/commit/a61c7ed6fa047e1038001d60b0150f3a6c5fa51f))
+* address review feedback for Update serde support ([a00578a](https://github.com/propeller-heads/tycho-indexer/commit/a00578a40b567c81058b99bbc4e202b1977b5db3))
+
+## [0.274.1](https://github.com/propeller-heads/tycho-indexer/compare/0.274.0...0.274.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* **integration-test:** fix flashblock execution simulations ([#948](https://github.com/propeller-heads/tycho-indexer/issues/948)) ([18775c3](https://github.com/propeller-heads/tycho-indexer/commit/18775c30a4ff46834cee65ac62ace3d982090649))
+* **integration-test:** fix flashblock simulation support ([a3dcc8b](https://github.com/propeller-heads/tycho-indexer/commit/a3dcc8bceedbc2e71600e8376214e0e10ef190bc))
+* **integration-test:** record latency for stale blocks and use signed values ([b7a6aac](https://github.com/propeller-heads/tycho-indexer/commit/b7a6aacdbf461e3c8bd0ede440a4ed0bf621b296))
+
 ## [0.274.0](https://github.com/propeller-heads/tycho-indexer/compare/0.273.0...0.274.0) (2026-04-27)
 
 
