@@ -1,6 +1,6 @@
 #[path = "1_map_pool_created.rs"]
 mod map_pool_created;
-mod utils;
+pub(crate) mod utils;
 
 #[path = "2_store_pools.rs"]
 mod store_pools;

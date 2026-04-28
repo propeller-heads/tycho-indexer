@@ -1,12 +1,12 @@
 use crate::{
     abi::d3_swap_module::events::LogSwapOut,
     events::EventTrait,
+    modules::utils,
     pb::tycho::evm::fluid_v2::Pool,
     storage::{dex_v2, storage_view::StorageChangesView},
 };
 use substreams::store::{StoreGet, StoreGetProto};
 use substreams_ethereum::pb::eth::v2::StorageChange;
-use substreams_helper::hex::Hexable;
 use tycho_substreams::prelude::*;
 
 impl EventTrait for LogSwapOut {
@@ -20,7 +20,7 @@ impl EventTrait for LogSwapOut {
         let mut attrs = Vec::new();
         attrs.extend(dex_v2::dex_variables_attributes(&storage_view, &self.dex_id, dex_type));
         attrs.extend(dex_v2::token_reserves_attributes(&storage_view, &self.dex_id, dex_type));
-        (self.dex_id.to_hex(), attrs)
+        (utils::component_id(&self.dex_type, &self.dex_id), attrs)
     }
 
     fn get_balance_delta(
@@ -29,7 +29,8 @@ impl EventTrait for LogSwapOut {
         ordinal: u64,
         pools_store: &StoreGetProto<Pool>,
     ) -> Vec<BalanceDelta> {
-        let pool_key = format!("Pool:{}", hex::encode(self.dex_id).to_hex());
+        let component_id = utils::component_id(&self.dex_type, &self.dex_id);
+        let pool_key = utils::pool_store_key(&self.dex_type, &self.dex_id);
         let pool = match pools_store.get_last(pool_key) {
             Some(pool) => pool,
             None => return vec![],
@@ -45,12 +46,7 @@ impl EventTrait for LogSwapOut {
                     .amount_in
                     .clone()
                     .to_signed_bytes_be(),
-                component_id: self
-                    .dex_id
-                    .clone()
-                    .to_hex()
-                    .as_bytes()
-                    .to_vec(),
+                component_id: component_id.clone().into_bytes(),
             },
             BalanceDelta {
                 ord: ordinal,
@@ -61,12 +57,7 @@ impl EventTrait for LogSwapOut {
                     .neg()
                     .clone()
                     .to_signed_bytes_be(),
-                component_id: self
-                    .dex_id
-                    .clone()
-                    .to_hex()
-                    .as_bytes()
-                    .to_vec(),
+                component_id: component_id.into_bytes(),
             },
         ]
     }

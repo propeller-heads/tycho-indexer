@@ -197,18 +197,19 @@ fn exchange_price_changes(
     token_to_pools_store: &StoreGetArray<String>,
 ) -> Vec<EntityChanges> {
     let token_key = hex::encode(token);
-    let pool_addresses = match token_to_pools_store.get_last(token_key) {
-        Some(pools) => pools,
+    let component_ids = match token_to_pools_store.get_last(token_key) {
+        Some(component_ids) => component_ids,
         None => return vec![],
     };
 
     let mut changes = Vec::new();
-    for pool_address_b64 in pool_addresses {
-        let pool_address = match STANDARD_NO_PAD.decode(pool_address_b64) {
+    for component_id_b64 in component_ids {
+        let component_id_bytes = match STANDARD_NO_PAD.decode(component_id_b64) {
             Ok(bytes) => bytes,
             Err(_) => continue,
         };
-        let pool_key = format!("Pool:{}", pool_address.to_hex());
+        let component_id = component_id_bytes.to_hex();
+        let pool_key = format!("Pool:{component_id}");
         let is_token_0 = pools_store
             .get_last(pool_key)
             .map(|pool| pool.token0 == *token)
@@ -219,8 +220,6 @@ fn exchange_price_changes(
         } else {
             ("token1/borrow_exchange_price", "token1/supply_exchange_price")
         };
-
-        let component_id = pool_address.to_hex();
 
         changes.push(EntityChanges {
             component_id: component_id.clone(),

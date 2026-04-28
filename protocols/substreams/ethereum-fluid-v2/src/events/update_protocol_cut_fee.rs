@@ -1,12 +1,12 @@
 use crate::{
     abi::d3_admin_module_idx_1::events::LogUpdateProtocolCutFee,
     events::EventTrait,
+    modules::utils,
     pb::tycho::evm::fluid_v2::Pool,
     storage::{dex_v2, storage_view::StorageChangesView},
 };
 use substreams::store::StoreGetProto;
 use substreams_ethereum::pb::eth::v2::StorageChange;
-use substreams_helper::hex::Hexable;
 use tycho_substreams::prelude::*;
 
 impl EventTrait for LogUpdateProtocolCutFee {
@@ -18,7 +18,7 @@ impl EventTrait for LogUpdateProtocolCutFee {
         let storage_view = StorageChangesView::new_filtered(dex_v2_address, storage_changes);
         let dex_type = self.dex_type.to_u64();
         let attrs = dex_v2::dex_variables2_attributes(&storage_view, &self.dex_id, dex_type);
-        (self.dex_id.to_hex(), attrs)
+        (utils::component_id(&self.dex_type, &self.dex_id), attrs)
     }
 
     fn get_balance_delta(

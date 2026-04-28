@@ -59,29 +59,29 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for FluidV2State {
                 ))
             })?;
         let dex_type = snapshot
-            .state
-            .attributes
+            .component
+            .static_attributes
             .get("dex_type")
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("dex_type".to_string()))?
             .clone();
 
         let fee = snapshot
-            .state
-            .attributes
+            .component
+            .static_attributes
             .get("fee")
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("fee".to_string()))?
             .clone();
 
         let tick_spacing = snapshot
-            .state
-            .attributes
+            .component
+            .static_attributes
             .get("tick_spacing")
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("tick_spacing".to_string()))?
             .clone();
 
         let controller_bytes = snapshot
-            .state
-            .attributes
+            .component
+            .static_attributes
             .get("controller")
             .ok_or_else(|| InvalidSnapshotError::MissingAttribute("controller".to_string()))?
             .clone();
@@ -182,9 +182,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for FluidV2State {
                 .into_iter()
                 .filter(|t| t.net_liquidity != 0)
                 .collect::<Vec<_>>(),
-            _ => {
-                return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string()))
-            }
+            _ => return Err(InvalidSnapshotError::MissingAttribute("tick_liquidities".to_string())),
         };
 
         ticks.sort_by_key(|tick| tick.index);

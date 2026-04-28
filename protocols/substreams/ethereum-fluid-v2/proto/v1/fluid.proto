@@ -3,8 +3,7 @@ syntax = "proto3";
 package tycho.evm.fluid_v2;
 
 message Pool {
-  bytes address = 1;
-  bytes token0 = 2;
-  bytes token1 = 3;
-  bytes created_tx_hash = 4;
+  bytes token0 = 1;
+  bytes token1 = 2;
+  bytes created_tx_hash = 3;
 }

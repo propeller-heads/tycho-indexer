@@ -187,10 +187,7 @@ impl FluidV2State {
                 ));
             }
         } else if sqrt_price_limit >= MAX_SQRT_RATIO || sqrt_price_limit <= sqrt_price {
-            return Err(SimulationError::InvalidInput(
-                "Invalid sqrt price limit".to_string(),
-                None,
-            ));
+            return Err(SimulationError::InvalidInput("Invalid sqrt price limit".to_string(), None));
         }
 
         let exact_input = amount_specified > I256::from_raw(U256::from(0u64));
@@ -223,8 +220,8 @@ impl FluidV2State {
         if fee_version == 1 {
             if self
                 .dex_variables2
-                .price_impact_to_fee_division_factor
-                == U256::from(0u64)
+                .price_impact_to_fee_division_factor ==
+                U256::from(0u64)
             {
                 constant_lp_fee_pips = self.dex_variables2.min_fee.to::<u32>();
             } else {
@@ -239,8 +236,8 @@ impl FluidV2State {
         let mut sqrt_price_start = state.sqrt_price;
         let mut sqrt_price_start_changed = false;
 
-        while state.amount_remaining != I256::from_raw(U256::from(0u64))
-            && state.sqrt_price != sqrt_price_limit
+        while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
+            state.sqrt_price != sqrt_price_limit
         {
             let (mut next_tick, initialized) = ticks
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
@@ -255,8 +252,8 @@ impl FluidV2State {
             let sqrt_price_next = get_sqrt_ratio_at_tick(next_tick)?;
             // Stored sqrt price is lossy-compressed; when that creates a tiny directional
             // anomaly, align to the tick price as long as the deviation stays within 0.01%.
-            if (zero_for_one && sqrt_price_next > state.sqrt_price)
-                || (!zero_for_one && sqrt_price_next < state.sqrt_price)
+            if (zero_for_one && sqrt_price_next > state.sqrt_price) ||
+                (!zero_for_one && sqrt_price_next < state.sqrt_price)
             {
                 let diff = if sqrt_price_next > state.sqrt_price {
                     safe_sub_u256(sqrt_price_next, state.sqrt_price)?
@@ -393,9 +390,9 @@ impl FluidV2State {
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
                     cross_init_tick_loops += 1;
 
-                    if active_liquidity_start == 0
-                        && !sqrt_price_start_changed
-                        && state.liquidity > 0
+                    if active_liquidity_start == 0 &&
+                        !sqrt_price_start_changed &&
+                        state.liquidity > 0
                     {
                         sqrt_price_start = state.sqrt_price;
                         sqrt_price_start_changed = true;
@@ -410,8 +407,8 @@ impl FluidV2State {
         verify_sqrt_price_change_limits(sqrt_price_start, state.sqrt_price)?;
         // TODO: For `fee_version == 1`, update dynamic-fee variables from final price impact.
 
-        let gas_used = U256::from(GAS_BASE)
-            + U256::from(GAS_CROSS_INIT_TICK.saturating_mul(cross_init_tick_loops));
+        let gas_used = U256::from(GAS_BASE) +
+            U256::from(GAS_CROSS_INIT_TICK.saturating_mul(cross_init_tick_loops));
 
         Ok(SwapInInternalResult {
             amount_out_raw_adjusted: amount_out_raw,
@@ -819,8 +816,8 @@ fn verify_sqrt_price_change_limits(
         safe_sub_u256(sqrt_price_start, sqrt_price_end)?
     };
     let percentage_change = safe_div_u256(safe_mul_u256(diff, pow10_u256(10))?, sqrt_price_start)?;
-    if percentage_change > U256::from(MAX_SQRT_PRICE_CHANGE_PERCENTAGE)
-        || percentage_change < U256::from(MIN_SQRT_PRICE_CHANGE_PERCENTAGE)
+    if percentage_change > U256::from(MAX_SQRT_PRICE_CHANGE_PERCENTAGE) ||
+        percentage_change < U256::from(MIN_SQRT_PRICE_CHANGE_PERCENTAGE)
     {
         return Err(SimulationError::InvalidInput(
             "Sqrt price change out of bounds".to_string(),
@@ -888,20 +885,20 @@ impl ProtocolSim for FluidV2State {
         let adjusted_price = if zero_for_one {
             sqrt_price_q96_to_f64(sqrt_price, token_in_decimals as u32, token_out_decimals as u32)?
         } else {
-            1.0f64
-                / sqrt_price_q96_to_f64(
+            1.0f64 /
+                sqrt_price_q96_to_f64(
                     sqrt_price,
                     token_out_decimals as u32,
                     token_in_decimals as u32,
                 )?
         };
 
-        let scale_num = u256_to_f64(token_in_num_precision)?
-            * u256_to_f64(token_out_den_precision)?
-            * u256_to_f64(exchange_price_out)?;
-        let scale_den = u256_to_f64(exchange_price_in)?
-            * u256_to_f64(token_in_den_precision)?
-            * u256_to_f64(token_out_num_precision)?;
+        let scale_num = u256_to_f64(token_in_num_precision)? *
+            u256_to_f64(token_out_den_precision)? *
+            u256_to_f64(exchange_price_out)?;
+        let scale_den = u256_to_f64(exchange_price_in)? *
+            u256_to_f64(token_in_den_precision)? *
+            u256_to_f64(token_out_num_precision)?;
         let price = adjusted_price * (scale_num / scale_den);
 
         let effective_fee = self.effective_fee(zero_for_one);
@@ -940,8 +937,8 @@ impl ProtocolSim for FluidV2State {
         // Keep the internal raw output for state updates. The extra round-down below only
         // affects the user-visible amount, just like the Solidity entrypoint.
         let amount_out_raw_adjusted_for_state = internal.amount_out_raw_adjusted;
-        if amount_out_raw_adjusted_for_state < pow10_u256(4)
-            || amount_out_raw_adjusted_for_state > max_x(86)
+        if amount_out_raw_adjusted_for_state < pow10_u256(4) ||
+            amount_out_raw_adjusted_for_state > max_x(86)
         {
             return Err(SimulationError::InvalidInput("Adjusted amount limits".to_string(), None));
         }
@@ -1491,23 +1488,23 @@ mod tests {
     #[test]
     fn test_dex_variables2_from_packed_decodes_fields() {
         let active_liquidity = u256("123456789012345678901234567890");
-        let packed = U256::from(21u64)
-            | (U256::from(34u64) << 12u32)
-            | (U256::from(11u64) << 24u32)
-            | (U256::from(15u64) << 30u32)
-            | (U256::from(6u64) << 34u32)
-            | (active_liquidity << 38u32)
-            | (U256::from(1u64) << 140u32)
-            | (U256::from(1u64) << 141u32)
-            | (U256::from(3u64) << 152u32)
-            | (U256::from(3600u64) << 156u32)
-            | (U256::from(42u64) << 168u32)
-            | (U256::from(150u64) << 176u32)
-            | (U256::from(400u64) << 192u32)
-            | (U256::from(1u64) << 208u32)
-            | (U256::from(777u64) << 209u32)
-            | (U256::from(12345u64) << 229u32)
-            | (U256::from(876u64) << 244u32);
+        let packed = U256::from(21u64) |
+            (U256::from(34u64) << 12u32) |
+            (U256::from(11u64) << 24u32) |
+            (U256::from(15u64) << 30u32) |
+            (U256::from(6u64) << 34u32) |
+            (active_liquidity << 38u32) |
+            (U256::from(1u64) << 140u32) |
+            (U256::from(1u64) << 141u32) |
+            (U256::from(3u64) << 152u32) |
+            (U256::from(3600u64) << 156u32) |
+            (U256::from(42u64) << 168u32) |
+            (U256::from(150u64) << 176u32) |
+            (U256::from(400u64) << 192u32) |
+            (U256::from(1u64) << 208u32) |
+            (U256::from(777u64) << 209u32) |
+            (U256::from(12345u64) << 229u32) |
+            (U256::from(876u64) << 244u32);
 
         let decoded = DexVariables2::from_packed(packed);
 
@@ -1539,16 +1536,16 @@ mod tests {
         let new_dex_variables =
             (new_sqrt_price << 20u32) | (U256::from(77u64) << 1u32) | U256::from(1u64);
         let new_active_liquidity = u256("987654321012345678");
-        let new_dex_variables2 = U256::from(12u64)
-            | (U256::from(24u64) << 12u32)
-            | (U256::from(5u64) << 24u32)
-            | (U256::from(15u64) << 30u32)
-            | (U256::from(6u64) << 34u32)
-            | (new_active_liquidity << 38u32)
-            | (U256::from(1u64) << 152u32)
-            | (U256::from(2500u64) << 156u32)
-            | (U256::from(99u64) << 176u32)
-            | (U256::from(199u64) << 192u32);
+        let new_dex_variables2 = U256::from(12u64) |
+            (U256::from(24u64) << 12u32) |
+            (U256::from(5u64) << 24u32) |
+            (U256::from(15u64) << 30u32) |
+            (U256::from(6u64) << 34u32) |
+            (new_active_liquidity << 38u32) |
+            (U256::from(1u64) << 152u32) |
+            (U256::from(2500u64) << 156u32) |
+            (U256::from(99u64) << 176u32) |
+            (U256::from(199u64) << 192u32);
 
         let updated_attributes: HashMap<String, Bytes> = [
             ("dex_variables".to_string(), Bytes::from(new_dex_variables.to_be_bytes_vec())),

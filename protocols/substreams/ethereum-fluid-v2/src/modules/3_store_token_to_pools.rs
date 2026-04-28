@@ -11,16 +11,16 @@ pub fn store_token_to_pools(pools_created: BlockChanges, store: StoreAppend<Stri
                 continue;
             }
 
-            let pool_address = component_change
+            let component_id = component_change
                 .id
                 .trim_start_matches("0x");
             let token0 = hex::encode(&component_change.tokens[0]);
             let token1 = hex::encode(&component_change.tokens[1]);
 
-            if let Ok(pool_address_bytes) = hex::decode(pool_address) {
-                let pool_address_b64 = STANDARD_NO_PAD.encode(&pool_address_bytes);
-                store.append(0, token0, pool_address_b64.clone());
-                store.append(0, token1, pool_address_b64);
+            if let Ok(component_id_bytes) = hex::decode(component_id) {
+                let component_id_b64 = STANDARD_NO_PAD.encode(&component_id_bytes);
+                store.append(0, token0, component_id_b64.clone());
+                store.append(0, token1, component_id_b64);
             }
         }
     }
