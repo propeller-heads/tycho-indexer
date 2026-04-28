@@ -24,8 +24,20 @@ use tycho_simulation::{
     protocol::models::ProtocolComponent,
     rfq::{
         client::RFQClient,
-        protocols::bebop::{
-            client_builder::BebopClientBuilder, models::BebopPriceData, state::BebopState,
+        protocols::{
+            bebop::{
+                client_builder::BebopClientBuilder, models::BebopPriceData, state::BebopState,
+            },
+            hashflow::{
+                client_builder::HashflowClientBuilder,
+                models::{HashflowMarketMakerLevels, HashflowPair, HashflowPriceLevel},
+                state::HashflowState,
+            },
+            liquorice::{
+                client_builder::LiquoriceClientBuilder,
+                models::LiquoriceTokenPairPrice,
+                state::LiquoriceState,
+            },
         },
     },
     tycho_client::feed::component_tracker::ComponentFilter,
@@ -305,6 +317,273 @@ async fn load_bebop_data(
     BebopBenchmarkData { pools, states }
 }
 
+struct LiquoriceBenchmarkData {
+    pools: HashMap<String, (Token, Token)>,
+    states: HashMap<String, LiquoriceState>,
+}
+
+async fn load_liquorice_data(
+    all_tokens: &HashMap<Bytes, Token>,
+    tvl_threshold: f64,
+) -> LiquoriceBenchmarkData {
+    let liquorice_user = env::var("LIQUORICE_USER").expect("LIQUORICE_USER env var required");
+    let liquorice_key = env::var("LIQUORICE_KEY").expect("LIQUORICE_KEY env var required");
+
+    let token_addresses: Vec<Bytes> = vec![
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
+        "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", // WBTC
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI
+    ]
+    .into_iter()
+    .filter_map(|addr| Bytes::from_str(addr).ok())
+    .collect();
+
+    let tokens_set = token_addresses.iter().cloned().collect();
+
+    let client =
+        LiquoriceClientBuilder::new(Chain::Ethereum, liquorice_user, liquorice_key)
+            .tokens(tokens_set)
+            .tvl_threshold(tvl_threshold)
+            .build()
+            .expect("Failed to build LiquoriceClient");
+
+    info!("Polling Liquorice price levels...");
+    let mut stream = client.stream();
+
+    let msg = tokio::time::timeout(Duration::from_secs(30), stream.next())
+        .await
+        .expect("Timed out waiting for Liquorice pricing update")
+        .expect("Stream ended without producing a message")
+        .expect("Liquorice stream error");
+
+    let (_provider, sync_msg) = msg;
+
+    info!(
+        "Received {} components from Liquorice",
+        sync_msg.snapshots.states.len()
+    );
+
+    let mut pools = HashMap::new();
+    let mut states = HashMap::new();
+    let mut level_depths: Vec<usize> = Vec::new();
+
+    for (component_id, component_with_state) in sync_msg.snapshots.states {
+        let component = &component_with_state.component;
+
+        if component.tokens.len() != 2 {
+            continue;
+        }
+
+        let base_addr = &component.tokens[0];
+        let quote_addr = &component.tokens[1];
+
+        let Some(base_token) = all_tokens.get(base_addr) else {
+            warn!("Base token not found: {base_addr}");
+            continue;
+        };
+        let Some(quote_token) = all_tokens.get(quote_addr) else {
+            warn!("Quote token not found: {quote_addr}");
+            continue;
+        };
+
+        let state_attrs = &component_with_state.state.attributes;
+        let empty_prices_map: Bytes = "{}".as_bytes().to_vec().into();
+        let prices_data = state_attrs.get("prices").unwrap_or(&empty_prices_map);
+
+        let prices_by_mm: HashMap<String, LiquoriceTokenPairPrice> =
+            match serde_json::from_slice(prices_data) {
+                Ok(p) => p,
+                Err(e) => {
+                    warn!("Failed to parse prices for {component_id}: {e}");
+                    continue;
+                }
+            };
+
+        if prices_by_mm
+            .values()
+            .all(|p| p.levels.is_empty())
+        {
+            continue;
+        }
+
+        let max_depth = prices_by_mm
+            .values()
+            .map(|p| p.levels.len())
+            .max()
+            .unwrap_or(0);
+        level_depths.push(max_depth);
+
+        let bench_client = LiquoriceClientBuilder::new(
+            Chain::Ethereum,
+            env::var("LIQUORICE_USER").unwrap_or_default(),
+            env::var("LIQUORICE_KEY").unwrap_or_default(),
+        )
+        .build()
+        .expect("Failed to build LiquoriceClient for state");
+
+        let state = LiquoriceState::new(
+            base_token.clone(),
+            quote_token.clone(),
+            prices_by_mm,
+            bench_client,
+        );
+
+        pools.insert(
+            component_id.clone(),
+            (base_token.clone(), quote_token.clone()),
+        );
+        states.insert(component_id, state);
+    }
+
+    let avg_depth =
+        level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
+    let max_depth = level_depths.iter().max().copied().unwrap_or(0);
+    info!(
+        "Loaded {} Liquorice pools — level depth: avg={avg_depth:.1} max={max_depth}",
+        states.len()
+    );
+
+    LiquoriceBenchmarkData { pools, states }
+}
+
+struct HashflowBenchmarkData {
+    pools: HashMap<String, (Token, Token)>,
+    states: HashMap<String, HashflowState>,
+}
+
+async fn load_hashflow_data(
+    all_tokens: &HashMap<Bytes, Token>,
+    tvl_threshold: f64,
+) -> HashflowBenchmarkData {
+    let hashflow_user = env::var("HASHFLOW_USER").expect("HASHFLOW_USER env var required");
+    let hashflow_key = env::var("HASHFLOW_KEY").expect("HASHFLOW_KEY env var required");
+
+    let token_addresses: Vec<Bytes> = vec![
+        "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
+        "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7", // USDT
+        "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", // WBTC
+        "0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI
+    ]
+    .into_iter()
+    .filter_map(|addr| Bytes::from_str(addr).ok())
+    .collect();
+
+    let tokens_set = token_addresses.iter().cloned().collect();
+
+    let client =
+        HashflowClientBuilder::new(Chain::Ethereum, hashflow_user, hashflow_key)
+            .tokens(tokens_set)
+            .tvl_threshold(tvl_threshold)
+            .build()
+            .expect("Failed to build HashflowClient");
+
+    info!("Polling Hashflow price levels...");
+    let mut stream = client.stream();
+
+    let msg = tokio::time::timeout(Duration::from_secs(30), stream.next())
+        .await
+        .expect("Timed out waiting for Hashflow pricing update")
+        .expect("Stream ended without producing a message")
+        .expect("Hashflow stream error");
+
+    let (_provider, sync_msg) = msg;
+
+    info!(
+        "Received {} components from Hashflow",
+        sync_msg.snapshots.states.len()
+    );
+
+    let mut pools = HashMap::new();
+    let mut states = HashMap::new();
+    let mut level_depths: Vec<usize> = Vec::new();
+
+    for (component_id, component_with_state) in sync_msg.snapshots.states {
+        let component = &component_with_state.component;
+
+        if component.tokens.len() != 2 {
+            continue;
+        }
+
+        let base_addr = &component.tokens[0];
+        let quote_addr = &component.tokens[1];
+
+        let Some(base_token) = all_tokens.get(base_addr) else {
+            warn!("Base token not found: {base_addr}");
+            continue;
+        };
+        let Some(quote_token) = all_tokens.get(quote_addr) else {
+            warn!("Quote token not found: {quote_addr}");
+            continue;
+        };
+
+        let state_attrs = &component_with_state.state.attributes;
+        let empty_levels_array: Bytes = "[]".as_bytes().to_vec().into();
+        let levels_data = state_attrs.get("levels").unwrap_or(&empty_levels_array);
+
+        let price_levels: Vec<HashflowPriceLevel> = match serde_json::from_slice(levels_data) {
+            Ok(l) => l,
+            Err(e) => {
+                warn!("Failed to parse levels for {component_id}: {e}");
+                continue;
+            }
+        };
+
+        if price_levels.is_empty() {
+            continue;
+        }
+
+        let market_maker = state_attrs
+            .get("mm")
+            .and_then(|mm_bytes| String::from_utf8(mm_bytes.to_vec()).ok())
+            .unwrap_or_else(|| "unknown".to_string());
+
+        level_depths.push(price_levels.len());
+
+        let levels = HashflowMarketMakerLevels {
+            pair: HashflowPair {
+                base_token: base_addr.clone(),
+                quote_token: quote_addr.clone(),
+            },
+            levels: price_levels,
+        };
+
+        let bench_client = HashflowClientBuilder::new(
+            Chain::Ethereum,
+            env::var("HASHFLOW_USER").unwrap_or_default(),
+            env::var("HASHFLOW_KEY").unwrap_or_default(),
+        )
+        .build()
+        .expect("Failed to build HashflowClient for state");
+
+        let state = HashflowState::new(
+            base_token.clone(),
+            quote_token.clone(),
+            levels,
+            market_maker,
+            bench_client,
+        );
+
+        pools.insert(
+            component_id.clone(),
+            (base_token.clone(), quote_token.clone()),
+        );
+        states.insert(component_id, state);
+    }
+
+    let avg_depth =
+        level_depths.iter().sum::<usize>() as f64 / level_depths.len().max(1) as f64;
+    let max_depth = level_depths.iter().max().copied().unwrap_or(0);
+    info!(
+        "Loaded {} Hashflow pools — level depth: avg={avg_depth:.1} max={max_depth}",
+        states.len()
+    );
+
+    HashflowBenchmarkData { pools, states }
+}
+
 fn map_protocol_system_to_protocol(protocol_system: &str) -> String {
     match protocol_system {
         "uniswap_v2" => "uniswap_v2",
@@ -503,6 +782,186 @@ fn benchmark_bebop_swaps(c: &mut Criterion, data: &BebopBenchmarkData) {
     group.finish();
 }
 
+fn benchmark_liquorice_swaps(c: &mut Criterion, data: &LiquoriceBenchmarkData) {
+    let (n_swaps, _) = get_config();
+
+    let mut group = c.benchmark_group("liquorice_swaps");
+    group
+        .measurement_time(Duration::from_secs(10))
+        .sample_size(n_swaps);
+
+    let total_pools = data.pools.len();
+    info!("Liquorice: {total_pools} pools, {} working states", data.states.len());
+
+    let mut swap_scenarios: Vec<(String, BigUint, Token, Token, &LiquoriceState)> = Vec::new();
+    let mut rng = rand::rng();
+    for (pool_id, (base_token, quote_token)) in data.pools.iter().cycle().take(n_swaps) {
+        let Some(state) = data.states.get(pool_id) else {
+            continue;
+        };
+        let Ok((upper, _)) =
+            state.get_limits(base_token.address.clone(), quote_token.address.clone())
+        else {
+            continue;
+        };
+        if upper == BigUint::ZERO {
+            continue;
+        }
+        let p: u32 = rng.random_range(1..=85);
+        let amount_in = &upper * BigUint::from(p) / BigUint::from(100u32);
+        swap_scenarios.push((
+            pool_id.clone(),
+            amount_in,
+            base_token.clone(),
+            quote_token.clone(),
+            state,
+        ));
+    }
+
+    if swap_scenarios.is_empty() {
+        info!("No valid swap scenarios for Liquorice, skipping");
+        group.finish();
+        return;
+    }
+
+    debug!("Sample swap scenarios for Liquorice:");
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in
+        swap_scenarios.iter().take(5).enumerate()
+    {
+        match state.get_amount_out(amount_in.clone(), token_in, token_out) {
+            Ok(result) => {
+                debug!(
+                    "  [{i}] Pool {}: {} {} -> {} {}",
+                    &pool_id[..pool_id.len().min(8)],
+                    amount_in,
+                    token_in.symbol,
+                    result.amount,
+                    token_out.symbol,
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "  [{i}] Pool {} FAILED: {} {} -> {} error: {e}",
+                    &pool_id[..pool_id.len().min(8)],
+                    amount_in,
+                    token_in.symbol,
+                    token_out.symbol,
+                );
+            }
+        }
+    }
+
+    group.bench_with_input(
+        BenchmarkId::new(
+            "get_amount_out",
+            format!("{}_swaps_from_{}_pools", swap_scenarios.len(), total_pools),
+        ),
+        &swap_scenarios,
+        |b, scenarios| {
+            let mut scenario_iter = scenarios.iter().cycle();
+            b.iter(|| {
+                let (_, amount_in, token_in, token_out, state) =
+                    scenario_iter.next().unwrap();
+                state
+                    .get_amount_out(amount_in.clone(), token_in, token_out)
+                    .expect("swap failed");
+            });
+        },
+    );
+
+    group.finish();
+}
+
+fn benchmark_hashflow_swaps(c: &mut Criterion, data: &HashflowBenchmarkData) {
+    let (n_swaps, _) = get_config();
+
+    let mut group = c.benchmark_group("hashflow_swaps");
+    group
+        .measurement_time(Duration::from_secs(10))
+        .sample_size(n_swaps);
+
+    let total_pools = data.pools.len();
+    info!("Hashflow: {total_pools} pools, {} working states", data.states.len());
+
+    let mut swap_scenarios: Vec<(String, BigUint, Token, Token, &HashflowState)> = Vec::new();
+    let mut rng = rand::rng();
+    for (pool_id, (base_token, quote_token)) in data.pools.iter().cycle().take(n_swaps) {
+        let Some(state) = data.states.get(pool_id) else {
+            continue;
+        };
+        let Ok((upper, _)) =
+            state.get_limits(base_token.address.clone(), quote_token.address.clone())
+        else {
+            continue;
+        };
+        if upper == BigUint::ZERO {
+            continue;
+        }
+        let p: u32 = rng.random_range(1..=85);
+        let amount_in = &upper * BigUint::from(p) / BigUint::from(100u32);
+        swap_scenarios.push((
+            pool_id.clone(),
+            amount_in,
+            base_token.clone(),
+            quote_token.clone(),
+            state,
+        ));
+    }
+
+    if swap_scenarios.is_empty() {
+        info!("No valid swap scenarios for Hashflow, skipping");
+        group.finish();
+        return;
+    }
+
+    debug!("Sample swap scenarios for Hashflow:");
+    for (i, (pool_id, amount_in, token_in, token_out, state)) in
+        swap_scenarios.iter().take(5).enumerate()
+    {
+        match state.get_amount_out(amount_in.clone(), token_in, token_out) {
+            Ok(result) => {
+                debug!(
+                    "  [{i}] Pool {}: {} {} -> {} {}",
+                    &pool_id[..pool_id.len().min(8)],
+                    amount_in,
+                    token_in.symbol,
+                    result.amount,
+                    token_out.symbol,
+                );
+            }
+            Err(e) => {
+                warn!(
+                    "  [{i}] Pool {} FAILED: {} {} -> {} error: {e}",
+                    &pool_id[..pool_id.len().min(8)],
+                    amount_in,
+                    token_in.symbol,
+                    token_out.symbol,
+                );
+            }
+        }
+    }
+
+    group.bench_with_input(
+        BenchmarkId::new(
+            "get_amount_out",
+            format!("{}_swaps_from_{}_pools", swap_scenarios.len(), total_pools),
+        ),
+        &swap_scenarios,
+        |b, scenarios| {
+            let mut scenario_iter = scenarios.iter().cycle();
+            b.iter(|| {
+                let (_, amount_in, token_in, token_out, state) =
+                    scenario_iter.next().unwrap();
+                state
+                    .get_amount_out(amount_in.clone(), token_in, token_out)
+                    .expect("swap failed");
+            });
+        },
+    );
+
+    group.finish();
+}
+
 fn swap_benchmarks(c: &mut Criterion) {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -514,12 +973,16 @@ fn swap_benchmarks(c: &mut Criterion) {
 
     let (benchmark_data, all_tokens) = rt.block_on(load_all_benchmark_data());
     let bebop_data = rt.block_on(load_bebop_data(&all_tokens, tvl_threshold));
+    let liquorice_data = rt.block_on(load_liquorice_data(&all_tokens, tvl_threshold));
+    let hashflow_data = rt.block_on(load_hashflow_data(&all_tokens, tvl_threshold));
     rt.shutdown_background();
 
     for (protocol, data) in &benchmark_data {
         benchmark_protocol_swaps(c, protocol, data);
     }
     benchmark_bebop_swaps(c, &bebop_data);
+    benchmark_liquorice_swaps(c, &liquorice_data);
+    benchmark_hashflow_swaps(c, &hashflow_data);
 }
 
 criterion_group!(benches, swap_benchmarks);
