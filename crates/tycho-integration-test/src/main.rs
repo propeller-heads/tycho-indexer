@@ -10,7 +10,10 @@ use std::{
     time::Duration,
 };
 
-use alloy::{eips::BlockNumberOrTag, primitives::Address, providers::Provider, rpc::types::Block};
+use alloy::{
+    eips::BlockNumberOrTag, primitives::Address, providers::Provider,
+    rpc::types::{Block, BlockId},
+};
 use clap::Parser;
 use dotenv::dotenv;
 use itertools::Itertools;
@@ -723,8 +726,13 @@ async fn process_update(
             .map(|(validator, id, _protocol)| (*validator, id.clone()))
             .collect();
 
+        let validation_block_id = if cli.partial_blocks {
+            BlockId::pending()
+        } else {
+            BlockId::from(block.header.number)
+        };
         let results =
-            batch_validate_components(&cli.rpc_url, &validator_data, block.header.number).await;
+            batch_validate_components(&cli.rpc_url, &validator_data, validation_block_id).await;
 
         for (i, result) in results.iter().enumerate() {
             let component_id = &validator_components[i].1;

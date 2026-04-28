@@ -78,14 +78,13 @@ sol! {
 async fn execute_batched_calls(
     rpc_url: &str,
     component_calls: &[(ComponentId, Vec<(CallTarget, CallData)>)],
-    block_id: u64,
+    block_id: BlockId,
 ) -> Result<HashMap<ComponentId, Vec<CallResult>>, Box<dyn std::error::Error + Send + Sync>> {
     if component_calls.is_empty() {
         return Ok(HashMap::new());
     }
     let client = ClientBuilder::default().http(rpc_url.parse()?);
     let mut batch = client.new_batch();
-    let block_id = BlockId::from(block_id);
 
     // Track which futures belong to which component
     let mut component_futures: Vec<(Bytes, Vec<_>)> = Vec::new();
@@ -189,7 +188,7 @@ pub trait Validator: ProtocolSim {
 pub async fn batch_validate_components(
     rpc_url: &str,
     components: &[(&dyn Validator, ComponentId)],
-    block_id: u64,
+    block_id: BlockId,
 ) -> Vec<Result<bool, Box<dyn std::error::Error + Send + Sync>>> {
     if components.is_empty() {
         return Vec::new();
@@ -315,7 +314,7 @@ mod tests {
     #[tokio::test]
     #[ignore] // This test requires an RPC connection
     async fn test_batch_validate_multiple_components() {
-        let block_id = 23775987;
+        let block_id = BlockId::from(23775987);
 
         // Component with correct reserves
         let pool_id_1 = "0x132BC4EA9E5282889fDcfE7Bc7A91Ea901a686D6";
