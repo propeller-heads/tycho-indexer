@@ -99,6 +99,13 @@ impl<AE: AccountExtractor + Send + Sync> ExtractorExtension for DCIPlugin<AE> {
             DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.cache_size(),
         }
     }
+
+    fn emit_cache_metrics(&self, chain: &str, extractor: &str) {
+        match self {
+            DCIPlugin::Standard(dci) => dci.emit_cache_metrics(chain, extractor),
+            DCIPlugin::UniswapV4Hooks(hooks_dci) => hooks_dci.emit_cache_metrics(chain, extractor),
+        }
+    }
 }
 pub enum ControlMessage {
     Stop,

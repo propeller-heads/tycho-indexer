@@ -628,6 +628,11 @@ where
     fn cache_size(&self) -> usize {
         self.cache.deep_size_of()
     }
+
+    fn emit_cache_metrics(&self, chain: &str, extractor: &str) {
+        self.cache
+            .emit_metrics(chain, extractor);
+    }
 }
 
 impl<AE, T, G> DynamicContractIndexer<AE, T, G>

@@ -341,12 +341,14 @@ where
             .set(self.protocol_cache.size_of().await as f64);
 
             if let Some(dci_plugin) = &self.dci_plugin {
+                let dci = dci_plugin.lock().await;
                 gauge!(
                     "dci_cache_size",
                     "chain" => self.chain.to_string(),
                     "extractor" => self.name.clone(),
                 )
-                .set(dci_plugin.lock().await.cache_size() as f64);
+                .set(dci.cache_size() as f64);
+                dci.emit_cache_metrics(&self.chain.to_string(), &self.name);
             }
         }
     }
