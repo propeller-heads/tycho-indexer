@@ -1,3 +1,11 @@
+## [0.275.1](https://github.com/propeller-heads/tycho-indexer/compare/0.275.0...0.275.1) (2026-04-28)
+
+
+### Bug Fixes
+
+* **integration test:** update validation to handle partial blocks ([#955](https://github.com/propeller-heads/tycho-indexer/issues/955)) ([5ca66da](https://github.com/propeller-heads/tycho-indexer/commit/5ca66da175e69cfed2a4bdf108b15bf494e2f91c))
+* **integration-test:** use pending block ID for validation in partial blocks mode ([e217f40](https://github.com/propeller-heads/tycho-indexer/commit/e217f400440de0fb5680565c5f4259b39171828c))
+
 ## [0.275.0](https://github.com/propeller-heads/tycho-indexer/compare/0.274.1...0.275.0) (2026-04-27)
 
 
