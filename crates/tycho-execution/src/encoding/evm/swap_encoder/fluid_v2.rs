@@ -37,9 +37,7 @@ impl SwapEncoder for FluidV2SwapEncoder {
         let token_out = self.coerce_native_address(swap.token_out());
 
         if token_in == token_out {
-            return Err(EncodingError::InvalidInput(
-                "Fluid v2 swap tokens must differ".to_string(),
-            ));
+            return Err(EncodingError::InvalidInput("Fluid v2 swap tokens must differ".to_string()));
         }
 
         let token_in_addr = self.bytes_to_address(token_in)?;

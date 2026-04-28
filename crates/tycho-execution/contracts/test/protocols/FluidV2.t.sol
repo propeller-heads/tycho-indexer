@@ -1,6 +1,6 @@
 pragma solidity ^0.8.26;
 
-import {FluidV2Executor} from "@src/executors/FluidV2Executor.sol";
+import {DexKey, FluidV2Executor} from "@src/executors/FluidV2Executor.sol";
 import {Constants} from "../Constants.sol";
 import {Test} from "forge-std/Test.sol";
 import {TransferManager} from "@src/TransferManager.sol";
@@ -10,7 +10,8 @@ contract MockFluidDexV2 {
     uint256 public lastOperateDexType;
     uint256 public lastOperateImplementationId;
     bytes public lastOperateData;
-    bytes public nextOperateResult = abi.encode(uint256(0), uint256(0), uint256(0));
+    bytes public nextOperateResult =
+        abi.encode(uint256(0), uint256(0), uint256(0));
 
     struct SettleCall {
         address token;
@@ -24,15 +25,20 @@ contract MockFluidDexV2 {
 
     SettleCall[] internal _settleCalls;
 
-    function startOperation(bytes calldata data) external payable returns (bytes memory result) {
+    function startOperation(bytes calldata data)
+        external
+        payable
+        returns (bytes memory result)
+    {
         lastStartOperationData = data;
         return result;
     }
 
-    function operate(uint256 dexType, uint256 implementationId, bytes memory data)
-        external
-        returns (bytes memory returnData)
-    {
+    function operate(
+        uint256 dexType,
+        uint256 implementationId,
+        bytes memory data
+    ) external returns (bytes memory returnData) {
         lastOperateDexType = dexType;
         lastOperateImplementationId = implementationId;
         lastOperateData = data;
@@ -68,18 +74,28 @@ contract MockFluidDexV2 {
         return _settleCalls.length;
     }
 
-    function settleCall(uint256 index) external view returns (SettleCall memory) {
+    function settleCall(uint256 index)
+        external
+        view
+        returns (SettleCall memory)
+    {
         return _settleCalls[index];
     }
 }
 
 contract FluidV2ExecutorTest is Test, Constants {
-    bytes4 internal constant START_OPERATION_CALLBACK_SELECTOR = bytes4(keccak256("startOperationCallback(bytes)"));
-    bytes4 internal constant DEX_CALLBACK_SELECTOR = bytes4(keccak256("dexCallback(address,address,uint256)"));
-    bytes4 internal constant SWAP_IN_SELECTOR =
-        bytes4(keccak256("swapIn(((address,address,uint24,uint24,address),bool,uint256,uint256,bytes))"));
+    bytes4 internal constant START_OPERATION_CALLBACK_SELECTOR =
+        bytes4(keccak256("startOperationCallback(bytes)"));
+    bytes4 internal constant DEX_CALLBACK_SELECTOR =
+        bytes4(keccak256("dexCallback(address,address,uint256)"));
+    bytes4 internal constant SWAP_IN_SELECTOR = bytes4(
+        keccak256(
+            "swapIn(((address,address,uint24,uint24,address),bool,uint256,uint256,bytes))"
+        )
+    );
 
-    address internal constant FLUID_NATIVE_TOKEN = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address internal constant FLUID_NATIVE_TOKEN =
+        0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
     MockFluidDexV2 internal dex;
     FluidV2Executor internal executor;
@@ -96,8 +112,15 @@ contract FluidV2ExecutorTest is Test, Constants {
     }
 
     function testGetTransferData() public {
-        bytes memory data =
-            abi.encodePacked(uint8(3), address(DAI_ADDR), address(USDC_ADDR), uint24(100), uint24(1), address(0), true);
+        bytes memory data = abi.encodePacked(
+            uint8(3),
+            address(DAI_ADDR),
+            address(USDC_ADDR),
+            uint24(100),
+            uint24(1),
+            address(0),
+            true
+        );
 
         (
             TransferManager.TransferType transferType,
@@ -115,47 +138,60 @@ contract FluidV2ExecutorTest is Test, Constants {
     }
 
     function testGetCallbackTransferDataForStartOperationCallback() public {
-        bytes memory raw = abi.encodePacked(START_OPERATION_CALLBACK_SELECTOR, abi.encode(bytes("hello")));
+        bytes memory raw = abi.encodePacked(
+            START_OPERATION_CALLBACK_SELECTOR, abi.encode(bytes("hello"))
+        );
 
-        (TransferManager.TransferType transferType, address receiver, address tokenIn, uint256 amount) =
-            executor.getCallbackTransferData(raw);
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(raw, DAI_ADDR);
 
         assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
-        assertEq(tokenIn, address(0));
-        assertEq(amount, 0);
     }
 
     function testGetCallbackTransferDataForDexCallback() public {
         address recipient = makeAddr("recipient");
-        bytes memory raw = abi.encodePacked(DEX_CALLBACK_SELECTOR, abi.encode(DAI_ADDR, recipient, 123));
+        bytes memory raw = abi.encodePacked(
+            DEX_CALLBACK_SELECTOR, abi.encode(DAI_ADDR, recipient, 123)
+        );
 
-        (TransferManager.TransferType transferType, address receiver, address tokenIn, uint256 amount) =
-            executor.getCallbackTransferData(raw);
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(raw, DAI_ADDR);
 
-        assertEq(uint8(transferType), uint8(TransferManager.TransferType.Transfer));
+        assertEq(
+            uint8(transferType), uint8(TransferManager.TransferType.Transfer)
+        );
         assertEq(receiver, recipient);
-        assertEq(tokenIn, DAI_ADDR);
-        assertEq(amount, 123);
     }
 
     function testGetCallbackTransferDataForNativeDexCallback() public {
         address recipient = makeAddr("recipient");
-        bytes memory raw = abi.encodePacked(DEX_CALLBACK_SELECTOR, abi.encode(FLUID_NATIVE_TOKEN, recipient, 456));
+        bytes memory raw = abi.encodePacked(
+            DEX_CALLBACK_SELECTOR,
+            abi.encode(FLUID_NATIVE_TOKEN, recipient, 456)
+        );
 
-        (TransferManager.TransferType transferType, address receiver, address tokenIn, uint256 amount) =
-            executor.getCallbackTransferData(raw);
+        (TransferManager.TransferType transferType, address receiver) =
+            executor.getCallbackTransferData(raw, address(0));
 
-        assertEq(uint8(transferType), uint8(TransferManager.TransferType.TransferNativeInExecutor));
+        assertEq(
+            uint8(transferType),
+            uint8(TransferManager.TransferType.TransferNativeInExecutor)
+        );
         assertEq(receiver, recipient);
-        assertEq(tokenIn, address(0));
-        assertEq(amount, 456);
     }
 
     function testSwapCallsStartOperation() public {
         address receiver = makeAddr("receiver");
         bytes memory data = abi.encodePacked(
-            uint8(3), address(DAI_ADDR), address(USDC_ADDR), uint24(100), uint24(1), address(0), true, hex"beef"
+            uint8(3),
+            address(DAI_ADDR),
+            address(USDC_ADDR),
+            uint24(100),
+            uint24(1),
+            address(0),
+            true,
+            hex"beef"
         );
 
         executor.swap(1e18, data, receiver);
@@ -167,7 +203,10 @@ contract FluidV2ExecutorTest is Test, Constants {
             uint256 amountIn,
             address callbackReceiver,
             bytes memory controllerData
-        ) = abi.decode(dex.lastStartOperationData(), (uint8, DexKey, bool, uint256, address, bytes));
+        ) = abi.decode(
+            dex.lastStartOperationData(),
+            (uint8, DexKey, bool, uint256, address, bytes)
+        );
 
         assertEq(dexType, 3);
         assertEq(dexKey.token0, DAI_ADDR);
@@ -182,15 +221,31 @@ contract FluidV2ExecutorTest is Test, Constants {
     }
 
     function testHandleCallbackStartOperationD3() public {
-        dex.setNextOperateResult(abi.encode(uint256(900), uint256(11), uint256(22)));
+        dex.setNextOperateResult(
+            abi.encode(uint256(900), uint256(11), uint256(22))
+        );
 
         bytes memory callbackData = abi.encode(
-            uint8(3), (DAI_ADDR, USDC_ADDR, uint24(100), uint24(1), address(0)), true, uint256(1000), BOB, bytes("")
+            uint8(3),
+            DexKey({
+                token0: DAI_ADDR,
+                token1: USDC_ADDR,
+                fee: uint24(100),
+                tickSpacing: uint24(1),
+                controller: address(0)
+            }),
+            true,
+            uint256(1000),
+            BOB,
+            bytes("")
         );
 
         vm.prank(address(dex));
-        bytes memory result =
-            executor.handleCallback(abi.encodePacked(START_OPERATION_CALLBACK_SELECTOR, abi.encode(callbackData)));
+        bytes memory result = executor.handleCallback(
+            abi.encodePacked(
+                START_OPERATION_CALLBACK_SELECTOR, abi.encode(callbackData)
+            )
+        );
 
         bytes memory swapResult = abi.decode(result, (bytes));
         assertEq(swapResult, abi.encode(uint256(900), uint256(11), uint256(22)));
@@ -217,15 +272,31 @@ contract FluidV2ExecutorTest is Test, Constants {
     }
 
     function testHandleCallbackStartOperationD4() public {
-        dex.setNextOperateResult(abi.encode(uint256(700), uint256(10), uint256(20)));
+        dex.setNextOperateResult(
+            abi.encode(uint256(700), uint256(10), uint256(20))
+        );
 
         bytes memory callbackData = abi.encode(
-            uint8(4), (DAI_ADDR, USDC_ADDR, uint24(100), uint24(1), address(0)), true, uint256(1000), BOB, bytes("")
+            uint8(4),
+            DexKey({
+                token0: DAI_ADDR,
+                token1: USDC_ADDR,
+                fee: uint24(100),
+                tickSpacing: uint24(1),
+                controller: address(0)
+            }),
+            true,
+            uint256(1000),
+            BOB,
+            bytes("")
         );
 
         vm.prank(address(dex));
-        bytes memory result =
-            executor.handleCallback(abi.encodePacked(START_OPERATION_CALLBACK_SELECTOR, abi.encode(callbackData)));
+        bytes memory result = executor.handleCallback(
+            abi.encodePacked(
+                START_OPERATION_CALLBACK_SELECTOR, abi.encode(callbackData)
+            )
+        );
 
         bytes memory swapResult = abi.decode(result, (bytes));
         assertEq(swapResult, abi.encode(uint256(700), uint256(10), uint256(20)));
@@ -250,8 +321,11 @@ contract FluidV2ExecutorTest is Test, Constants {
 
     function testHandleCallbackDexCallbackReturnsEmptyBytes() public {
         vm.prank(address(dex));
-        bytes memory result =
-            executor.handleCallback(abi.encodePacked(DEX_CALLBACK_SELECTOR, abi.encode(DAI_ADDR, BOB, 123)));
+        bytes memory result = executor.handleCallback(
+            abi.encodePacked(
+                DEX_CALLBACK_SELECTOR, abi.encode(DAI_ADDR, BOB, 123)
+            )
+        );
 
         bytes memory callbackResult = abi.decode(result, (bytes));
         assertEq(callbackResult.length, 0);
@@ -259,6 +333,10 @@ contract FluidV2ExecutorTest is Test, Constants {
 
     function testVerifyCallbackBadSender() public {
         vm.expectRevert();
-        executor.verifyCallback(abi.encodePacked(START_OPERATION_CALLBACK_SELECTOR, abi.encode(bytes(""))));
+        executor.verifyCallback(
+            abi.encodePacked(
+                START_OPERATION_CALLBACK_SELECTOR, abi.encode(bytes(""))
+            )
+        );
     }
 }

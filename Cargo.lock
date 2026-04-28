@@ -9971,8 +9971,6 @@ dependencies = [
  "async-trait",
  "colored",
  "hex",
- "itertools 0.13.0",
- "lru 0.16.3",
  "miette",
  "num-bigint",
  "regex",
