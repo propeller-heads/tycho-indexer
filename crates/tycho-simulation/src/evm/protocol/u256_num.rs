@@ -1,7 +1,7 @@
 //! Numeric methods for the U256 type
 use std::collections::HashMap;
 
-use alloy::primitives::{bytes::Bytes, U256};
+use alloy::primitives::{bytes::Bytes, B256, U256};
 use num_bigint::BigUint;
 use tycho_common::simulation::errors::SimulationError;
 
@@ -118,6 +118,18 @@ pub fn biguint_to_u256(value: &BigUint) -> U256 {
         limbs[i] = digit;
     }
     U256::from_limbs(limbs)
+}
+
+/// Left-pads a byte slice to 32 bytes. Handles sentinel values (e.g. `0x00`)
+/// the server produces when no real tx hash is available. Real hashes are
+/// always exactly 32 bytes and pass through unchanged. Slices >32 bytes are
+/// truncated to the first 32.
+pub fn bytes_to_b256(bytes: &[u8]) -> B256 {
+    let mut buf = [0u8; 32];
+    let start = 32usize.saturating_sub(bytes.len());
+    let copy_len = bytes.len().min(32);
+    buf[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
+    B256::from(buf)
 }
 
 pub fn bytes_to_u256(bytes: Bytes) -> U256 {

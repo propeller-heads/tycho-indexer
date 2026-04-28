@@ -124,7 +124,7 @@ impl From<tycho_common::dto::ResponseAccount> for ResponseAccount {
     fn from(value: tycho_common::dto::ResponseAccount) -> Self {
         Self {
             chain: value.chain.into(),
-            address: Address::from_slice(&value.address[..20]), // Convert address field to Address
+            address: Address::from_slice(&value.address[..20]),
             title: value.title.clone(),
             slots: u256_num::map_slots_to_u256(value.slots),
             native_balance: u256_num::bytes_to_u256(value.native_balance.into()),
@@ -136,12 +136,94 @@ impl From<tycho_common::dto::ResponseAccount> for ResponseAccount {
                 })
                 .collect(),
             code: value.code.to_vec(),
-            code_hash: B256::from_slice(&value.code_hash[..]),
-            balance_modify_tx: B256::from_slice(&value.balance_modify_tx[..]),
-            code_modify_tx: B256::from_slice(&value.code_modify_tx[..]),
+            code_hash: u256_num::bytes_to_b256(&value.code_hash),
+            balance_modify_tx: u256_num::bytes_to_b256(&value.balance_modify_tx),
+            code_modify_tx: u256_num::bytes_to_b256(&value.code_modify_tx),
             creation_tx: value
                 .creation_tx
-                .map(|tx| B256::from_slice(&tx[..])), // Optionally map creation_tx if present
+                .map(|tx| u256_num::bytes_to_b256(&tx)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tycho_common::Bytes;
+
+    use super::*;
+
+    fn make_dto_response_account(
+        balance_modify_tx: Bytes,
+        code_modify_tx: Bytes,
+        code_hash: Bytes,
+        creation_tx: Option<Bytes>,
+    ) -> tycho_common::dto::ResponseAccount {
+        #[allow(deprecated)]
+        tycho_common::dto::ResponseAccount::new(
+            tycho_common::dto::Chain::Ethereum,
+            Bytes::zero(20),
+            "test".to_string(),
+            std::collections::HashMap::new(),
+            Bytes::zero(32),
+            std::collections::HashMap::new(),
+            Bytes::from(vec![0xDE, 0xAD]),
+            code_hash,
+            balance_modify_tx,
+            code_modify_tx,
+            creation_tx,
+        )
+    }
+
+    #[test]
+    fn test_response_account_conversion_with_32_byte_hashes() {
+        let dto = make_dto_response_account(
+            Bytes::zero(32),
+            Bytes::zero(32),
+            Bytes::zero(32),
+            Some(Bytes::zero(32)),
+        );
+
+        let result = ResponseAccount::from(dto);
+
+        assert_eq!(result.balance_modify_tx, B256::ZERO);
+        assert_eq!(result.code_modify_tx, B256::ZERO);
+        assert_eq!(result.code_hash, B256::ZERO);
+        assert_eq!(result.creation_tx, Some(B256::ZERO));
+    }
+
+    #[test]
+    fn test_response_account_conversion_with_short_hashes() {
+        let dto = make_dto_response_account(
+            Bytes::from("0x00"),
+            Bytes::from("0x00"),
+            Bytes::from("0x00"),
+            Some(Bytes::from("0x01")),
+        );
+
+        let result = ResponseAccount::from(dto);
+
+        assert_eq!(result.balance_modify_tx, B256::ZERO);
+        assert_eq!(result.code_modify_tx, B256::ZERO);
+        assert_eq!(result.code_hash, B256::ZERO);
+        let mut expected = [0u8; 32];
+        expected[31] = 0x01;
+        assert_eq!(result.creation_tx, Some(B256::from(expected)));
+    }
+
+    #[test]
+    fn test_response_account_conversion_with_empty_hashes() {
+        let dto = make_dto_response_account(
+            Bytes::from(vec![]),
+            Bytes::from(vec![]),
+            Bytes::from(vec![]),
+            None,
+        );
+
+        let result = ResponseAccount::from(dto);
+
+        assert_eq!(result.balance_modify_tx, B256::ZERO);
+        assert_eq!(result.code_modify_tx, B256::ZERO);
+        assert_eq!(result.code_hash, B256::ZERO);
+        assert_eq!(result.creation_tx, None);
     }
 }
