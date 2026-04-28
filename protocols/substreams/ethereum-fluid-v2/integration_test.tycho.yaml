@@ -7,10 +7,10 @@ skip_balance_check: true
 initialized_accounts:
 tests:
   - name: test_polygon_usdc_usdt0
-    start_block: 79889913
+    start_block: 79889908
     stop_block: 80217047
     expected_components:
-      - id: "0x8d1b5f8da63fa29b191672231d3845740a11fcbef6c76e077cfffe56cc27c707"
+      - id: "0x048d1b5f8da63fa29b191672231d3845740a11fcbef6c76e077cfffe56cc27c707"
         tokens:
           - "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" # usdc
           - "0xc2132D05D31c914a87C6611C10748AEb04B58e8F" # usdt0
@@ -24,10 +24,10 @@ tests:
         skip_execution: true
 
   - name: test_polygon_usdc_eth
-    start_block: 79889915
+    start_block: 79889908
     stop_block: 80217047
     expected_components:
-      - id: "0xbc4435ed6fcf5fe373cdb243a3e5685f49dbde7d3d91bff4806cc064f9efd11e"
+      - id: "0x04bc4435ed6fcf5fe373cdb243a3e5685f49dbde7d3d91bff4806cc064f9efd11e"
         tokens:
           - "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" # usdc
           - "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee" # eth

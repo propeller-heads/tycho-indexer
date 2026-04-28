@@ -25,11 +25,19 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for FluidV2State {
         all_tokens: &HashMap<Bytes, Token>,
         _decoder_context: &DecoderContext,
     ) -> Result<Self, Self::Error> {
-        let dex_id = Bytes::from_str(snapshot.component.id.as_str()).map_err(|e| {
+        let component_id = Bytes::from_str(snapshot.component.id.as_str()).map_err(|e| {
             InvalidSnapshotError::ValueError(format!(
-                "Expected component id to be pool contract address: {e}"
+                "Expected component id to be hex encoded dex_type and dex_id: {e}"
             ))
         })?;
+        if component_id.len() != 33 {
+            return Err(InvalidSnapshotError::ValueError(format!(
+                "Expected component id to be 33 bytes, got {}",
+                component_id.len()
+            )));
+        }
+        let component_id_dex_type = component_id[0];
+        let dex_id = Bytes::from(&component_id[1..]);
         let token0_address = snapshot
             .component
             .tokens
@@ -197,6 +205,11 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for FluidV2State {
                 )));
             }
         };
+        if component_id_dex_type != dex_type_value as u8 {
+            return Err(InvalidSnapshotError::ValueError(format!(
+                "Component id dex_type {component_id_dex_type} does not match static dex_type {dex_type_value}",
+            )));
+        }
 
         let fee_value = U256::from_be_slice(&fee).to::<u32>();
         let fee_value = fee_value & 0x00FF_FFFF;

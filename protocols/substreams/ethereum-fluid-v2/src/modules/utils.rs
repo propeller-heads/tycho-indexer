@@ -16,8 +16,7 @@ impl Params {
 }
 
 pub fn component_id(dex_type: &BigInt, dex_id: &[u8; 32]) -> String {
-    let mut bytes = Vec::with_capacity(64);
-    bytes.extend_from_slice(&[0u8; 31]);
+    let mut bytes = Vec::with_capacity(33);
     bytes.push(dex_type.to_u64() as u8);
     bytes.extend_from_slice(dex_id);
     bytes.to_hex()
@@ -33,12 +32,12 @@ mod tests {
     use substreams::scalar::BigInt;
 
     #[test]
-    fn component_id_prefixes_dex_id_with_padded_dex_type() {
+    fn component_id_prefixes_dex_id_with_dex_type() {
         let dex_id = [0x11u8; 32];
 
         let id = component_id(&BigInt::from(4), &dex_id);
 
-        assert_eq!(id, format!("0x{:064x}{}", 4, "11".repeat(32)));
+        assert_eq!(id, format!("0x04{}", "11".repeat(32)));
     }
 
     #[test]
