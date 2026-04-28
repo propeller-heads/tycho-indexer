@@ -12,6 +12,7 @@ members = [
     "crates/tycho-integration-test",
     "crates/tycho-execution",
     "protocols/testing",
+    "protocols/crates/uniswap-v3",
 ]
 # protocols/substreams/ is intentionally excluded — separate WASM workspace, different toolchain
 

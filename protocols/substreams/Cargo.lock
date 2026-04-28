@@ -787,8 +787,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_qs 0.13.0",
- "substreams",
- "substreams-ethereum",
+ "substreams 0.5.22",
+ "substreams-ethereum 0.9.13",
  "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=b8aeaa3)",
  "tycho-substreams 0.2.0 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?rev=3c08359)",
 ]
@@ -862,7 +862,7 @@ dependencies = [
  "substreams 0.5.22",
  "substreams-ethereum 0.9.13",
  "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?tag=0.5.0)",
- "tycho-substreams 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tycho-substreams 0.8.0",
 ]
 
 [[package]]
@@ -961,7 +961,7 @@ dependencies = [
  "serde_json",
  "substreams 0.5.22",
  "substreams-ethereum 0.9.13",
- "tycho-substreams 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tycho-substreams 0.8.0",
 ]
 
 [[package]]
@@ -1104,8 +1104,9 @@ dependencies = [
  "prost 0.11.9",
  "substreams 0.5.22",
  "substreams-ethereum 0.9.13",
- "substreams-helper 0.0.2 (git+https://github.com/propeller-heads/tycho-protocol-sdk.git?tag=0.4.0)",
- "tycho-substreams 0.2.2",
+ "substreams-helper 0.0.2",
+ "tycho-substreams 0.8.0",
+ "uniswap-v3-core",
 ]
 
 [[package]]
@@ -3069,8 +3070,8 @@ dependencies = [
  "prost 0.11.9",
  "serde",
  "serde_json",
- "substreams",
- "substreams-ethereum",
+ "substreams 0.5.22",
+ "substreams-ethereum 0.9.13",
 ]
 
 [[package]]
@@ -3205,23 +3206,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tycho-substreams"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8158444c99f55b314f5d63837b794f4842975d148feb03ea8e2720ecab957eba"
-dependencies = [
- "ethabi 18.0.0",
- "hex",
- "itertools 0.12.1",
- "num-bigint",
- "prost 0.11.9",
- "serde",
- "serde_json",
- "substreams 0.5.22",
- "substreams-ethereum 0.9.13",
-]
-
-[[package]]
 name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3307,6 +3291,19 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "uniswap-v3-core"
+version = "0.1.0"
+dependencies = [
+ "ethabi 18.0.0",
+ "getrandom 0.2.17",
+ "hex",
+ "num-bigint",
+ "substreams 0.5.22",
+ "substreams-ethereum 0.9.13",
+ "tycho-substreams 0.8.0",
+]
 
 [[package]]
 name = "valuable"
