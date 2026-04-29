@@ -1,11 +1,14 @@
 //! <https://github.com/propeller-heads/tycho-execution/blob/main/foundry/src/TransferManager.sol>
-use crate::address::Address;
-use crate::error::Error;
-use crate::log::{Event, Log};
-use crate::math::checked_subtract;
-use crate::model::vault::Vault;
-use crate::state::State;
 use serde::Serialize;
+
+use crate::{
+    address::Address,
+    error::Error,
+    log::{Event, Log},
+    math::checked_subtract,
+    model::vault::Vault,
+    state::State,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum TransferType {
@@ -31,6 +34,7 @@ pub fn _tstore_transfer_from_info(
 }
 
 /// <https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/TransferManager.sol#L130>
+#[allow(clippy::too_many_arguments)]
 pub fn _transfer(
     state: &mut State,
     vault: &mut Vault,
@@ -142,15 +146,11 @@ fn _transfer_from_user(
     let is_permit2 = state.tload("is_permit2")?;
 
     if amount > amount_allowed {
-        return Err(Error::revert(
-            "_transfer_from_user: amount > amount_allowed",
-        ));
+        return Err(Error::revert("_transfer_from_user: amount > amount_allowed"));
     }
 
     if token != token_in_storage {
-        return Err(Error::revert(
-            "_transfer_from_user: token != token_in_storage",
-        ));
+        return Err(Error::revert("_transfer_from_user: token != token_in_storage"));
     }
 
     amount_allowed -= amount;

@@ -1,8 +1,12 @@
 //! Code related to [progress_thread] that writes progress information,
 //! like speed and count of suspicious, to stderr every second.
-use std::io::Write;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::{
+    io::Write,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+};
 
 /// Main function of thread that writes progress information,
 /// like speed and count of suspicious, to stderr every second.
@@ -67,7 +71,8 @@ impl LazyAtomicCounter {
         self.local += 1;
         if self.local >= 10000 {
             // only do expensive operation for every thousandth cheap operation
-            self.shared.fetch_add(self.local, Ordering::Relaxed);
+            self.shared
+                .fetch_add(self.local, Ordering::Relaxed);
             self.local = 0;
         }
     }

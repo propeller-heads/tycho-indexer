@@ -1,10 +1,15 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+
 use crossbeam_deque::{Injector, Worker};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use tycho_router_model::Telemetry;
-use tycho_router_model::params::ParamsInner;
-use tycho_router_model::progress::{Counters, progress_thread};
-use tycho_router_model::worker::worker_thread;
+use tycho_router_model::{
+    Telemetry,
+    params::ParamsInner,
+    progress::{Counters, progress_thread},
+    worker::worker_thread,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let global_queue_of_main_thread: Arc<Injector<ParamsInner>> = Arc::new(Injector::new());
@@ -87,7 +92,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // and if all are idle tells all workers to stop
         let mut all_finished = true;
         let mut all_idle = true;
-        for (index, handle) in worker_thread_join_handles.iter().enumerate() {
+        for (index, handle) in worker_thread_join_handles
+            .iter()
+            .enumerate()
+        {
             if !handle.is_finished() {
                 all_finished = false;
                 if !worker_is_idle[index].load(Ordering::Acquire) {
@@ -128,7 +136,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Err(err) => std::panic::resume_unwind(err),
     }
 
-    eprintln!("");
+    eprintln!();
     eprintln!("{telemetry}");
     Ok(())
 }

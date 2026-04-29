@@ -14,15 +14,18 @@
 //! If performance mattered less, trait objects would likely be chosen.
 //!
 //! <https://github.com/propeller-heads/tycho-execution/tree/main/foundry/src/executors>
-use crate::address::Address;
-use crate::error::Error;
-use crate::log::Log;
-use crate::model::dispatcher::_call_handle_callback_on_executor;
-use crate::model::transfer_manager::TransferType;
-use crate::model::vault::Vault;
-use crate::params::{ParamKey, Params};
-use crate::state::State;
 use serde::Serialize;
+
+use crate::{
+    address::Address,
+    error::Error,
+    log::Log,
+    model::{
+        dispatcher::_call_handle_callback_on_executor, transfer_manager::TransferType, vault::Vault,
+    },
+    params::{ParamKey, Params},
+    state::State,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, PartialOrd, Ord)]
 pub enum Executor {
@@ -77,19 +80,11 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/CurveExecutor.sol#L139
             Self::Curve => {
                 let mut token_in = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     Address::CURVE_TOKENS,
                 )?;
                 let mut token_out = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     Address::CURVE_TOKENS,
                 )?;
 
@@ -110,11 +105,7 @@ impl Executor {
                 Ok(TransferData {
                     transfer_type,
                     receiver: params.request(
-                        ParamKey::ProtocolData {
-                            swap_index,
-                            start: 40,
-                            end: 60,
-                        },
+                        ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
                         // trying more variants might find some very obscure bugs
                         // in the future but slows down simulation a lot
                         // and currently is ignored anyway
@@ -128,19 +119,11 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/ERC4626Executor.sol#L67
             Self::ERC4626 => {
                 let token_in = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?;
                 let receiver = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -151,10 +134,7 @@ impl Executor {
 
                 let token_out = if is_redeem {
                     params.request(
-                        ParamKey::SwapIndexed {
-                            prefix: "IERC4626.asset()",
-                            swap_index,
-                        },
+                        ParamKey::SwapIndexed { prefix: "IERC4626.asset()", swap_index },
                         Address::POSSIBLY_ERC20_AND_ZERO,
                     )?
                 } else {
@@ -172,11 +152,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/FluidV1Executor.sol#L132
             Self::FluidV1 => {
                 let is_native_sell = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 61,
-                        end: 62,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 61, end: 62 },
                     [true, false],
                 )?;
                 Ok(TransferData {
@@ -190,20 +166,12 @@ impl Executor {
                         Address::Zero
                     } else {
                         params.request(
-                            ParamKey::ProtocolData {
-                                swap_index,
-                                start: 21,
-                                end: 41,
-                            },
+                            ParamKey::ProtocolData { swap_index, start: 21, end: 41 },
                             Address::POSSIBLY_ERC20_AND_ZERO,
                         )?
                     },
                     token_out: params.request(
-                        ParamKey::ProtocolData {
-                            swap_index,
-                            start: 41,
-                            end: 61,
-                        },
+                        ParamKey::ProtocolData { swap_index, start: 41, end: 61 },
                         Address::POSSIBLY_ERC20_AND_ZERO,
                     )?,
                     output_to_router: false,
@@ -213,30 +181,18 @@ impl Executor {
             Self::MaverickV2 => Ok(TransferData {
                 transfer_type: TransferType::Transfer,
                 receiver: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
                     Address::SENDER_CONTROLLED,
                 )?,
                 token_in: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 token_out: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 40,
-                        end: 60,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 output_to_router: false,
@@ -246,19 +202,11 @@ impl Executor {
                 transfer_type: TransferType::None,
                 receiver: Address::Zero,
                 token_in: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 token_out: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 output_to_router: false,
@@ -267,30 +215,18 @@ impl Executor {
             Self::UniswapV2 => Ok(TransferData {
                 transfer_type: TransferType::Transfer,
                 receiver: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
                     Address::SENDER_CONTROLLED,
                 )?,
                 token_in: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 token_out: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 40,
-                        end: 60,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 output_to_router: false,
@@ -300,19 +236,11 @@ impl Executor {
                 transfer_type: TransferType::None,
                 receiver: Address::Zero,
                 token_in: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 token_out: params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     Address::POSSIBLY_ERC20_AND_ZERO,
                 )?,
                 output_to_router: false,
@@ -320,11 +248,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/WethExecutor.sol#L76
             Self::Weth => {
                 let is_wrapping = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 1,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 1 },
                     [true, false],
                 )?;
                 Ok(TransferData {
@@ -334,16 +258,8 @@ impl Executor {
                         TransferType::ProtocolWillDebit
                     },
                     receiver: Address::Router,
-                    token_in: if is_wrapping {
-                        Address::Zero
-                    } else {
-                        Address::WETH
-                    },
-                    token_out: if is_wrapping {
-                        Address::WETH
-                    } else {
-                        Address::Zero
-                    },
+                    token_in: if is_wrapping { Address::Zero } else { Address::WETH },
+                    token_out: if is_wrapping { Address::WETH } else { Address::Zero },
                     output_to_router: true,
                 })
             }
@@ -351,6 +267,7 @@ impl Executor {
     }
 
     /// <https://github.com/propeller-heads/tycho-execution/blob/9b0512c9580617224c7a0d7de781674a2cdc6b62/foundry/interfaces/IExecutor.sol#L23>
+    #[allow(clippy::too_many_arguments)]
     pub fn swap(
         &self,
         params: &Params,
@@ -365,11 +282,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/CurveExecutor.sol#L70
             Self::Curve => {
                 let pool = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 40,
-                        end: 60,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -383,11 +296,7 @@ impl Executor {
                 }
 
                 let token_in = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     Address::VARIANTS,
                 )?;
 
@@ -400,10 +309,7 @@ impl Executor {
                 // the actual swap logic doesn't matter
 
                 let transfer_allowances_during_swap = params.request(
-                    ParamKey::SwapIndexed {
-                        prefix: "transfer_allowances_during_swap",
-                        swap_index,
-                    },
+                    ParamKey::SwapIndexed { prefix: "transfer_allowances_during_swap", swap_index },
                     [true, false],
                 )?;
                 if transfer_allowances_during_swap {
@@ -428,11 +334,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/ERC4626Executor.sol#L32
             Self::ERC4626 => {
                 let target = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 20,
-                        end: 40,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -451,11 +353,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/FluidV1Executor.sol#L60
             Self::FluidV1 => {
                 let dex = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -467,11 +365,7 @@ impl Executor {
                     });
                 }
                 let is_native_sell = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 61,
-                        end: 62,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 61, end: 62 },
                     [true, false],
                 )?;
                 if !is_native_sell {
@@ -487,11 +381,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/CurveExecutor.sol#L70
             Self::MaverickV2 => {
                 let pool = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -510,11 +400,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/SlipstreamsExecutor.sol#L37
             Self::Slipstreams => {
                 let pool = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 43,
-                        end: 63,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 43, end: 63 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -534,11 +420,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/UniswapV2Executor.sol#L39
             Self::UniswapV2 => {
                 let pool = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 20,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -557,11 +439,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/UniswapV3Executor.sol#L37
             Self::UniswapV3 => {
                 let target = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 43,
-                        end: 63,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 43, end: 63 },
                     // trying more variants might find some very obscure bugs
                     // in the future but slows down simulation a lot
                     // and currently is ignored anyway
@@ -584,11 +462,7 @@ impl Executor {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/WethExecutor.sol#L44
             Self::Weth => {
                 let is_wrapping = params.request(
-                    ParamKey::ProtocolData {
-                        swap_index,
-                        start: 0,
-                        end: 1,
-                    },
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 1 },
                     [true, false],
                 )?;
                 if is_wrapping {
@@ -688,11 +562,7 @@ impl Executor {
             Self::FluidV1 => Address::Router,
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/MaverickV2Executor.sol#L18
             Self::MaverickV2 => params.request(
-                ParamKey::ProtocolData {
-                    swap_index,
-                    start: 0,
-                    end: 20,
-                },
+                ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                 // trying more variants might find some very obscure bugs
                 // in the future but slows down simulation a lot
                 // and currently is ignored anyway
@@ -702,11 +572,7 @@ impl Executor {
             Self::Slipstreams => Address::Router,
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/UniswapV2Executor.sol#L29
             Self::UniswapV2 => params.request(
-                ParamKey::ProtocolData {
-                    swap_index,
-                    start: 0,
-                    end: 20,
-                },
+                ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
                 // trying more variants might find some very obscure bugs
                 // in the future but slows down simulation a lot
                 // and currently is ignored anyway

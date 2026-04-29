@@ -1,6 +1,6 @@
-use crate::params::ParamValue;
-use crate::{Address, Error};
 use std::borrow::Cow;
+
+use crate::{Address, Error, params::ParamValue};
 
 /// Models the Ethereum world state, which changes during the simulation.
 ///
@@ -56,7 +56,8 @@ impl Default for State {
 impl State {
     /// Simulate `assembly { tstore(key, value) }`
     pub fn tstore<K: Into<Cow<'static, str>>, V: Into<ParamValue>>(&mut self, key: K, value: V) {
-        self.transient.insert(key.into(), value.into());
+        self.transient
+            .insert(key.into(), value.into());
     }
 
     /// Simulate `assembly { tstore(key, 0) }` for [ParamValue]s that have no null value.
@@ -78,10 +79,7 @@ impl State {
             return Err(Error::TLoadShouldHavePreviousTStore { key });
         };
         let Ok(result) = param.clone().try_into() else {
-            return Err(Error::TLoadShouldBeConvertibleInto {
-                key,
-                value: param.clone(),
-            });
+            return Err(Error::TLoadShouldBeConvertibleInto { key, value: param.clone() });
         };
         Ok(result)
     }
@@ -156,9 +154,7 @@ impl State {
             ));
         }
         if token.is_never_erc20() {
-            return Err(Error::revert(
-                "erc20_safe_transfer_from: token is never erc20",
-            ));
+            return Err(Error::revert("erc20_safe_transfer_from: token is never erc20"));
         }
 
         *self
@@ -256,7 +252,10 @@ impl State {
 
     /// Simulate `owner.balance`
     pub fn eth_balance(&mut self, owner: Address) -> i64 {
-        self.owner_to_eth_balance.get(&owner).cloned().unwrap_or(0)
+        self.owner_to_eth_balance
+            .get(&owner)
+            .cloned()
+            .unwrap_or(0)
     }
 
     /// Simulate `from` executing `Address.sendValue(to, amount)`
@@ -266,8 +265,14 @@ impl State {
                 "cannot eth_send_value negative amount. likely a bug in the model",
             ));
         }
-        *self.owner_to_eth_balance.entry(from).or_insert(0) -= amount;
-        *self.owner_to_eth_balance.entry(to).or_insert(0) += amount;
+        *self
+            .owner_to_eth_balance
+            .entry(from)
+            .or_insert(0) -= amount;
+        *self
+            .owner_to_eth_balance
+            .entry(to)
+            .or_insert(0) += amount;
         Ok(())
     }
 }

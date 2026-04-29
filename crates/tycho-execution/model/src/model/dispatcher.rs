@@ -1,15 +1,20 @@
 //! <https://github.com/propeller-heads/tycho-execution/blob/main/foundry/src/Dispatcher.sol>
-use crate::log::{Event, Log};
-use crate::math::checked_subtract;
-use crate::model::executors::Executor;
-use crate::model::transfer_manager::{
-    _balance_of, _revoke_unconsumed_approval, _transfer, _transfer_out, TransferType,
+use crate::{
+    Address, Error, State,
+    log::{Event, Log},
+    math::checked_subtract,
+    model::{
+        executors::Executor,
+        transfer_manager::{
+            _balance_of, _revoke_unconsumed_approval, _transfer, _transfer_out, TransferType,
+        },
+        vault::Vault,
+    },
+    params::{ParamKey, Params},
 };
-use crate::model::vault::Vault;
-use crate::params::{ParamKey, Params};
-use crate::{Address, Error, State};
 
 /// <https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/Dispatcher.sol#L89>
+#[allow(clippy::too_many_arguments)]
 pub fn _call_swap_on_executor(
     params: &Params,
     state: &mut State,
@@ -41,27 +46,20 @@ pub fn _call_swap_on_executor(
 
     state.tstore("swap_input_token", transfer_data.token_in);
 
-    let measure_at = if transfer_data.output_to_router {
-        Address::Router
-    } else {
-        receiver
-    };
+    let measure_at = if transfer_data.output_to_router { Address::Router } else { receiver };
 
-    let balance_before_swap =
-        if measure_at.is_sender_controlled() || transfer_data.token_out.is_sender_controlled() {
-            // if the sender controls `token_out`, they can make the `balanceOf`
-            // return arbitrary amounts.
-            // if the sender controls `measure_at`, they can control the balance.
-            params.request(
-                ParamKey::SwapIndexed {
-                    swap_index,
-                    prefix: "balance_before_swap",
-                },
-                [0],
-            )?
-        } else {
-            _balance_of(state, transfer_data.token_out, measure_at)?
-        };
+    let balance_before_swap = if measure_at.is_sender_controlled() ||
+        transfer_data
+            .token_out
+            .is_sender_controlled()
+    {
+        // if the sender controls `token_out`, they can make the `balanceOf`
+        // return arbitrary amounts.
+        // if the sender controls `measure_at`, they can control the balance.
+        params.request(ParamKey::SwapIndexed { swap_index, prefix: "balance_before_swap" }, [0])?
+    } else {
+        _balance_of(state, transfer_data.token_out, measure_at)?
+    };
 
     let amount = _transfer(
         state,
@@ -88,22 +86,22 @@ pub fn _call_swap_on_executor(
         _revoke_unconsumed_approval(state, transfer_data.token_in, transfer_data.receiver)?;
     }
 
-    let balance_after_swap =
-        if measure_at.is_sender_controlled() || transfer_data.token_out.is_sender_controlled() {
-            // if the sender controls `token_out`, they can make the `balanceOf`
-            // return arbitrary amounts.
-            // if the sender controls `measure_at`, they can control the balance.
-            params.request(
-                ParamKey::SwapIndexed {
-                    swap_index,
-                    prefix: "balance_after_swap",
-                },
-                // simulate a balance increase at no cost to the sender
-                [balance_before_swap + 10000],
-            )?
-        } else {
-            _balance_of(state, transfer_data.token_out, measure_at)?
-        };
+    let balance_after_swap = if measure_at.is_sender_controlled() ||
+        transfer_data
+            .token_out
+            .is_sender_controlled()
+    {
+        // if the sender controls `token_out`, they can make the `balanceOf`
+        // return arbitrary amounts.
+        // if the sender controls `measure_at`, they can control the balance.
+        params.request(
+            ParamKey::SwapIndexed { swap_index, prefix: "balance_after_swap" },
+            // simulate a balance increase at no cost to the sender
+            [balance_before_swap + 10000],
+        )?
+    } else {
+        _balance_of(state, transfer_data.token_out, measure_at)?
+    };
 
     let mut amount_out = checked_subtract(balance_after_swap, balance_before_swap)?;
 

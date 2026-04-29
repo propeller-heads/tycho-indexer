@@ -34,7 +34,8 @@
 //! This motivated the construction of a model of Tycho Router V3's functionality in Python.
 //!
 //! Simulating many relevant parameter combinations in the model
-//! confirmed the two critical vulnerabilities and discovered two additional critical vulnerabilities.
+//! confirmed the two critical vulnerabilities and discovered two additional critical
+//! vulnerabilities.
 //!
 //! As the model was extended, the Python implementation took too long to run.
 //! The model was rewritten in Rust with a focus on performance.
@@ -63,8 +64,8 @@
 //!
 //! Only the subset of [Executor](model::executors::Executor)s that give the caller control
 //! over the called pool contract were modeled.
-//! These [Executor](model::executors::Executor)s present a higher risk than those that interact with a
-//! protocol contract the caller has no control over.
+//! These [Executor](model::executors::Executor)s present a higher risk than those that interact
+//! with a protocol contract the caller has no control over.
 //! They are also far easier to model.
 //!
 //! Sequential swaps and split swaps with more than 2 swaps were not simulated.
@@ -81,8 +82,9 @@
 //! [model] mostly follows the naming and file structure of the original Solidity TychoRouter.
 //!
 //! [Params](params::Params) represents all parameters the execution depends on,
-//! like whether to call `singleSwap` or `sequentialSwap`, each swap's [Executor](model::executors::Executor),
-//! the swap count, `token_in`, each swap's protocol data, the `receiver`, etc.
+//! like whether to call `singleSwap` or `sequentialSwap`, each swap's
+//! [Executor](model::executors::Executor), the swap count, `token_in`, each swap's protocol data,
+//! the `receiver`, etc.
 //!
 //! The list of work, [Params](params::Params) to try, is not known upfront.
 //! While it would be possible to enumerate every single possible [Params](params::Params)
@@ -90,13 +92,13 @@
 //! is harder to understand.
 //! For example, whether the [FluidV1](model::executors::Executor::FluidV1) executor's
 //! `is_native_sell` parameter is `true` or `false`, would have to be enumerated for
-//! every executor, including those where the parameter doesn't make a difference. This would double the time needed.
-//! That's just for one parameter. There are many more and most are not just simple
+//! every executor, including those where the parameter doesn't make a difference. This would double
+//! the time needed. That's just for one parameter. There are many more and most are not just simple
 //! binary choices.
 //!
 //! Instead, additional parameters can be [requested](params::Params::request) anywhere
-//! in the model exactly where they are needed, which is easy to understand, and only when they are needed,
-//! which is efficient.
+//! in the model exactly where they are needed, which is easy to understand, and only when they are
+//! needed, which is efficient.
 //!
 //! As a result, we're dealing with a problem where work can generate more work.
 //!
@@ -118,11 +120,11 @@
 //!
 //! 1) Double-check that the model correctly mirrors the essential functionality of the Solidity
 //!    code
-//! 2) Add tests to reinforce 1. and to reduce the probability of dangerous false negatives,
-//!    i.e. vulnerabilities that are hidden due to bugs in the model
+//! 2) Add tests to reinforce 1. and to reduce the probability of dangerous false negatives, i.e.
+//!    vulnerabilities that are hidden due to bugs in the model
 //! 3) Model the remaining [Executor](model::executors::Executor)s
-//! 4) Reduce the amount of user inputs, i.e. parameters the caller can control,
-//!    to reduce attack surface and reduce the time the model takes to run
+//! 4) Reduce the amount of user inputs, i.e. parameters the caller can control, to reduce attack
+//!    surface and reduce the time the model takes to run
 //!
 //! # Parallelism
 //!
@@ -164,7 +166,8 @@
 //! INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 //! FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 //! IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM,
-//! DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+//! DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+//! OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 mod address;
 pub use address::Address;

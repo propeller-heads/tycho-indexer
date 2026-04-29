@@ -1,6 +1,4 @@
-use crate::address::Address;
-use crate::error::Error;
-use crate::state::State;
+use crate::{address::Address, error::Error, state::State};
 
 /// The [Vault] is modeled as a struct because it has state,
 /// which changes during the simulation, like the vault balances and the deltas.
@@ -69,7 +67,10 @@ impl Vault {
 
     /// <https://github.com/propeller-heads/tycho-execution/blob/d27e2a6f4d9ea6f4cba53b2fc1f54cd6676b60d2/foundry/src/Vault.sol#L185>
     pub fn _get_delta(&self, token: Address) -> i64 {
-        self.deltas.get(&token).cloned().unwrap_or(0)
+        self.deltas
+            .get(&token)
+            .cloned()
+            .unwrap_or(0)
     }
 
     /// <https://github.com/propeller-heads/tycho-execution/blob/d27e2a6f4d9ea6f4cba53b2fc1f54cd6676b60d2/foundry/src/Vault.sol#L209>
@@ -162,9 +163,7 @@ impl Vault {
                 self._burn(user, token_in, amount_in)?;
             }
         } else if self._get_nonzero_delta_count() > 0 {
-            return Err(Error::revert(
-                "finalize_balances: !use_vault && nonzero_delta_count > 0",
-            ));
+            return Err(Error::revert("finalize_balances: !use_vault && nonzero_delta_count > 0"));
         }
 
         Ok(())

@@ -1,5 +1,6 @@
-use crate::params::{ParamValue, RequestParamError};
 use std::borrow::Cow;
+
+use crate::params::{ParamValue, RequestParamError};
 
 /// The various kinds of errors that can occur during simulation.
 /// Reverts, for example.
@@ -25,7 +26,8 @@ pub enum Error {
         key: Cow<'static, str>,
     },
     /// Requested [key](Error::TLoadShouldBeConvertibleInto::key) found in transient storage
-    /// but [value](Error::TLoadShouldBeConvertibleInto::value) can't be converted into desired type.
+    /// but [value](Error::TLoadShouldBeConvertibleInto::value) can't be converted into desired
+    /// type.
     TLoadShouldBeConvertibleInto {
         key: Cow<'static, str>,
         value: ParamValue,
@@ -34,15 +36,11 @@ pub enum Error {
 
 impl Error {
     pub fn revert<T: Into<Cow<'static, str>>>(reason: T) -> Self {
-        Self::Revert {
-            reason: reason.into(),
-        }
+        Self::Revert { reason: reason.into() }
     }
 
     pub fn warning<T: Into<Cow<'static, str>>>(reason: T) -> Self {
-        Self::Warning {
-            reason: reason.into(),
-        }
+        Self::Warning { reason: reason.into() }
     }
 }
 

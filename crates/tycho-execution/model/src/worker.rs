@@ -1,12 +1,21 @@
 //! Code related to [worker_thread]s and how they [find_work]
 //! using work-stealing.
-use crate::params::{Params, ParamsInner, RequestParamError};
-use crate::progress::Counters;
-use crate::{Error, Outcome, Telemetry, simulate};
+use std::{
+    io::Write,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
-use std::io::Write;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+
+use crate::{
+    Error, Outcome, Telemetry,
+    params::{Params, ParamsInner, RequestParamError},
+    progress::Counters,
+    simulate,
+};
 
 /// Returns a [worker_thread]'s next work item. First looks in local queue, then tries
 /// to steal work from other workers, and finally looks in global queue.
@@ -88,10 +97,8 @@ pub fn find_work_unless_all_idle(
     is_worker_idle: &Arc<AtomicBool>,
     tell_idle_workers_to_stop: &Arc<AtomicBool>,
 ) -> Option<ParamsInner> {
-    match find_work(&local_queue, &stealers, &global_queue) {
-        Some(work) => {
-            return Some(work);
-        }
+    match find_work(local_queue, stealers, global_queue) {
+        Some(work) => Some(work),
         None => {
             // all of the idle management happens only if a worker doesn't find any work.
             // if we were to break here, then several threads would simply exit
@@ -118,7 +125,7 @@ pub fn find_work_unless_all_idle(
                 // give main thread some time to detect that all workers are idle
                 std::thread::sleep(std::time::Duration::from_millis(100));
                 // try to find work again
-                if let Some(work) = find_work(&local_queue, &stealers, &global_queue) {
+                if let Some(work) = find_work(local_queue, stealers, global_queue) {
                     eprintln!(
                         "worker thread {:?} busy (after it was idle)",
                         std::thread::current().id()
@@ -209,7 +216,7 @@ pub fn worker_thread(
                 telemetry.executors_warning(params.executors(), reason);
                 // TODO print out warning if enabled to be able to debug it
             }
-            Err(err) => Err(err).unwrap(),
+            Err(err) => panic!("{err:?}"),
         }
     }
     eprintln!("worker thread {:?} finished", std::thread::current().id());

@@ -1,15 +1,20 @@
 //! <https://github.com/propeller-heads/tycho-execution/blob/main/foundry/src/TychoRouter.sol>
-use crate::address::Address;
-use crate::error::Error;
-use crate::log::{Event, Log};
-use crate::math::checked_subtract;
-use crate::model::dispatcher::{_call_get_effective_router_fee_on_output, _call_swap_on_executor};
-use crate::model::executors::Executor;
-use crate::model::fee_calculator::calculate_fee;
-use crate::model::transfer_manager::{_transfer_out, _tstore_transfer_from_info};
-use crate::model::vault::Vault;
-use crate::params::{ParamKey, Params};
-use crate::state::State;
+#![allow(clippy::too_many_arguments)]
+use crate::{
+    address::Address,
+    error::Error,
+    log::{Event, Log},
+    math::checked_subtract,
+    model::{
+        dispatcher::{_call_get_effective_router_fee_on_output, _call_swap_on_executor},
+        executors::Executor,
+        fee_calculator::calculate_fee,
+        transfer_manager::{_transfer_out, _tstore_transfer_from_info},
+        vault::Vault,
+    },
+    params::{ParamKey, Params},
+    state::State,
+};
 
 /// <https://github.com/propeller-heads/tycho-execution/blob/d27e2a6f4d9ea6f4cba53b2fc1f54cd6676b60d2/foundry/src/TychoRouter.sol#L184>
 pub fn split_swap(
@@ -327,14 +332,7 @@ fn _split_swap_checked(
     let amount_out = if client_fee_bps == 0 && router_fee_on_output_bps == 0 {
         amount_out_before_fees
     } else {
-        _take_fees(
-            params,
-            vault,
-            log,
-            token_out,
-            amount_out_before_fees,
-            client_fee_bps,
-        )?
+        _take_fees(params, vault, log, token_out, amount_out_before_fees, client_fee_bps)?
     };
 
     let amount_out = _maybe_add_client_contribution(
@@ -348,9 +346,7 @@ fn _split_swap_checked(
         receiver,
     )?;
 
-    _settle_output(
-        state, vault, log, amount_out, amount_in, token_in, token_out, receiver,
-    )?;
+    _settle_output(state, vault, log, amount_out, amount_in, token_in, token_out, receiver)?;
     Ok(())
 }
 
@@ -409,14 +405,7 @@ fn _single_swap(
     let amount_out = if client_fee_bps == 0 && router_fee_on_output_bps == 0 {
         amount_out_before_fees
     } else {
-        _take_fees(
-            params,
-            vault,
-            log,
-            token_out,
-            amount_out_before_fees,
-            client_fee_bps,
-        )?
+        _take_fees(params, vault, log, token_out, amount_out_before_fees, client_fee_bps)?
     };
 
     let amount_out = _maybe_add_client_contribution(
@@ -430,9 +419,7 @@ fn _single_swap(
         receiver,
     )?;
 
-    _settle_output(
-        state, vault, log, amount_out, amount_in, token_in, token_out, receiver,
-    )?;
+    _settle_output(state, vault, log, amount_out, amount_in, token_in, token_out, receiver)?;
     Ok(())
 }
 
@@ -452,14 +439,10 @@ fn _sequential_swap_checked(
         return Err(Error::revert("_sequential_swap_checked: amount_in == 0"));
     }
     if receiver == Address::Zero {
-        return Err(Error::revert(
-            "_sequential_swap_checked: receiver == address(0)",
-        ));
+        return Err(Error::revert("_sequential_swap_checked: receiver == address(0)"));
     }
     if min_amount_out == 0 {
-        return Err(Error::revert(
-            "_sequential_swap_checked: min_amount_out == 0",
-        ));
+        return Err(Error::revert("_sequential_swap_checked: min_amount_out == 0"));
     }
 
     let router_fee_on_output_bps = _call_get_effective_router_fee_on_output(params, state)?;
@@ -482,14 +465,7 @@ fn _sequential_swap_checked(
     let amount_out = if client_fee_bps == 0 && router_fee_on_output_bps == 0 {
         amount_out_before_fees
     } else {
-        _take_fees(
-            params,
-            vault,
-            log,
-            token_out,
-            amount_out_before_fees,
-            client_fee_bps,
-        )?
+        _take_fees(params, vault, log, token_out, amount_out_before_fees, client_fee_bps)?
     };
 
     let amount_out = _maybe_add_client_contribution(
@@ -503,9 +479,7 @@ fn _sequential_swap_checked(
         receiver,
     )?;
 
-    _settle_output(
-        state, vault, log, amount_out, amount_in, token_in, token_out, receiver,
-    )?;
+    _settle_output(state, vault, log, amount_out, amount_in, token_in, token_out, receiver)?;
     Ok(())
 }
 
@@ -576,29 +550,13 @@ fn _split_swap(
 
     for swap_index in 0..swap_count {
         // inlined code from https://github.com/propeller-heads/tycho-execution/blob/d27e2a6f4d9ea6f4cba53b2fc1f54cd6676b60d2/foundry/lib/LibSwap.sol#L32
-        let token_in_index = params.request(
-            ParamKey::SwapData {
-                swap_index,
-                start: 0,
-                end: 1,
-            },
-            0..n_tokens,
-        )?;
-        let token_out_index = params.request(
-            ParamKey::SwapData {
-                swap_index,
-                start: 1,
-                end: 2,
-            },
-            0..n_tokens,
-        )?;
+        let token_in_index =
+            params.request(ParamKey::SwapData { swap_index, start: 0, end: 1 }, 0..n_tokens)?;
+        let token_out_index =
+            params.request(ParamKey::SwapData { swap_index, start: 1, end: 2 }, 0..n_tokens)?;
         let largest_uint24 = 2i64.pow(24) - 1;
         let split = params.request(
-            ParamKey::SwapData {
-                swap_index,
-                start: 2,
-                end: 5,
-            },
+            ParamKey::SwapData { swap_index, start: 2, end: 5 },
             [0, 1, 10000, largest_uint24],
         )?;
         let executor = params.request(ParamKey::Executor { swap_index }, Executor::VARIANTS)?;
@@ -611,8 +569,8 @@ fn _split_swap(
         };
 
         let mut swap_receiver = Address::Router;
-        if token_out_index == checked_subtract(n_tokens, 1)? && !is_cyclical
-            || is_cyclical && token_out_index == 0
+        if token_out_index == checked_subtract(n_tokens, 1)? && !is_cyclical ||
+            is_cyclical && token_out_index == 0
         {
             swap_receiver = receiver;
         }
@@ -667,12 +625,8 @@ fn _sequential_swap(
             final_receiver
         } else {
             let next_swap_index = swap_index + 1;
-            let next_executor = params.request(
-                ParamKey::Executor {
-                    swap_index: next_swap_index,
-                },
-                Executor::VARIANTS,
-            )?;
+            let next_executor = params
+                .request(ParamKey::Executor { swap_index: next_swap_index }, Executor::VARIANTS)?;
             next_executor.funds_expected_address(params, state, next_swap_index)?
         };
 
@@ -740,9 +694,7 @@ fn _update_native_delta_accounting(
     let msg_value = params.request("msg_value", vec![0, amount_in])?;
     if msg_value > 0 {
         if msg_value != amount_in {
-            return Err(Error::revert(
-                "update_native_delta_accounting: msg_value != amount_in",
-            ));
+            return Err(Error::revert("update_native_delta_accounting: msg_value != amount_in"));
         }
         vault._update_delta_accounting(Address::Zero, msg_value);
         log.append(Event::UpdateDeltaAccounting {
@@ -827,9 +779,7 @@ fn _maybe_add_client_contribution(
                 });
             }
         } else {
-            return Err(Error::revert(
-                "_maybe_add_client_contribution: negative output delta",
-            ));
+            return Err(Error::revert("_maybe_add_client_contribution: negative output delta"));
         }
 
         Ok(min_amount_out)

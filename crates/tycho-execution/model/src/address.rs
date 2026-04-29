@@ -59,12 +59,8 @@ impl Address {
     /// but will reduce the parameter space,
     /// reduce the potential number of reverts due to the address not implementing ERC20,
     /// and speed up the simulation.
-    pub const POSSIBLY_ERC20_AND_ZERO: [Address; 4] = [
-        Address::Sender,
-        Address::SenderControlled,
-        Address::WETH,
-        Address::Zero,
-    ];
+    pub const POSSIBLY_ERC20_AND_ZERO: [Address; 4] =
+        [Address::Sender, Address::SenderControlled, Address::WETH, Address::Zero];
 
     /// [Address::POSSIBLY_ERC20_AND_ZERO] + [Address::CurveNative].
     /// Use this when generating tokens used by Curve because
@@ -84,9 +80,9 @@ impl Address {
     /// This includes the [Address] being a contract that implements arbitrary code.
     pub fn is_sender_controlled(&self) -> bool {
         // the sender can freely choose ClientFeeReceiver
-        self == &Address::Sender
-            || self == &Address::SenderControlled
-            || self == &Address::ClientFeeReceiver
+        self == &Address::Sender ||
+            self == &Address::SenderControlled ||
+            self == &Address::ClientFeeReceiver
     }
 
     /// ERC20 operations should revert for addresses that never implement ERC20

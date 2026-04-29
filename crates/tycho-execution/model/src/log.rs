@@ -8,10 +8,12 @@
 //! If you're trying to find suspicious [Outcome](crate::Outcome)s in the first place,
 //! performance matters and it's better to disable logging via the [NopLog].
 
-use crate::address::Address;
-use crate::model::executors::TransferData;
-use serde::Serialize;
-use serde::ser::{SerializeMap, SerializeSeq};
+use serde::{
+    Serialize,
+    ser::{SerializeMap, SerializeSeq},
+};
+
+use crate::{address::Address, model::executors::TransferData};
 
 /// An important [Event] that makes it easier to reason about
 /// the execution path the simulation took.
@@ -79,57 +81,25 @@ impl std::fmt::Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UpdateDeltaAccounting {
-                token,
-                delta_change,
-                nonzero_delta_count_after,
-                ..
+                token, delta_change, nonzero_delta_count_after, ..
             } => write!(
                 f,
                 "`_updateDeltaAccounting(token={token:?}, deltaChange={delta_change})` after which `_getNonZeroDeltaCount() == {nonzero_delta_count_after}`"
             ),
-            Self::CreditVault {
-                owner,
-                token,
-                amount,
-                ..
-            } => write!(
-                f,
-                "_creditVault(user={owner:?}, token={token:?}, amount={amount})"
-            ),
-            Self::DebitVault {
-                owner,
-                token,
-                amount,
-                ..
-            } => write!(
-                f,
-                "_debitVault(user={owner:?}, token={token:?}, amount={amount})"
-            ),
-            Self::TransferOut {
-                receiver,
-                token,
-                amount,
-                ..
-            } => write!(
-                f,
-                "_transferOut(token={token:?}, to={receiver:?}, amount={amount})"
-            ),
-            Self::EthSendValue {
-                sender,
-                receiver,
-                amount,
-                ..
-            } => write!(
+            Self::CreditVault { owner, token, amount, .. } => {
+                write!(f, "_creditVault(user={owner:?}, token={token:?}, amount={amount})")
+            }
+            Self::DebitVault { owner, token, amount, .. } => {
+                write!(f, "_debitVault(user={owner:?}, token={token:?}, amount={amount})")
+            }
+            Self::TransferOut { receiver, token, amount, .. } => {
+                write!(f, "_transferOut(token={token:?}, to={receiver:?}, amount={amount})")
+            }
+            Self::EthSendValue { sender, receiver, amount, .. } => write!(
                 f,
                 "`{sender:?}` calls: `Address.sendValue(to={receiver:?}, amount={amount})`"
             ),
-            Self::Erc20SafeTransfer {
-                token,
-                sender,
-                receiver,
-                amount,
-                ..
-            } => write!(
+            Self::Erc20SafeTransfer { token, sender, receiver, amount, .. } => write!(
                 f,
                 "`{sender:?}` calls: `IERC20({token:?}).safeTransfer(to={receiver:?}, amount={amount})`"
             ),

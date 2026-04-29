@@ -1,9 +1,11 @@
-use crate::log::{Log, VecLog};
-use crate::model::Vault;
-use crate::model::tycho_router::*;
-use crate::params::Params;
-use crate::{Address, Error, State};
 use serde::Serialize;
+
+use crate::{
+    Address, Error, State,
+    log::{Log, VecLog},
+    model::{Vault, tycho_router::*},
+    params::Params,
+};
 
 /// Run the model. The most important function. All [model](crate::model) code is called from this
 /// directly or indirectly.
@@ -58,8 +60,8 @@ pub fn simulate(params: &Params) -> Result<(State, Vault, impl Log + use<> + Ser
     {
         functions.push("sequentialSwapUsingVault");
     }
-    if crate::config::ENABLE_SEQUENTIAL_SWAP_FUNCTIONS
-        && crate::config::ENABLE_PERMIT2_SWAP_FUNCTIONS
+    if crate::config::ENABLE_SEQUENTIAL_SWAP_FUNCTIONS &&
+        crate::config::ENABLE_PERMIT2_SWAP_FUNCTIONS
     {
         functions.push("sequentialSwapPermit2");
     }

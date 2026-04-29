@@ -1,8 +1,5 @@
 //! <https://github.com/propeller-heads/tycho-execution/blob/main/foundry/src/FeeCalculator.sol>
-use crate::address::Address;
-use crate::error::Error;
-use crate::math::checked_subtract;
-use crate::params::Params;
+use crate::{address::Address, error::Error, math::checked_subtract, params::Params};
 
 pub const MAX_FEE_BPS: i64 = 10000;
 
@@ -36,15 +33,9 @@ fn _get_fee_info(params: &Params) -> Result<FeeInfo, Error> {
             params.request("router_fee_on_client_fee_bps", vec![0, MAX_FEE_BPS])?
         };
 
-        Ok(FeeInfo {
-            router_fee_on_output_bps,
-            router_fee_on_client_fee_bps,
-        })
+        Ok(FeeInfo { router_fee_on_output_bps, router_fee_on_client_fee_bps })
     } else {
-        Ok(FeeInfo {
-            router_fee_on_output_bps: 0,
-            router_fee_on_client_fee_bps: 0,
-        })
+        Ok(FeeInfo { router_fee_on_output_bps: 0, router_fee_on_client_fee_bps: 0 })
     }
 }
 
@@ -56,8 +47,8 @@ pub fn calculate_fee(
 ) -> Result<(i64, Vec<FeeRecipient>), Error> {
     let fee_info = _get_fee_info(params)?;
 
-    if (client_fee_bps + fee_info.router_fee_on_output_bps > MAX_FEE_BPS)
-        || fee_info.router_fee_on_client_fee_bps > MAX_FEE_BPS
+    if (client_fee_bps + fee_info.router_fee_on_output_bps > MAX_FEE_BPS) ||
+        fee_info.router_fee_on_client_fee_bps > MAX_FEE_BPS
     {
         return Err(Error::revert("calculate_fee: fee bps too large"));
     }
@@ -89,14 +80,8 @@ pub fn calculate_fee(
     Ok((
         amount_out,
         vec![
-            FeeRecipient {
-                recipient: Address::RouterFeeReceiver,
-                fee_amount: total_router_fee,
-            },
-            FeeRecipient {
-                recipient: Address::ClientFeeReceiver,
-                fee_amount: client_portion,
-            },
+            FeeRecipient { recipient: Address::RouterFeeReceiver, fee_amount: total_router_fee },
+            FeeRecipient { recipient: Address::ClientFeeReceiver, fee_amount: client_portion },
         ],
     ))
 }

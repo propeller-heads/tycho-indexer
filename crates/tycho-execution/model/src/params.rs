@@ -1,11 +1,11 @@
 //! [Representation of a combination of parameters](Params) to simulate
 //! and a [mechanism](RequestParam) by which the model can [request additional
 //! parameters](Params::request) to be simulated.
-use crate::address::Address;
-use crate::model::executors::Executor;
+use std::{borrow::Cow, rc::Rc};
+
 use serde::Serialize;
-use std::borrow::Cow;
-use std::rc::Rc;
+
+use crate::{address::Address, model::executors::Executor};
 
 /// Because [Params] contains [Rc] it isn't sendable to other threads.
 /// We need to be able to send it to other threads.
@@ -73,26 +73,22 @@ impl Params {
         let key: ParamKey = key.into();
         if let Some(param) = self.0.get(&key) {
             let Ok(value) = param.clone().try_into() else {
-                return Err(RequestParamError::ShouldBeConvertibleInto(
-                    key,
-                    param.clone(),
-                ));
+                return Err(RequestParamError::ShouldBeConvertibleInto(key, param.clone()));
             };
             return Ok(value);
         }
 
         // turning this into a Vec right here is faster and simpler than
         // turning it into a trait object and iterating it later
-        let variants: Vec<ParamValue> = variants.into_iter().map(|x| x.into()).collect();
+        let variants: Vec<ParamValue> = variants
+            .into_iter()
+            .map(|x| x.into())
+            .collect();
         if variants.is_empty() {
-            return Err(
-                RequestParamError::VariantsShouldNotBeEmptySinceWouldCauseInfiniteLoop(key),
-            );
+            return Err(RequestParamError::VariantsShouldNotBeEmptySinceWouldCauseInfiniteLoop(key));
         }
 
-        Err(RequestParamError::RequestParam(RequestParam::new(
-            self, key, variants,
-        )))
+        Err(RequestParamError::RequestParam(RequestParam::new(self, key, variants)))
     }
 
     /// Return the value of the parameter with `key`.
@@ -103,7 +99,9 @@ impl Params {
         ParamValue: TryInto<V>,
     {
         let key: ParamKey = key.into();
-        self.0.get(&key).and_then(|x| x.clone().try_into().ok())
+        self.0
+            .get(&key)
+            .and_then(|x| x.clone().try_into().ok())
     }
 
     /// Return the list of [Executor]s for each executed swap in order.
@@ -283,21 +281,15 @@ impl std::fmt::Display for ParamKey {
             Self::String(string) => f.write_str(string),
             Self::SwapIndexed { prefix, swap_index } => write!(f, "{prefix}[{swap_index}]"),
             Self::Executor { swap_index } => write!(f, "executors[{swap_index}]"),
-            Self::SwapData {
-                swap_index,
-                start,
-                end,
-            } => write!(f, "swap_data[{swap_index}][{start}:{end}]"),
-            Self::ProtocolData {
-                swap_index,
-                start,
-                end,
-            } => write!(f, "protocol_data[{swap_index}][{start}:{end}]"),
-            Self::CallbackCalldata {
-                swap_index,
-                start,
-                end,
-            } => write!(f, "callback_calldata[{swap_index}][{start}:{end}]"),
+            Self::SwapData { swap_index, start, end } => {
+                write!(f, "swap_data[{swap_index}][{start}:{end}]")
+            }
+            Self::ProtocolData { swap_index, start, end } => {
+                write!(f, "protocol_data[{swap_index}][{start}:{end}]")
+            }
+            Self::CallbackCalldata { swap_index, start, end } => {
+                write!(f, "callback_calldata[{swap_index}][{start}:{end}]")
+            }
         }
     }
 }
@@ -324,8 +316,8 @@ enum RequestParamInner {
 /// Request each of the `variants` of param `key` to be added to `params`.
 /// Allows on-demand expansion of the parameter space.
 ///
-/// Each [RequestParam] is itself an [Iterator] that generates the [ParamsInner] resulting from the request:
-/// ```
+/// Each [RequestParam] is itself an [Iterator] that generates the [ParamsInner] resulting from the
+/// request: ```
 /// # use tycho_router_model::Address;
 /// # use tycho_router_model::model::executors::Executor;
 /// # use tycho_router_model::params::{Params, RequestParam, ParamKey, ParamValue};
@@ -386,10 +378,7 @@ impl RequestParam {
     /// This is just the constructor for [RequestParam].
     pub fn new(params: &Params, key: ParamKey, variants: Vec<ParamValue>) -> Self {
         assert!(!variants.is_empty());
-        Self {
-            key,
-            inner: RequestParamInner::New(Rc::clone(&params.0), variants),
-        }
+        Self { key, inner: RequestParamInner::New(Rc::clone(&params.0), variants) }
     }
 }
 
@@ -407,9 +396,7 @@ impl Iterator for RequestParam {
                 self.next()
             }
             RequestParamInner::Iterating(mut params, mut variants) => {
-                let Some(variant) = variants.next() else {
-                    return None;
-                };
+                let variant = variants.next()?;
                 // if there's only one variant left, there's no need to clone the map
                 if variants.len() != 0 {
                     let params_clone = params.clone();

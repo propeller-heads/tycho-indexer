@@ -1,9 +1,6 @@
-use crate::log::Log;
-use crate::model::Vault;
-use crate::params::Params;
-use crate::{Address, State};
-use serde::Serialize;
-use serde::ser::SerializeMap;
+use serde::{Serialize, ser::SerializeMap};
+
+use crate::{Address, State, log::Log, model::Vault, params::Params};
 
 /// Combines all elements of a successful [Result] of [simulate](crate::simulate::simulate):
 /// The input [Params] and the output [State], [Vault] and [Log].
@@ -19,20 +16,21 @@ impl<T: Log> Outcome<T> {
     pub fn new(params: Params, mut state: State, mut vault: Vault, log: T) -> Self {
         // in order to keep the serialized output readable and compact
         // remove zero valued entries in various maps
-        state.owner_to_eth_balance.retain(|_, v| *v != 0);
-        state.owner_and_token_to_balance.retain(|_, v| *v != 0);
+        state
+            .owner_to_eth_balance
+            .retain(|_, v| *v != 0);
+        state
+            .owner_and_token_to_balance
+            .retain(|_, v| *v != 0);
         state
             .token_and_owner_and_spender_to_allowance
             .retain(|_, v| *v != 0);
-        vault.owner_and_token_to_balance.retain(|_, v| *v != 0);
+        vault
+            .owner_and_token_to_balance
+            .retain(|_, v| *v != 0);
         vault.deltas.retain(|_, v| *v != 0);
 
-        Self {
-            params,
-            state,
-            vault,
-            log,
-        }
+        Self { params, state, vault, log }
     }
 
     /// Right now the [Outcome] is considered suspicious if the
@@ -44,7 +42,10 @@ impl<T: Log> Outcome<T> {
     /// only looks at situations where the user can steal assets.
     /// TODO also detect situations where the user can waste assets.
     pub fn is_suspicious(&self) -> bool {
-        let msg_value: i64 = self.params.get("msg_value").unwrap_or(0);
+        let msg_value: i64 = self
+            .params
+            .get("msg_value")
+            .unwrap_or(0);
         self.final_caller_eth_balance() > msg_value
     }
 
@@ -68,8 +69,9 @@ impl<T: Log> Outcome<T> {
                 }
             }
         }
-        for ((token, _, spender), router_allowance) in
-            &self.state.token_and_owner_and_spender_to_allowance
+        for ((token, _, spender), router_allowance) in &self
+            .state
+            .token_and_owner_and_spender_to_allowance
         {
             if spender.is_sender_controlled() {
                 // TODO if you introduce other value holding erc20 tokens,
@@ -106,11 +108,19 @@ impl<T: Log + Serialize> Serialize for Outcome<T> {
             s.serialize_entry("final_caller_eth_balance", &final_caller_eth_balance)?;
         }
 
-        if !self.state.owner_to_eth_balance.is_empty() {
+        if !self
+            .state
+            .owner_to_eth_balance
+            .is_empty()
+        {
             s.serialize_entry("eth_balance", &self.state.owner_to_eth_balance)?;
         }
 
-        if !self.state.owner_and_token_to_balance.is_empty() {
+        if !self
+            .state
+            .owner_and_token_to_balance
+            .is_empty()
+        {
             s.serialize_entry("erc20_balance", &self.state.owner_and_token_to_balance)?;
         }
 
@@ -121,19 +131,22 @@ impl<T: Log + Serialize> Serialize for Outcome<T> {
         {
             s.serialize_entry(
                 "erc20_allowance",
-                &self.state.token_and_owner_and_spender_to_allowance,
+                &self
+                    .state
+                    .token_and_owner_and_spender_to_allowance,
             )?;
         }
 
-        if !self.vault.owner_and_token_to_balance.is_empty() {
+        if !self
+            .vault
+            .owner_and_token_to_balance
+            .is_empty()
+        {
             s.serialize_entry("vault_balance", &self.vault.owner_and_token_to_balance)?;
         }
 
         if self.vault._get_nonzero_delta_count() > 0 {
-            s.serialize_entry(
-                "nonzero_delta_count",
-                &self.vault._get_nonzero_delta_count(),
-            )?;
+            s.serialize_entry("nonzero_delta_count", &self.vault._get_nonzero_delta_count())?;
         }
 
         if !self.vault.deltas.is_empty() {
