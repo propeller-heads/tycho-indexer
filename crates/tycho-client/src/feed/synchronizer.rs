@@ -757,9 +757,12 @@ where
             while retry_count < self.max_retries {
                 info!(extractor_id=%&self.extractor_id, retry_count, "(Re)starting synchronization loop");
 
+                let prev_block = self.last_synced_block.as_ref().map(|h| h.number);
                 let res = self
                     .state_sync(&mut tx, current_end_rx)
                     .await;
+                let made_progress =
+                    self.last_synced_block.as_ref().map(|h| h.number) > prev_block;
                 match res {
                     Ok(()) => {
                         info!(
@@ -800,7 +803,13 @@ where
                     }
                 }
                 sleep(self.retry_cooldown).await;
-                retry_count += 1;
+                // A run that processed blocks is a healthy run — reset the counter so
+                // transient failures after a long successful period get a fresh retry budget.
+                if made_progress {
+                    retry_count = 0;
+                } else {
+                    retry_count += 1;
+                }
             }
             if let Some(e) = final_error {
                 warn!(extractor_id=%&self.extractor_id, retry_count, error=%e, "Max retries exceeded");
