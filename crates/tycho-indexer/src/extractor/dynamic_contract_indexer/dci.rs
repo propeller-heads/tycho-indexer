@@ -179,22 +179,15 @@ where
             debug!("Will retry {:?} parameters", params_to_retry.len());
         }
 
-        // Combine new params from block and retry params into a single map for processing
-        let mut all_entrypoint_params = new_entrypoint_params;
-        for (ep_id, retry_params) in params_to_retry {
-            all_entrypoint_params
-                .entry(ep_id)
-                .or_default()
-                .extend(retry_params);
-        }
-
         // Select for analysis the newly detected EntryPointsWithData that haven't been analyzed
         // yet. This filter prevents us from re-analyzing entrypoints that have already been
         // analyzed, which can be a case if all the components have the same entrypoint. This is
         // for performance reasons, we don't want to re-analyze the same entrypoint many times.
         let mut entrypoints_to_analyze: HashMap<EntryPointWithTracingParams, &Transaction> =
             HashMap::new();
-        for (entrypoint_id, tracing_params) in all_entrypoint_params.iter() {
+
+        // Process new params: update component_id_to_entrypoint_params cache + build trace list
+        for (entrypoint_id, tracing_params) in new_entrypoint_params.iter() {
             for (tx, param) in tracing_params.iter() {
                 let entrypoint = new_entrypoints
                     .get(entrypoint_id)
@@ -214,7 +207,6 @@ where
                     EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
 
                 // Skip if we already have a successful trace for this entrypoint + params pair.
-                // Only skip if we have Some(result), not if we have None (failed trace).
                 if let Some(Some(_)) = self
                     .cache
                     .entrypoint_results
@@ -223,7 +215,7 @@ where
                     continue;
                 }
 
-                // Update the component_id_to_entrypoint_params cache
+                // Update the component_id_to_entrypoint_params cache (new params only)
                 if let Some(component_ids) = self
                     .cache
                     .ep_id_to_component_id
@@ -238,8 +230,45 @@ where
                     }
                 }
 
-                // If the same params appear twice in the block, we link them to the first
-                // transaction.
+                entrypoints_to_analyze
+                    .entry(entrypoint_with_params)
+                    .and_modify(|entry_tx| {
+                        if entry_tx.index > tx.index {
+                            *entry_tx = tx;
+                        }
+                    })
+                    .or_insert(tx);
+            }
+        }
+
+        // Process retry params: build trace list only (no cache write — they're already cached)
+        for (entrypoint_id, tracing_params) in params_to_retry.iter() {
+            for (tx, param) in tracing_params.iter() {
+                let entrypoint = new_entrypoints
+                    .get(entrypoint_id)
+                    .or_else(|| {
+                        self.cache
+                            .ep_id_to_entrypoint
+                            .get(entrypoint_id)
+                    })
+                    .ok_or_else(|| {
+                        ExtractionError::Storage(StorageError::NotFound(
+                            "Entrypoint".to_string(),
+                            entrypoint_id.to_string(),
+                        ))
+                    })?;
+
+                let entrypoint_with_params =
+                    EntryPointWithTracingParams::new(entrypoint.clone(), param.clone());
+
+                if let Some(Some(_)) = self
+                    .cache
+                    .entrypoint_results
+                    .get(&(entrypoint_id.clone(), param.clone()))
+                {
+                    continue;
+                }
+
                 entrypoints_to_analyze
                     .entry(entrypoint_with_params)
                     .and_modify(|entry_tx| {
