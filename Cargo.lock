@@ -4022,14 +4022,14 @@ dependencies = [
 
 [[package]]
 name = "foundry-block-explorers"
-version = "0.23.0"
+version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c41211d5c69c92070d2e2174eff99ffb259d0d568d2e4f789d2a7251b4416ccd"
+checksum = "ff814624bb21bfe43b70fb736ab39527b405d04cdc94d90b7e182fba28b25ec7"
 dependencies = [
  "alloy-chains",
  "alloy-json-abi",
  "alloy-primitives 1.5.7",
- "reqwest 0.13.2",
+ "reqwest 0.12.23",
  "semver 1.0.26",
  "serde",
  "serde_json",
