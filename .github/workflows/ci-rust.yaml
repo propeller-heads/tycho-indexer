@@ -328,7 +328,14 @@ jobs:
           cache-on-failure: true
 
       - name: cargo check --no-default-features
-        run: cargo check --workspace --no-default-features --locked
+        # Excluded crates are binaries that compile-fail without a rustls
+        # crypto provider feature (`tls-aws-lc-rs` / `tls-ring`), which their
+        # `default` features supply. The workspace-wide check is meaningful for
+        # the lib crates only.
+        run: |
+          cargo check --workspace --no-default-features --locked \
+            --exclude tycho-indexer \
+            --exclude tycho-integration-test
         env:
           RUSTFLAGS: -Dwarnings
 
@@ -339,3 +346,66 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo "No Rust changes detected, skipping no-default-features check"
+
+  check-tls-features:
+    name: Check TLS features
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true' || github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { crate: tycho-client,           tls: tls-aws-lc-rs, extra: "" }
+          - { crate: tycho-client,           tls: tls-ring,      extra: "" }
+          - { crate: tycho-client,           tls: tls-native,    extra: "" }
+          - { crate: tycho-simulation,       tls: tls-aws-lc-rs, extra: "evm,rfq" }
+          - { crate: tycho-simulation,       tls: tls-ring,      extra: "evm,rfq" }
+          - { crate: tycho-simulation,       tls: tls-native,    extra: "evm,rfq" }
+          - { crate: tycho-ethereum,         tls: tls-aws-lc-rs, extra: "" }
+          - { crate: tycho-ethereum,         tls: tls-ring,      extra: "" }
+          - { crate: tycho-ethereum,         tls: tls-native,    extra: "" }
+          - { crate: tycho-execution,        tls: tls-aws-lc-rs, extra: "evm" }
+          - { crate: tycho-execution,        tls: tls-ring,      extra: "evm" }
+          - { crate: tycho-execution,        tls: tls-native,    extra: "evm" }
+          - { crate: tycho-integration-test, tls: tls-aws-lc-rs, extra: "" }
+          - { crate: tycho-integration-test, tls: tls-ring,      extra: "" }
+          # tycho-indexer is binary-only and does not expose tls-native (no
+          # native-tls path through tonic + the alloy reqwest stack it uses).
+          - { crate: tycho-indexer,          tls: tls-aws-lc-rs, extra: "" }
+          - { crate: tycho-indexer,          tls: tls-ring,      extra: "" }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@888c2e1ea69ab0d4330cbf0af1ecc7b68f368cc1  # stable
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6  # v2.7.8
+        with:
+          cache-on-failure: true
+          key: tls-${{ matrix.crate }}-${{ matrix.tls }}
+
+      - name: cargo check
+        env:
+          CRATE: ${{ matrix.crate }}
+          TLS_FEATURE: ${{ matrix.tls }}
+          EXTRA_FEATURES: ${{ matrix.extra }}
+          RUSTFLAGS: -Dwarnings
+        run: |
+          features="$TLS_FEATURE"
+          if [ -n "$EXTRA_FEATURES" ]; then
+            features="$features,$EXTRA_FEATURES"
+          fi
+          cargo check -p "$CRATE" --no-default-features --features "$features" --locked
+
+  check-tls-features-skip:
+    name: Check TLS features
+    needs: [changes]
+    if: needs.changes.outputs.rust != 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "No Rust changes detected, skipping TLS-feature matrix"
