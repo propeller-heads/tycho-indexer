@@ -86,7 +86,35 @@ impl ExtractorConfigs {
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
 
+#[cfg(feature = "tls-aws-lc-rs")]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("install aws-lc-rs default crypto provider");
+    }
+}
+
+#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("install ring default crypto provider");
+    }
+}
+
+// `tycho-indexer` is a binary; tonic, the AWS SDK, and alloy all reach into
+// rustls in the default build, so picking neither provider would leave the
+// process panicking on its first TLS handshake. Force a compile error instead.
+#[cfg(not(any(feature = "tls-aws-lc-rs", feature = "tls-ring")))]
+compile_error!(
+    "tycho-indexer requires one of the rustls crypto providers; build with \
+     `--features tls-aws-lc-rs` (default) or `--features tls-ring`"
+);
+
 fn main() -> Result<(), anyhow::Error> {
+    install_default_crypto_provider();
     let cli: Cli = Cli::parse();
     let global_args = cli.args();
     match cli.command() {

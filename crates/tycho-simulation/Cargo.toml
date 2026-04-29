@@ -51,10 +51,6 @@ tycho-common = { workspace = true }
 tycho-ethereum = { workspace = true }
 
 # EVM dependencies
-# `eip712` is forwarded so `DynSolValue::CustomStruct` is consistently in scope
-# across feature-unified workspace builds (alloy 1.5+ gates that variant on the
-# `eip712` feature; without it, `cargo --all-features` produces a
-# non-exhaustive `DynSolValue` match).
 alloy = { workspace = true, features = [
     "sol-types",
     "rand",
@@ -105,7 +101,7 @@ tracing-appender = { workspace = true }
 dialoguer          = "0.10.4"
 
 [features]
-default = ["evm", "rfq"]
+default = ["evm", "rfq", "tls-aws-lc-rs"]
 network_tests = []
 evm = [
     "dep:foundry-block-explorers",
@@ -122,3 +118,12 @@ rfq = [
     "dep:http",
     "dep:prost",
 ]
+tls-aws-lc-rs = [
+    "reqwest?/rustls",
+    "tokio-tungstenite?/rustls-tls-native-roots",
+]
+tls-ring = [
+    "reqwest?/rustls-no-provider",
+    "tokio-tungstenite?/rustls-tls-native-roots",
+]
+tls-native = ["reqwest?/native-tls", "tokio-tungstenite?/native-tls"]

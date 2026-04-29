@@ -23,3 +23,17 @@ tycho-client = { workspace = true }
 tycho-common = { workspace = true }
 tycho-simulation = { workspace = true, features = ["evm"] }
 tycho-test = { workspace = true }
+rustls.workspace = true
+
+[features]
+default = ["tls-aws-lc-rs"]
+tls-aws-lc-rs = [
+    "rustls/aws-lc-rs",
+    "tycho-client/tls-aws-lc-rs",
+    "tycho-simulation/tls-aws-lc-rs",
+]
+tls-ring = [
+    "rustls/ring",
+    "tycho-client/tls-ring",
+    "tycho-simulation/tls-ring",
+]

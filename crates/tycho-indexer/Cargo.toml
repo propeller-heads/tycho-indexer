@@ -41,7 +41,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-retry = "0.3"
-tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-stream = { workspace = true }
 tonic = { version = "0.13", default-features = false, features = [
     "transport",
     "router",
@@ -49,7 +49,6 @@ tonic = { version = "0.13", default-features = false, features = [
     "prost",
     "gzip",
     "tls-native-roots",
-    "tls-aws-lc",
 ] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
@@ -73,7 +72,9 @@ actix-web-opentelemetry = "0.22.0"
 alloy = { workspace = true, default-features = false, features = [
     "sol-types",
     "reqwest",
+    "reqwest-rustls-tls",
 ] }
+rustls.workspace = true
 aws-config = { version = "1.1.8", features = ["behavior-version-latest"] }
 # Drop default `rustls` feature (= aws-smithy-runtime/tls-rustls = legacy
 # rustls 0.21 + ring + hyper 0.14). Keep sigv4a / default-https-client /
@@ -105,6 +106,15 @@ tycho-substreams = "0.8.0"
 utoipa = { version = "4.2.0", features = ["chrono"] }
 utoipa-swagger-ui = { version = "6.0.0", features = ["actix-web"] }
 zstd = "0.13"
+
+[features]
+# rustls-only: tonic 0.13 does not expose a native-tls path, so the binary
+# does not offer a `tls-native` flag. tycho-indexer always needs a rustls
+# crypto provider (tonic + AWS SDK + alloy all reach into rustls in the
+# default build).
+default = ["tls-aws-lc-rs"]
+tls-aws-lc-rs = ["tonic/tls-aws-lc", "rustls/aws-lc-rs"]
+tls-ring = ["tonic/tls-ring", "rustls/ring"]
 
 [dev-dependencies]
 pretty_assertions.workspace = true

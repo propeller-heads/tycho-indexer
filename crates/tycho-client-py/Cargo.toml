@@ -10,3 +10,4 @@ path = "src/main.rs"
 [dependencies]
 tycho-client = { workspace = true }
 tokio = { workspace = true }
+rustls = { workspace = true, features = ["aws-lc-rs"] }

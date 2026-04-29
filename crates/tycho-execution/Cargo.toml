@@ -46,7 +46,10 @@ rstest         = { workspace = true }
 tycho-execution = { path = ".", features = ["test-utils"] }
 
 [features]
-default = ["evm"]
+default = ["evm", "tls-aws-lc-rs"]
 evm = ["alloy", "reqwest"]
 fork-tests = []
 test-utils = ["async-trait", "typetag"]
+tls-aws-lc-rs = ["reqwest?/rustls"]
+tls-ring = ["reqwest?/rustls-no-provider"]
+tls-native = ["reqwest?/native-tls"]
