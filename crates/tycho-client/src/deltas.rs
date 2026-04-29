@@ -482,7 +482,7 @@ impl WsDeltasClient {
 
     /// Waits for the client to be connected
     ///
-    /// This method acquires the lock for inner for a short period, then waits until the  
+    /// This method acquires the lock for inner for a short period, then waits until the
     /// connection is established if not already connected.
     async fn ensure_connection(&self) -> Result<(), DeltasError> {
         if self.dead.load(Ordering::SeqCst) {
@@ -776,9 +776,18 @@ impl DeltasClient for WsDeltasClient {
                 .await?;
         }
         trace!("Waiting for subscription response");
-        let res = ready_rx.await.map_err(|_| {
-            DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
-        })??;
+        let res = tokio::time::timeout(Duration::from_secs(30), ready_rx)
+            .await
+            .map_err(|_| {
+                DeltasError::TransportError(
+                    "Subscribe confirmation timed out after 30s".to_string(),
+                )
+            })?
+            .map_err(|_| {
+                DeltasError::TransportError(
+                    "Subscription channel closed unexpectedly".to_string(),
+                )
+            })??;
         trace!("Subscription successful");
         Ok(res)
     }
@@ -795,9 +804,19 @@ impl DeltasClient for WsDeltasClient {
 
             WsDeltasClient::unsubscribe_inner(inner, subscription_id, ready_tx).await?;
         }
-        ready_rx.await.map_err(|_| {
-            DeltasError::TransportError("Unsubscribe channel closed unexpectedly".to_string())
-        })?;
+        tokio::time::timeout(Duration::from_secs(5), ready_rx)
+            .await
+            .map_err(|_| {
+                warn!(?subscription_id, "Unsubscribe confirmation timed out after 5s");
+                DeltasError::TransportError(
+                    "Unsubscribe confirmation timed out after 5s".to_string(),
+                )
+            })?
+            .map_err(|_| {
+                DeltasError::TransportError(
+                    "Unsubscribe channel closed unexpectedly".to_string(),
+                )
+            })?;
 
         Ok(())
     }
