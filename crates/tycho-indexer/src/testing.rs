@@ -683,7 +683,8 @@ pub fn block(version: u64) -> Block {
 pub mod fixtures {
     use std::{collections::HashSet, str::FromStr};
 
-    use prost::Message;
+    // tycho-substreams 0.8 implements prost 0.11's `Message` trait; alias points there.
+    use prost_11::Message;
     use tycho_common::{models::protocol::ProtocolComponentStateDelta, Bytes};
     use tycho_storage::postgres::db_fixtures::yesterday_midnight;
     use tycho_substreams::pb::tycho::evm::v1::*;
@@ -810,7 +811,7 @@ pub mod fixtures {
     }
 
     pub fn pb_block_scoped_data(
-        msg: impl prost::Message,
+        msg: impl prost_11::Message,
         cursor: Option<&str>,
         final_block_height: Option<u64>,
     ) -> crate::pb::sf::substreams::rpc::v2::BlockScopedData {

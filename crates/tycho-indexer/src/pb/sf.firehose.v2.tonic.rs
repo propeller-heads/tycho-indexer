@@ -21,7 +21,7 @@ pub mod stream_client {
     }
     impl<T> StreamClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::BoxBody>,
+        T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + Send,
@@ -42,13 +42,13 @@ pub mod stream_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
                 >,
             >,
             <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
             >>::Error: Into<StdError> + Send + Sync,
         {
             StreamClient::new(InterceptedService::new(inner, interceptor))
@@ -114,7 +114,7 @@ pub mod fetch_client {
     }
     impl<T> FetchClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::BoxBody>,
+        T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + Send,
@@ -135,13 +135,13 @@ pub mod fetch_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
                 >,
             >,
             <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
             >>::Error: Into<StdError> + Send + Sync,
         {
             FetchClient::new(InterceptedService::new(inner, interceptor))
@@ -204,7 +204,7 @@ pub mod endpoint_info_client {
     }
     impl<T> EndpointInfoClient<T>
     where
-        T: tonic::client::GrpcService<tonic::body::BoxBody>,
+        T: tonic::client::GrpcService<tonic::body::Body>,
         T::Error: Into<StdError>,
         T::ResponseBody: Body<Data = Bytes> + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<StdError> + Send,
@@ -225,13 +225,13 @@ pub mod endpoint_info_client {
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
             T: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
                 Response = http::Response<
-                    <T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody,
+                    <T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody,
                 >,
             >,
             <T as tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
+                http::Request<tonic::body::Body>,
             >>::Error: Into<StdError> + Send + Sync,
         {
             EndpointInfoClient::new(InterceptedService::new(inner, interceptor))
