@@ -62,7 +62,7 @@ alloy = { workspace = true, features = [
     "json-abi",
     "eip712",
 ], optional = true }
-foundry-block-explorers = { version = "0.22.0", optional = true }
+foundry-block-explorers = { version = "0.23.0", optional = true }
 num-bigint = { workspace = true }
 revm = { version = "29.0.1", features = [
     "alloydb",
@@ -83,9 +83,7 @@ async-trait = { workspace = true, optional = true }
 hex-literal = { workspace = true }
 http = { version = "1.0", optional = true }
 prost = { version = "0.13", optional = true }
-reqwest = { version = "0.12.22", default-features = false, features = [
-    "native-tls",
-], optional = true }
+reqwest = { workspace = true, optional = true }
 tokio-tungstenite = { version = "0.28.0", features = [
     "native-tls",
 ], optional = true }

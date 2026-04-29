@@ -91,8 +91,13 @@ dotenv = "0.15.0"
 deepsize = "0.2.0"
 unicode-segmentation = "1.12.0"
 clap = "4.5.48"
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "json",
+    "stream",
+    "charset",
+    "http2",
+    "system-proxy",
+    "query",
     "native-tls",
 ] }
 

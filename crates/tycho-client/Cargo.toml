@@ -34,7 +34,7 @@ hex.workspace = true
 tracing-appender.workspace = true
 lru.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
-reqwest = { version = "0.12.7", features = ["json", "zstd"] }
+reqwest = { workspace = true, features = ["zstd"] }
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",
