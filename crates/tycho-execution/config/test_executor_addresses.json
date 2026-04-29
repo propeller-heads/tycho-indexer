@@ -25,5 +25,8 @@
   "base": {
     "aerodrome_slipstreams": "0x2a07706473244BC757E10F2a9E86fB532828afe3",
     "aerodrome_v1": "0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6"
+  },
+  "polygon": {
+    "fluid_v2": "0xe8dc788818033232EF9772CB2e6622F1Ec8bc840"
   }
 }

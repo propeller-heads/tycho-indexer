@@ -1,7 +1,9 @@
 pragma solidity ^0.8.26;
 
+import "../TychoRouterTestSetup.sol";
 import {DexKey, FluidV2Executor} from "@src/executors/FluidV2Executor.sol";
 import {Constants} from "../Constants.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Test} from "forge-std/Test.sol";
 import {TransferManager} from "@src/TransferManager.sol";
 
@@ -338,5 +340,62 @@ contract FluidV2ExecutorTest is Test, Constants {
                 START_OPERATION_CALLBACK_SELECTOR, abi.encode(bytes(""))
             )
         );
+    }
+}
+
+contract TychoRouterForFluidV2Test is TychoRouterTestSetup {
+    IERC20 internal constant POLYGON_USDC =
+        IERC20(0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359);
+    IERC20 internal constant POLYGON_USDT0 =
+        IERC20(0xc2132D05D31c914a87C6611C10748AEb04B58e8F);
+
+    function getChain() public pure override returns (string memory) {
+        return "polygon";
+    }
+
+    function getForkBlock() public pure override returns (uint256) {
+        return 80217047;
+    }
+
+    function testSingleSwapUsdcUsdt0() public {
+        uint256 amountIn = 1e6;
+        deal(address(POLYGON_USDC), ALICE, amountIn);
+        uint256 balanceBefore = POLYGON_USDT0.balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        POLYGON_USDC.approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_fluid_v2_polygon_usdc_usdt0"
+        );
+
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 balanceAfter = POLYGON_USDT0.balanceOf(ALICE);
+        assertTrue(success, "Call Failed");
+        assertGt(balanceAfter - balanceBefore, 0);
+        assertEq(POLYGON_USDC.balanceOf(tychoRouterAddr), 0);
+        assertEq(POLYGON_USDT0.balanceOf(tychoRouterAddr), 0);
+    }
+
+    function testSingleSwapUsdcNative() public {
+        uint256 amountIn = 1e6;
+        deal(address(POLYGON_USDC), BOB, amountIn);
+        uint256 balanceBefore = BOB.balance;
+
+        vm.startPrank(BOB);
+        POLYGON_USDC.approve(tychoRouterAddr, type(uint256).max);
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_fluid_v2_polygon_usdc_eth"
+        );
+
+        (bool success,) = tychoRouterAddr.call(callData);
+        vm.stopPrank();
+
+        uint256 balanceAfter = BOB.balance;
+        assertTrue(success, "Call Failed");
+        assertGt(balanceAfter - balanceBefore, 0);
+        assertEq(POLYGON_USDC.balanceOf(tychoRouterAddr), 0);
+        assertEq(tychoRouterAddr.balance, 0);
     }
 }
