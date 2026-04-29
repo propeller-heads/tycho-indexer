@@ -486,11 +486,24 @@ impl WsDeltasClient {
     /// connection is established if not already connected.
     async fn ensure_connection(&self) -> Result<(), DeltasError> {
         if self.dead.load(Ordering::SeqCst) {
-            return Err(DeltasError::NotConnected)
-        };
+            return Err(DeltasError::NotConnected);
+        }
+        if self.is_connected().await {
+            return Ok(());
+        }
+        // Enable the future BEFORE re-checking is_connected to close the race window where
+        // the reconnect task calls notify_waiters() between is_connected() returning false and
+        // notified().await — without enable(), that notification would be lost and this call
+        // would block until the next reconnect.
+        let notified = self.conn_notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
         if !self.is_connected().await {
-            self.conn_notify.notified().await;
-        };
+            notified.await;
+        }
+        if self.dead.load(Ordering::SeqCst) {
+            return Err(DeltasError::NotConnected);
+        }
         Ok(())
     }
 
