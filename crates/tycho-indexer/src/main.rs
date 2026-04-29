@@ -104,15 +104,6 @@ fn install_default_crypto_provider() {
     }
 }
 
-// `tycho-indexer` is a binary; tonic, the AWS SDK, and alloy all reach into
-// rustls in the default build, so picking neither provider would leave the
-// process panicking on its first TLS handshake. Force a compile error instead.
-#[cfg(not(any(feature = "tls-aws-lc-rs", feature = "tls-ring")))]
-compile_error!(
-    "tycho-indexer requires one of the rustls crypto providers; build with \
-     `--features tls-aws-lc-rs` (default) or `--features tls-ring`"
-);
-
 fn main() -> Result<(), anyhow::Error> {
     install_default_crypto_provider();
     let cli: Cli = Cli::parse();

@@ -16,6 +16,10 @@ categories.workspace = true
 [[bin]]
 name = "tycho-indexer"
 path = "src/main.rs"
+# Bin always reaches into rustls (tonic + AWS SDK + alloy). `required-features`
+# makes cargo skip the bin under `--no-default-features` instead of
+# compile-failing, so the workspace-wide `cargo check` stays clean.
+required-features = ["tls-aws-lc-rs"]
 
 [dependencies]
 actix = "0.13.1"

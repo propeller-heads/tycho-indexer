@@ -3,6 +3,14 @@ name = "tycho-integration-test"
 version.workspace = true
 edition.workspace = true
 
+# Binary requires a rustls provider (tycho-client + tycho-simulation TLS
+# clients run inside this harness). `required-features` makes cargo skip the
+# bin under `--no-default-features` instead of failing the build.
+[[bin]]
+name = "tycho-integration-test"
+path = "src/main.rs"
+required-features = ["tls-aws-lc-rs"]
+
 [dependencies]
 actix-web = "4.11.0"
 alloy = { workspace = true, features = ["rpc-types-eth", "sol-types"] }

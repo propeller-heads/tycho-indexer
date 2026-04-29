@@ -328,14 +328,7 @@ jobs:
           cache-on-failure: true
 
       - name: cargo check --no-default-features
-        # Excluded crates are binaries that compile-fail without a rustls
-        # crypto provider feature (`tls-aws-lc-rs` / `tls-ring`), which their
-        # `default` features supply. The workspace-wide check is meaningful for
-        # the lib crates only.
-        run: |
-          cargo check --workspace --no-default-features --locked \
-            --exclude tycho-indexer \
-            --exclude tycho-integration-test
+        run: cargo check --workspace --no-default-features --locked
         env:
           RUSTFLAGS: -Dwarnings
 

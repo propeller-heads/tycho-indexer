@@ -195,14 +195,6 @@ fn install_default_crypto_provider() {
     }
 }
 
-// Binary requires a rustls provider; the harness drives tycho-client +
-// tycho-simulation TLS clients which both default to the rustls path.
-#[cfg(not(any(feature = "tls-aws-lc-rs", feature = "tls-ring")))]
-compile_error!(
-    "tycho-integration-test requires one of the rustls crypto providers; build with \
-     `--features tls-aws-lc-rs` (default) or `--features tls-ring`"
-);
-
 #[tokio::main]
 async fn main() -> miette::Result<()> {
     install_default_crypto_provider();
