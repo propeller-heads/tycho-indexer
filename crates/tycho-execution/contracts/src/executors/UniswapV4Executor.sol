@@ -542,10 +542,11 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
     function getCallbackTransferData(
         bytes calldata, /* data */
-        address tokenIn
+        address tokenIn,
+        address /* caller */
     )
         external
-        payable
+        view
         returns (TransferManager.TransferType transferType, address receiver)
     {
         receiver = address(poolManager);

@@ -106,13 +106,14 @@ contract SlipstreamsExecutor is IExecutor, ICallback {
 
     function getCallbackTransferData(
         bytes calldata, /* data */
-        address /* tokenIn */
+        address, /* tokenIn */
+        address caller
     )
         external
-        payable
+        pure
         returns (TransferManager.TransferType transferType, address receiver)
     {
         transferType = TransferManager.TransferType.Transfer;
-        receiver = msg.sender;
+        receiver = caller;
     }
 }

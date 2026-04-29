@@ -147,10 +147,11 @@ contract BalancerV3Executor is IExecutor, ICallback {
 
     function getCallbackTransferData(
         bytes calldata, /* data */
-        address /* tokenIn */
+        address, /* tokenIn */
+        address /* caller */
     )
         external
-        payable
+        view
         returns (TransferManager.TransferType transferType, address receiver)
     {
         transferType = TransferManager.TransferType.Transfer;

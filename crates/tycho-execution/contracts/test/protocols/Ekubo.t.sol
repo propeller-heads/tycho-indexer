@@ -105,7 +105,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         bytes memory data = abi.encodePacked(PAY_CALLBACK_SELECTOR);
 
         (TransferManager.TransferType transferType, address receiver) =
-            executor.getCallbackTransferData(data, USDC_ADDR);
+            executor.getCallbackTransferData(data, USDC_ADDR, address(this));
 
         assertEq(
             uint8(transferType), uint8(TransferManager.TransferType.Transfer)
@@ -117,7 +117,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         bytes memory data = abi.encodePacked(LOCKED_SELECTOR);
 
         (TransferManager.TransferType transferType, address receiver) =
-            executor.getCallbackTransferData(data, USDC_ADDR);
+            executor.getCallbackTransferData(data, USDC_ADDR, address(this));
 
         assertEq(uint8(transferType), uint8(TransferManager.TransferType.None));
         assertEq(receiver, address(0));
@@ -127,7 +127,7 @@ contract EkuboExecutorTest is Constants, TestUtils {
         bytes memory data = abi.encodePacked(LOCKED_SELECTOR);
 
         (TransferManager.TransferType transferType, address receiver) =
-            executor.getCallbackTransferData(data, address(0));
+            executor.getCallbackTransferData(data, address(0), address(this));
 
         assertEq(
             uint8(transferType),

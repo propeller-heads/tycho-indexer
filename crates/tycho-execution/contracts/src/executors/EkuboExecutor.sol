@@ -272,9 +272,13 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         );
     }
 
-    function getCallbackTransferData(bytes calldata data, address tokenIn)
+    function getCallbackTransferData(
+        bytes calldata data,
+        address tokenIn,
+        address /* caller */
+    )
         external
-        payable
+        view
         returns (TransferManager.TransferType transferType, address receiver)
     {
         bytes4 selector = bytes4(data[:4]);

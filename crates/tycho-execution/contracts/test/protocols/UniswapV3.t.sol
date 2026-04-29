@@ -29,15 +29,8 @@ contract UniswapV3ExecutorExposed is UniswapV3Executor {
             ? IUniswapV3Pool(msg.sender).token0()
             : IUniswapV3Pool(msg.sender).token1();
 
-        // Use delegatecall to preserve msg.sender
-        bytes memory callData = abi.encodeWithSignature(
-            "getCallbackTransferData(bytes,address)", msg.data, tokenIn
-        );
-        (bool success, bytes memory result) =
-            address(this).delegatecall(callData);
-        require(success, "Delegatecall failed");
-
-        (, address receiver) = abi.decode(result, (uint8, address));
+        (, address receiver) =
+            this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
 
         uint256 amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
@@ -108,8 +101,9 @@ contract UniswapV3ExecutorTest is Test, TestUtils, Constants {
             dataLength,
             protocolData
         );
-        (TransferManager.TransferType transferType, address receiver) =
-            uniswapV3Exposed.getCallbackTransferData(callbackData, WETH_ADDR);
+        (TransferManager.TransferType transferType, address receiver) = uniswapV3Exposed.getCallbackTransferData(
+            callbackData, WETH_ADDR, address(this)
+        );
 
         assertEq(
             uint8(transferType), uint8(TransferManager.TransferType.Transfer)

@@ -209,7 +209,7 @@ contract Dispatcher is TransferManager {
     }
 
     // slither-disable-next-line assembly
-    function _callHandleCallbackOnExecutor(bytes calldata data)
+    function _callHandleCallbackOnExecutor(bytes calldata data, address caller)
         internal
         returns (bytes memory)
     {
@@ -228,9 +228,12 @@ contract Dispatcher is TransferManager {
 
         _validateExecutor(executor);
 
-        (bool transferDataSuccess, bytes memory transferData) = executor.delegatecall(
+        (bool transferDataSuccess, bytes memory transferData) = executor.staticcall(
             abi.encodeWithSelector(
-                ICallback.getCallbackTransferData.selector, data, tokenIn
+                ICallback.getCallbackTransferData.selector,
+                data,
+                tokenIn,
+                caller
             )
         );
 
