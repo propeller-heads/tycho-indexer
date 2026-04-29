@@ -75,7 +75,15 @@ alloy = { workspace = true, default-features = false, features = [
     "reqwest",
 ] }
 aws-config = { version = "1.1.8", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.77"
+# Drop default `rustls` feature (= aws-smithy-runtime/tls-rustls = legacy
+# rustls 0.21 + ring + hyper 0.14). Keep sigv4a / default-https-client /
+# rt-tokio so the SDK still ships an HTTPS client (rustls 0.23 + aws-lc-rs
+# via the default-https-client feature path).
+aws-sdk-s3 = { version = "1.77", default-features = false, features = [
+    "sigv4a",
+    "default-https-client",
+    "rt-tokio",
+] }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 mini-moka = "0.10.3"
