@@ -128,6 +128,10 @@ pub enum RPCError {
     #[error("Failed to parse response: {0}")]
     ParseResponse(String),
 
+    /// The requested block is outside the server's retention window.
+    #[error("Snapshot block is stale: {0}")]
+    StaleBlock(String),
+
     /// Other fatal errors.
     #[error("Fatal error: {0}")]
     Fatal(String),
@@ -137,6 +141,23 @@ pub enum RPCError {
 
     #[error("Server unreachable: {0}")]
     ServerUnreachable(String),
+}
+
+/// Converts an HTTP response body parse failure into the correct `RPCError`.
+///
+/// The tycho server returns plain-text error messages (not JSON) when a requested block falls
+/// outside its retention window. Detecting these here gives callers a typed signal to retry
+/// with a more recent block rather than treating it as an unrecoverable parse failure.
+///
+/// NOTE: The string matching below is coupled to the server's error message text. If those
+/// messages change server-side this silently regresses to `ParseResponse`. Replace with a
+/// structured error code if the server ever returns typed error responses.
+fn parse_error(err: serde_json::Error, body: &str) -> RPCError {
+    if body.contains("version is older than") || body.contains("Could not find Block") {
+        RPCError::StaleBlock(body.to_string())
+    } else {
+        RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+    }
 }
 
 #[cfg_attr(test, automock)]
@@ -1021,7 +1042,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let accounts = serde_json::from_str::<StateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| parse_error(err, &body))?;
         trace!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
@@ -1052,7 +1073,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| parse_error(err, &body))?;
         trace!(?components, "Received protocol_components response from Tycho server");
 
         Ok(components)
@@ -1104,7 +1125,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| parse_error(err, &body))?;
         trace!(?states, "Received protocol_states response from Tycho server");
 
         Ok(states)
@@ -1132,7 +1153,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let tokens = serde_json::from_str::<TokensRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| parse_error(err, &body))?;
 
         Ok(tokens)
     }
@@ -1159,7 +1180,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| parse_error(err, &body))?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
     }
@@ -1188,7 +1209,7 @@ impl RPCClient for HttpRPCClient {
         let component_tvl =
             serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+                parse_error(err, &body)
             })?;
         trace!(?component_tvl, "Received component_tvl response from Tycho server");
         Ok(component_tvl)
@@ -1220,7 +1241,7 @@ impl RPCClient for HttpRPCClient {
         let entrypoints =
             serde_json::from_str::<TracedEntryPointRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse traced_entry_points response: {:?}", &body);
-                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+                parse_error(err, &body)
             })?;
         trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
         Ok(entrypoints)
