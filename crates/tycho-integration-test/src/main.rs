@@ -1200,6 +1200,7 @@ async fn process_state(
             }
         };
         let duration_seconds = start_time.elapsed().as_secs_f64();
+        let estimated_gas = amount_out_result.gas;
         let expected_amount_out = amount_out_result.amount;
         debug!(
             event_type = "get_amount_out_duration",
@@ -1249,6 +1250,7 @@ async fn process_state(
                 component_id: component.id.to_string(),
                 token_in: token_in.address.to_string(),
                 token_out: token_out.address.to_string(),
+                estimated_gas,
             },
         );
     }
@@ -1362,6 +1364,14 @@ fn process_execution_result(
             }
 
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
+
+            if let Some(estimated) = execution_info.estimated_gas.to_f64() {
+                metrics::record_gas_error_ratio(
+                    &execution_info.protocol_system,
+                    estimated,
+                    *gas_used as f64,
+                );
+            }
 
             // Record slippage in statistics
             if let Some(ref stats) = statistics {
