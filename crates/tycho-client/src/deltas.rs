@@ -914,16 +914,31 @@ impl DeltasClient for WsDeltasClient {
                 this.conn_notify.notify_waiters();
                 result = Ok(());
 
+                // If no WS frame arrives within this window the TCP connection is
+                // considered stalled (e.g. network cut without a TCP RST/FIN). The OS
+                // default keepalive fires after ~2 hours; this gives us an
+                // application-level detection that is orders of magnitude faster.
+                const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
                 loop {
                     let res = tokio::select! {
-                        msg = msg_rx.next() => match msg {
-                            Some(msg) => this.handle_msg(msg).await,
-                            None => {
-                                // This code should not be reachable since the stream
-                                // should return ConnectionClosed in the case above
-                                // before it returns None here.
-                                warn!("Websocket connection silently closed, giving up!");
-                                break 'retry
+                        msg_result = tokio::time::timeout(IDLE_TIMEOUT, msg_rx.next()) => {
+                            match msg_result {
+                                Err(_elapsed) => {
+                                    warn!("No WS frame received for {IDLE_TIMEOUT:?}, \
+                                           treating connection as stalled; Reconnecting...");
+                                    retry_count += 1;
+                                    let mut guard = this.inner.as_ref().lock().await;
+                                    *guard = None;
+                                    break; // break inner loop → reconnect
+                                }
+                                Ok(Some(msg)) => this.handle_msg(msg).await,
+                                Ok(None) => {
+                                    // This code should not be reachable since the stream
+                                    // should return ConnectionClosed in the case above
+                                    // before it returns None here.
+                                    warn!("Websocket connection silently closed, giving up!");
+                                    break 'retry
+                                }
                             }
                         },
                         _ = cmd_rx.recv() => {break 'retry},
