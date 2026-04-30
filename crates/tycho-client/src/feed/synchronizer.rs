@@ -422,8 +422,6 @@ where
 
         let result = async {
             info!("Waiting for deltas...");
-            let mut warned_waiting_for_new_block = false;
-            let mut warned_skipping_synced = false;
             // Track the last seen block number such that we know when we get the first partial
             let mut last_block_number: Option<u64> = None;
 
@@ -435,6 +433,8 @@ where
             const MAX_STALE_RETRIES: u32 = 5;
             let mut stale_retries: u32 = 0;
             let (msg, header) = 'init: loop {
+                let mut warned_waiting_for_new_block = false;
+                let mut warned_skipping_synced = false;
                 let mut first_msg = loop {
                     let msg = select! {
                         deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {

@@ -504,6 +504,9 @@ impl WsDeltasClient {
         if self.dead.load(Ordering::SeqCst) {
             return Err(DeltasError::NotConnected);
         }
+        if !self.is_connected().await {
+            return Err(DeltasError::NotConnected);
+        }
         Ok(())
     }
 

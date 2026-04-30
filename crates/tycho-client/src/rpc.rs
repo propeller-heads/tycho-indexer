@@ -1159,7 +1159,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let tokens = serde_json::from_str::<TokensRequestResponse>(&body)
-            .map_err(|err| parse_error(err, &body))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
 
         Ok(tokens)
     }
@@ -1186,7 +1186,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
-            .map_err(|err| parse_error(err, &body))?;
+            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
         trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
         Ok(protocol_systems)
     }
@@ -1215,7 +1215,7 @@ impl RPCClient for HttpRPCClient {
         let component_tvl =
             serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
-                parse_error(err, &body)
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
         trace!(?component_tvl, "Received component_tvl response from Tycho server");
         Ok(component_tvl)
@@ -1247,7 +1247,7 @@ impl RPCClient for HttpRPCClient {
         let entrypoints =
             serde_json::from_str::<TracedEntryPointRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse traced_entry_points response: {:?}", &body);
-                parse_error(err, &body)
+                RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
         trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
         Ok(entrypoints)

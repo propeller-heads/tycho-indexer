@@ -8,7 +8,7 @@ use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
 use futures03::{
     future::join_all,
     stream::FuturesUnordered,
-    StreamExt,
+    FutureExt, StreamExt,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -673,17 +673,21 @@ where
             .ok_or(BlockSynchronizerError::NoSynchronizers)?;
         // init synchronizers; unknown extractors are warned about and skipped rather than
         // crashing the whole client, so a misconfigured protocol doesn't take down valid ones.
-        let extractor_ids: Vec<ExtractorIdentity> = synchronizers.keys().cloned().collect();
-        let init_results = join_all(synchronizers.values_mut().map(|s| s.initialize())).await;
+        let init_results = join_all(
+            synchronizers
+                .iter_mut()
+                .map(|(id, s)| s.initialize().map(|res| (id.clone(), res))),
+        )
+        .await;
         let mut to_skip = Vec::new();
-        for (extractor_id, result) in extractor_ids.iter().zip(init_results) {
+        for (extractor_id, result) in init_results {
             match result {
                 Ok(()) => {}
                 Err(SynchronizerError::RPCError(crate::rpc::RPCError::UnknownExtractor(
                     reason,
                 ))) => {
                     warn!(%extractor_id, %reason, "Extractor not recognised by server, skipping");
-                    to_skip.push(extractor_id.clone());
+                    to_skip.push(extractor_id);
                 }
                 Err(e) => return Err(BlockSynchronizerError::InitializationError(e)),
             }
