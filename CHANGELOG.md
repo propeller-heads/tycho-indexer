@@ -1,3 +1,12 @@
+## [0.278.2](https://github.com/propeller-heads/tycho-indexer/compare/0.278.1...0.278.2) (2026-04-30)
+
+
+### Bug Fixes
+
+* handle short byte slices in ResponseAccount B256 conversion ([f85e888](https://github.com/propeller-heads/tycho-indexer/commit/f85e88805857055c72cd9ae8ce1e61434f925c89))
+* handle short byte slices in ResponseAccount B256 conversion ([#957](https://github.com/propeller-heads/tycho-indexer/issues/957)) ([42467af](https://github.com/propeller-heads/tycho-indexer/commit/42467afab8b1eb7195a8e6fd30ff19a65d110082))
+* remove dead tx fields from simulation ResponseAccount, use TryFrom ([e4df7ad](https://github.com/propeller-heads/tycho-indexer/commit/e4df7adece2b0972b52db71d4bb64517ddeb307d))
+
 ## [0.278.1](https://github.com/propeller-heads/tycho-indexer/compare/0.278.0...0.278.1) (2026-04-30)
 
 ## [0.278.0](https://github.com/propeller-heads/tycho-indexer/compare/0.277.0...0.278.0) (2026-04-30)
