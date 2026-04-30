@@ -800,9 +800,7 @@ impl DeltasClient for WsDeltasClient {
                 )
             })?
             .map_err(|_| {
-                DeltasError::TransportError(
-                    "Subscription channel closed unexpectedly".to_string(),
-                )
+                DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
             })??;
         trace!("Subscription successful");
         Ok(res)
@@ -829,9 +827,7 @@ impl DeltasClient for WsDeltasClient {
                 )
             })?
             .map_err(|_| {
-                DeltasError::TransportError(
-                    "Unsubscribe channel closed unexpectedly".to_string(),
-                )
+                DeltasError::TransportError("Unsubscribe channel closed unexpectedly".to_string())
             })?;
 
         Ok(())

@@ -5,11 +5,7 @@ use std::{
 };
 
 use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
-use futures03::{
-    future::join_all,
-    stream::FuturesUnordered,
-    FutureExt, StreamExt,
-};
+use futures03::{future::join_all, stream::FuturesUnordered, FutureExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
@@ -673,11 +669,10 @@ where
             .ok_or(BlockSynchronizerError::NoSynchronizers)?;
         // init synchronizers; unknown extractors are warned about and skipped rather than
         // crashing the whole client, so a misconfigured protocol doesn't take down valid ones.
-        let init_results = join_all(
-            synchronizers
-                .iter_mut()
-                .map(|(id, s)| s.initialize().map(|res| (id.clone(), res))),
-        )
+        let init_results = join_all(synchronizers.iter_mut().map(|(id, s)| {
+            s.initialize()
+                .map(|res| (id.clone(), res))
+        }))
         .await;
         let mut to_skip = Vec::new();
         for (extractor_id, result) in init_results {

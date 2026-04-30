@@ -757,12 +757,18 @@ where
             while retry_count < self.max_retries {
                 info!(extractor_id=%&self.extractor_id, retry_count, "(Re)starting synchronization loop");
 
-                let prev_block = self.last_synced_block.as_ref().map(|h| h.number);
+                let prev_block = self
+                    .last_synced_block
+                    .as_ref()
+                    .map(|h| h.number);
                 let res = self
                     .state_sync(&mut tx, current_end_rx)
                     .await;
-                let made_progress =
-                    self.last_synced_block.as_ref().map(|h| h.number) > prev_block;
+                let made_progress = self
+                    .last_synced_block
+                    .as_ref()
+                    .map(|h| h.number) >
+                    prev_block;
                 match res {
                     Ok(()) => {
                         info!(
