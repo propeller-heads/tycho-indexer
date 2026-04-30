@@ -1136,6 +1136,7 @@ impl TestRunner {
                             component_id: component.id.to_string(),
                             token_in: token_in.symbol.clone(),
                             token_out: token_out.symbol.clone(),
+                            estimated_gas: amount_out_result.gas.clone(),
                         },
                     );
                 }

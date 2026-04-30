@@ -64,6 +64,10 @@ pub fn initialize_metrics() {
         "tycho_integration_validation_failures_total",
         "Total number of failed state validations"
     );
+    describe_histogram!(
+        "tycho_integration_simulation_gas_error_ratio",
+        "Absolute gas estimation error as a fraction of actual gas: |estimated - actual| / actual"
+    );
 }
 
 /// Record the duration between block timestamp and component receipt.
@@ -186,6 +190,18 @@ pub fn record_protocol_update_block_delay(block_delay: u64) {
     histogram!("tycho_integration_protocol_update_block_delay_blocks").record(block_delay as f64);
 }
 
+/// Record gas estimation error as |estimated - actual| / actual
+pub fn record_gas_error_ratio(protocol: &str, estimated_gas: f64, actual_gas: f64) {
+    if actual_gas > 0.0 {
+        let ratio = (estimated_gas - actual_gas).abs() / actual_gas;
+        histogram!(
+            "tycho_integration_simulation_gas_error_ratio",
+            "protocol" => protocol.to_string(),
+        )
+        .record(ratio);
+    }
+}
+
 /// Record a failed validation
 pub fn record_validation_failure(protocol: &str) {
     counter!(
@@ -225,6 +241,11 @@ pub async fn create_metrics_exporter(port: u16) -> Result<tokio::task::JoinHandl
         .set_buckets_for_metric(
             Matcher::Full("tycho_integration_protocol_update_block_delay_blocks".to_string()),
             &[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 7.0, 10.0, 15.0, 20.0, 25.0],
+        )
+        .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?
+        .set_buckets_for_metric(
+            Matcher::Full("tycho_integration_simulation_gas_error_ratio".to_string()),
+            &[0.0, 0.02, 0.04, 0.06, 0.08, 0.1, 0.25, 0.5, 1.0],
         )
         .map_err(|e| miette::miette!("Failed to set buckets: {}", e))?;
     let handle = exporter_builder

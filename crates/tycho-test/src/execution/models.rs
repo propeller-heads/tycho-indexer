@@ -20,6 +20,7 @@ pub struct TychoExecutionInput {
     pub component_id: String,
     pub token_in: String,
     pub token_out: String,
+    pub estimated_gas: BigUint,
 }
 
 /// Result of executing a Tycho transaction simulation.
