@@ -34,16 +34,31 @@ hex.workspace = true
 tracing-appender.workspace = true
 lru.workspace = true
 clap = { workspace = true, features = ["derive", "env"] }
-reqwest = { version = "0.12.7", features = ["json", "zstd"] }
+reqwest = { workspace = true, features = ["zstd"] }
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
     "fmt",
     "json",
 ] }
-hyper = "0.14.27"
+http = "1"
 backoff = { version = "0.4.0", features = ["tokio", "futures"] }
 time = "0.3.41"
 zstd = "0.13"
+rustls.workspace = true
+
+[features]
+default = ["tls-aws-lc-rs"]
+tls-aws-lc-rs = [
+    "reqwest/rustls",
+    "tokio-tungstenite/rustls-tls-native-roots",
+    "rustls/aws-lc-rs",
+]
+tls-ring = [
+    "reqwest/rustls-no-provider",
+    "tokio-tungstenite/rustls-tls-native-roots",
+    "rustls/ring",
+]
+tls-native = ["reqwest/native-tls", "tokio-tungstenite/native-tls"]
 
 [dev-dependencies]
 pretty_assertions.workspace = true

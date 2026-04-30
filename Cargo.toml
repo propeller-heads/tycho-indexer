@@ -58,22 +58,24 @@ futures = "0.3.31"
 futures03 = { package = "futures", version = "0.3.31", features = ["compat"] }
 async-trait = "0.1.88"
 async-stream = "0.3.6"
-# Pinned at 0.20 for tycho-client; simulation's rfq feature uses 0.28 directly (separate semver)
-tokio-tungstenite = { version = "0.20.0", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.29.0", default-features = false, features = [
+    "connect",
+    "rustls-tls-native-roots",
+] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 
 # --- Logging & tracing ---
 tracing = "0.1.41"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3.17", default-features = false }
-console-subscriber = "0.2.0"
+console-subscriber = "0.5.0"
 
 # --- Error handling ---
 thiserror = "1"
 anyhow = "1.0.76"
 
 # --- EVM / Blockchain ---
-alloy = { version = "1.1.0", default-features = false }
+alloy = { version = "1.8", default-features = false }
 ethabi = "18.0.0"
 
 # --- Utility ---
@@ -92,9 +94,21 @@ dotenv = "0.15.0"
 deepsize = "0.2.0"
 unicode-segmentation = "1.12.0"
 clap = "4.5.48"
-reqwest = { version = "0.12", default-features = false, features = [
+reqwest = { version = "0.13", default-features = false, features = [
     "json",
-    "native-tls",
+    "stream",
+    "charset",
+    "http2",
+    "system-proxy",
+    "query",
+    "rustls-no-provider",
+] }
+# rustls 0.23 default-features = false; per-crate `tls-aws-lc-rs` /
+# `tls-ring` features pull `aws-lc-rs` / `ring` respectively.
+rustls = { version = "0.23", default-features = false, features = [
+    "std",
+    "logging",
+    "tls12",
 ] }
 
 # --- Storage ---

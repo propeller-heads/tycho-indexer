@@ -177,8 +177,28 @@ struct TychoState {
     component_ids_by_protocol: HashMap<String, HashSet<String>>,
 }
 
+#[cfg(feature = "tls-aws-lc-rs")]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("install aws-lc-rs default crypto provider");
+    }
+}
+
+#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("install ring default crypto provider");
+    }
+}
+
 #[tokio::main]
 async fn main() -> miette::Result<()> {
+    install_default_crypto_provider();
+
     miette::set_hook(Box::new(|_| Box::new(NarratableReportHandler::new())))?;
     dotenv().ok();
     tracing_subscriber::fmt()

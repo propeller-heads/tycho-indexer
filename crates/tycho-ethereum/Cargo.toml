@@ -28,7 +28,7 @@ serde_with = "3.16.1"
 
 # Required dependencies
 alloy = { workspace = true, default-features = false, features = [
-    "reqwest-default-tls",
+    "reqwest",
     "rpc-client",
     "json-rpc",
     "sol-types",
@@ -37,6 +37,12 @@ alloy = { workspace = true, default-features = false, features = [
     "rpc-types-debug",
     "providers",
 ] }
+
+[features]
+default = ["tls-aws-lc-rs"]
+tls-aws-lc-rs = ["alloy/reqwest-rustls-tls"]
+tls-ring = ["alloy/reqwest-rustls-tls"]
+tls-native = ["alloy/reqwest-native-tls"]
 
 [dev-dependencies]
 pretty_assertions.workspace = true

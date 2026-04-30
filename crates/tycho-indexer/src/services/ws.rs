@@ -689,7 +689,7 @@ mod tests {
 
         // Test sending ping message and receiving pong message
         connection
-            .send(Message::Ping(vec![]))
+            .send(Message::Ping(Default::default()))
             .await
             .expect("Failed to send ping message");
 
@@ -866,7 +866,11 @@ mod tests {
             partial_blocks: false,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
         debug!("Sent subscribe message");
@@ -900,7 +904,11 @@ mod tests {
             partial_blocks: false,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
         debug!("Sent subscribe message for second extractor");
@@ -928,7 +936,11 @@ mod tests {
         // Create and send a unsubscribe message from the client
         let action = Command::Unsubscribe { subscription_id: first_subscription_id };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send unsubscribe message");
         debug!("Sent unsubscribe message");
@@ -1014,7 +1026,11 @@ mod tests {
             partial_blocks: false,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
         debug!("Sent subscribe message with compression=true");
@@ -1196,7 +1212,7 @@ mod tests {
                 async move {
                     println!("Client {i} sending subscription request");
                     connection
-                        .send(Message::Text(msg_text))
+                        .send(Message::Text(msg_text.into()))
                         .await
                         .unwrap_or_else(|_| panic!("Failed to send from client {i}"));
 
@@ -1274,7 +1290,11 @@ mod tests {
             partial_blocks: false,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
 
@@ -1332,7 +1352,11 @@ mod tests {
         let fake_subscription_id = Uuid::new_v4();
         let action = Command::Unsubscribe { subscription_id: fake_subscription_id };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send unsubscribe message");
 
@@ -1389,7 +1413,7 @@ mod tests {
         // Send malformed JSON
         let malformed_json = r#"{"method":"subscribe","invalid_json"#;
         connection
-            .send(Message::Text(malformed_json.to_string()))
+            .send(Message::Text(malformed_json.to_string().into()))
             .await
             .expect("Failed to send malformed message");
 
@@ -1513,7 +1537,11 @@ mod tests {
             partial_blocks: sub_partial_blocks,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
 
@@ -1590,7 +1618,11 @@ mod tests {
             partial_blocks: false,
         };
         connection
-            .send(Message::Text(serde_json::to_string(&action).unwrap()))
+            .send(Message::Text(
+                serde_json::to_string(&action)
+                    .unwrap()
+                    .into(),
+            ))
             .await
             .expect("Failed to send subscribe message");
 

@@ -10,7 +10,9 @@ use chrono::{Duration, NaiveDateTime};
 use deepsize::DeepSizeOf;
 use metrics::{counter, gauge, histogram};
 use mockall::automock;
-use prost::Message;
+// tycho-substreams 0.8 still implements prost 0.11's `Message` trait;
+// `prost_11` is the workspace alias for that exact version.
+use prost_11::Message;
 use tokio::{sync::Mutex, task::JoinHandle};
 use tracing::{debug, error, info, info_span, instrument, trace, warn, Instrument};
 use tycho_common::{
@@ -341,14 +343,12 @@ where
             .set(self.protocol_cache.size_of().await as f64);
 
             if let Some(dci_plugin) = &self.dci_plugin {
-                let dci = dci_plugin.lock().await;
                 gauge!(
                     "dci_cache_size",
                     "chain" => self.chain.to_string(),
                     "extractor" => self.name.clone(),
                 )
-                .set(dci.cache_size() as f64);
-                dci.emit_cache_metrics(&self.chain.to_string(), &self.name);
+                .set(dci_plugin.lock().await.cache_size() as f64);
             }
         }
     }
@@ -911,7 +911,8 @@ where
             })?;
         let msg = {
             let msg = if data.type_url.ends_with("BlockChanges") {
-                let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())?;
+                let raw_msg = tycho_substreams::BlockChanges::decode(data.value.as_slice())
+                    .map_err(|e| ExtractionError::DecodeError(e.to_string()))?;
                 trace!(?raw_msg, "Received BlockChanges message");
                 BlockChanges::try_from_message((
                     raw_msg,

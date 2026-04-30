@@ -16,6 +16,10 @@ categories.workspace = true
 [[bin]]
 name = "tycho-indexer"
 path = "src/main.rs"
+# Bin always reaches into rustls (tonic + AWS SDK + alloy). `required-features`
+# makes cargo skip the bin under `--no-default-features` instead of
+# compile-failing, so the workspace-wide `cargo check` stays clean.
+required-features = ["tls-aws-lc-rs"]
 
 [dependencies]
 actix = "0.13.1"
@@ -31,15 +35,25 @@ futures03.workspace = true
 hex.workspace = true
 mockall.workspace = true
 once_cell = "1.18.0"
-prost = "0.11"
-prost-types = "0.11"
+prost = "0.13"
+prost-types = "0.13"
+# tycho-substreams 0.8 types implement prost 0.11 Message; renamed alias to call decode/encode
+# without conflicting with prost 0.13 used for tonic stubs.
+prost_11 = { package = "prost", version = "0.11" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-retry = "0.3"
-tokio-stream = { version = "0.1", features = ["sync"] }
-tonic = { version = "0.9", features = ["tls-roots", "gzip"] }
+tokio-stream = { workspace = true }
+tonic = { version = "0.13", default-features = false, features = [
+    "transport",
+    "router",
+    "codegen",
+    "prost",
+    "gzip",
+    "tls-native-roots",
+] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3.17", default-features = false, features = [
     "env-filter",
@@ -58,36 +72,66 @@ actix-web = { version = "=4.11.0", default-features = false, features = [
 # Pinned: actix-http >=3.12 removed the ws module used by actix-web-actors 4.3.1
 actix-cors = "0.6.5"
 actix-web-actors = "=4.2.0"
-actix-web-opentelemetry = "0.17.0"
+actix-web-opentelemetry = "0.22.0"
 alloy = { workspace = true, default-features = false, features = [
     "sol-types",
     "reqwest",
+    "reqwest-rustls-tls",
 ] }
+rustls.workspace = true
 aws-config = { version = "1.1.8", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1.77"
+# Drop default `rustls` feature (= aws-smithy-runtime/tls-rustls = legacy
+# rustls 0.21 + ring + hyper 0.14). Keep sigv4a / default-https-client /
+# rt-tokio so the SDK still ships an HTTPS client (rustls 0.23 + aws-lc-rs
+# via the default-https-client feature path).
+aws-sdk-s3 = { version = "1.77", default-features = false, features = [
+    "sigv4a",
+    "default-https-client",
+    "rt-tokio",
+] }
 metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 mini-moka = "0.10.3"
 num-bigint = "0.4.4"
 num-traits = "0.2.19"
 num_cpus = "1.16.0"
-opentelemetry = { version = "0.22" }
-opentelemetry-otlp = { version = "0.15", default-features = false, features = [
+opentelemetry = { version = "0.30" }
+opentelemetry-otlp = { version = "0.30", default-features = false, features = [
     "trace",
     "grpc-tonic",
 ] }
-opentelemetry_sdk = { version = "0.22", features = ["rt-tokio"] }
+# BatchSpanProcessor in 0.30 uses a dedicated thread; rt-tokio is only needed
+# for the experimental async-runtime variant which we don't use.
+opentelemetry_sdk = "0.30"
 rand.workspace = true
 serde_yaml = "0.9.32"
-tracing-opentelemetry = { version = "0.23", default-features = false }
-tycho-substreams = "0.6.0"
+tracing-opentelemetry = { version = "0.31", default-features = false }
+tycho-substreams = "0.8.0"
 utoipa = { version = "4.2.0", features = ["chrono"] }
 utoipa-swagger-ui = { version = "6.0.0", features = ["actix-web"] }
 zstd = "0.13"
 
+[features]
+# rustls-only: tonic 0.13 does not expose a native-tls path, so the binary
+# does not offer a `tls-native` flag. tycho-indexer always needs a rustls
+# crypto provider (tonic + AWS SDK + alloy all reach into rustls in the
+# default build).
+default = ["tls-aws-lc-rs"]
+tls-aws-lc-rs = ["tonic/tls-aws-lc", "rustls/aws-lc-rs"]
+tls-ring = ["tonic/tls-ring", "rustls/ring"]
+
 [dev-dependencies]
 pretty_assertions.workspace = true
 tokio-tungstenite.workspace = true
+# Used by the substreams mock server to host a tonic 0.13 service: tower for
+# `Service`, http-body-util for `BoxBody` / collect, bytes for the payload.
+tower = "0.5"
+http-body-util = "0.1"
+bytes = "1"
+# `net` feature exposes `TcpListenerStream` so the mock can hand its bound
+# listener directly to `Server::serve_with_incoming` (avoids the
+# bind-drop-rebind race the previous mock had).
+tokio-stream = { workspace = true, features = ["net"] }
 rstest.workspace = true
 mockito.workspace = true
 actix-rt = "2.9.0"

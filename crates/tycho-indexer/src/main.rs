@@ -28,7 +28,7 @@ use tokio::{
     signal::unix::{signal, SignalKind},
     task::JoinHandle,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument};
 use tracing_subscriber::EnvFilter;
 use tycho_common::{
     models::{
@@ -86,7 +86,26 @@ impl ExtractorConfigs {
 type ExtractionTasks = Vec<JoinHandle<Result<(), ExtractionError>>>;
 type ServerTasks = Vec<JoinHandle<Result<(), ExtractionError>>>; //TODO: introduce an error type for it
 
+#[cfg(feature = "tls-aws-lc-rs")]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .expect("install aws-lc-rs default crypto provider");
+    }
+}
+
+#[cfg(all(feature = "tls-ring", not(feature = "tls-aws-lc-rs")))]
+fn install_default_crypto_provider() {
+    if rustls::crypto::CryptoProvider::get_default().is_none() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("install ring default crypto provider");
+    }
+}
+
 fn main() -> Result<(), anyhow::Error> {
+    install_default_crypto_provider();
     let cli: Cli = Cli::parse();
     let global_args = cli.args();
     match cli.command() {
@@ -106,28 +125,51 @@ fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn create_tracing_subscriber() {
+/// Returns an [`ot::TracingHandle`] when the OTLP pipeline is initialised; the
+/// handle must be held for the lifetime of the process so the
+/// `BatchSpanProcessor` can flush its buffered spans on `Drop`. Other code paths
+/// (tokio-console, plain stdout, OTLP-init failure) return `None`.
+///
+/// Caller contract: when `OTLP_EXPORTER_ENDPOINT` is set, this must be invoked
+/// from a tokio runtime context (either inside `#[tokio::main]` or under a
+/// `Runtime::enter()` guard). The OTLP grpc-tonic exporter constructs a tonic
+/// `Channel` during build, which captures `Handle::current()`; without that
+/// handle, exports from the `BatchSpanProcessor`'s dedicated thread cannot
+/// drive the underlying hyper executor.
+fn create_tracing_subscriber() -> Option<ot::TracingHandle> {
     // Set up the subscriber
     let console_flag = std::env::var("ENABLE_CONSOLE").unwrap_or_else(|_| "false".to_string());
     if console_flag == "true" {
         console_subscriber::init();
-    } else {
-        // OTLP endpoint is set, construct OTLP pipeline
-        if let Ok(otlp_exporter_endpoint) = std::env::var("OTLP_EXPORTER_ENDPOINT") {
-            let config = ot::TracingConfig { otlp_exporter_endpoint };
-            ot::init_tracing(config).unwrap();
-        } else {
-            warn!("OTLP_EXPORTER_ENDPOINT not set defaulting to stdout subscriber!");
-            let format = tracing_subscriber::fmt::format()
-                .with_level(true)
-                .with_target(false)
-                .compact();
-            tracing_subscriber::fmt()
-                .event_format(format)
-                .with_env_filter(EnvFilter::from_default_env())
-                .init();
-        }
+        return None;
     }
+
+    if let Ok(otlp_exporter_endpoint) = std::env::var("OTLP_EXPORTER_ENDPOINT") {
+        match ot::init_tracing(ot::TracingConfig { otlp_exporter_endpoint }) {
+            Ok(handle) => return Some(handle),
+            Err(err) => {
+                eprintln!(
+                    "Failed to initialise OTLP tracing ({err:#}); falling back to stdout subscriber"
+                );
+            }
+        }
+    } else {
+        eprintln!("OTLP_EXPORTER_ENDPOINT not set, defaulting to stdout subscriber");
+    }
+
+    install_stdout_subscriber();
+    None
+}
+
+fn install_stdout_subscriber() {
+    let format = tracing_subscriber::fmt::format()
+        .with_level(true)
+        .with_target(false)
+        .compact();
+    tracing_subscriber::fmt()
+        .event_format(format)
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
 }
 
 /// Creates and runs the Prometheus metrics exporter using Actix Web.
@@ -197,9 +239,18 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 
     let (control_tx, control_rx) = mpsc::channel();
 
+    // Initialise tracing inside `main_runtime`'s context so the OTLP grpc-tonic
+    // exporter's tonic Channel captures the runtime handle at build time. Drop
+    // the enter guard immediately after — the handle binding outlives the guard
+    // and lives for the rest of `run_indexer`, which is what keeps the
+    // BatchSpanProcessor flushing on `Drop`.
+    let _tracing_handle = {
+        let _enter = main_runtime.enter();
+        create_tracing_subscriber()
+    };
+
     let (extraction_tasks, other_tasks) = main_runtime
         .block_on(async {
-            create_tracing_subscriber();
             let _metrics_task = create_metrics_exporter();
 
             info!("Starting Tycho");
@@ -267,7 +318,7 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 
 #[tokio::main]
 async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), ExtractionError> {
-    create_tracing_subscriber();
+    let _tracing_handle = create_tracing_subscriber();
     info!("Starting Tycho");
 
     let dci_plugin = run_args
@@ -324,7 +375,7 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 
 #[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
-    create_tracing_subscriber();
+    let _tracing_handle = create_tracing_subscriber();
 
     let rpc_client = global_args.rpc.build_client()?;
 
@@ -643,7 +694,7 @@ async fn run_analyze_tokens(
 ) -> Result<(), anyhow::Error> {
     let rpc_client = global_args.rpc.build_client()?;
 
-    create_tracing_subscriber();
+    let _tracing_handle = create_tracing_subscriber();
     let (cached_gw, gw_writer_thread) = GatewayBuilder::new(&global_args.database_url)
         .set_chains(&[analyzer_args.chain])
         .build()

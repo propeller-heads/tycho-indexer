@@ -30,7 +30,7 @@ use std::{
 
 use async_trait::async_trait;
 use futures03::{stream::SplitSink, SinkExt, StreamExt};
-use hyper::{
+use http::{
     header::{
         AUTHORIZATION, CONNECTION, HOST, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE,
         USER_AGENT,
@@ -593,7 +593,7 @@ impl WsDeltasClient {
             Ok(tungstenite::protocol::Message::Binary(data)) => {
                 // Decompress the zstd-compressed data,
                 // Note that we only support compressed BlockChanges messages for now.
-                match zstd::decode_all(data.as_slice()) {
+                match zstd::decode_all(data.as_ref()) {
                     Ok(decompressed) => match serde_json::from_slice::<serde_json::Value>(decompressed.as_slice()) {
                                 Ok(value) => match serde_json::from_value::<WebSocketMessage>(value.clone()) {
                                     Ok(ws_message) => match ws_message {
@@ -630,7 +630,7 @@ impl WsDeltasClient {
                     .as_mut()
                     .ok_or_else(|| DeltasError::NotConnected)?;
                 if let Err(error) = inner
-                    .ws_send(tungstenite::protocol::Message::Pong(Vec::new()))
+                    .ws_send(tungstenite::protocol::Message::Pong(Default::default()))
                     .await
                 {
                     debug!(?error, "Failed to send pong!");
@@ -729,13 +729,15 @@ impl WsDeltasClient {
         inner.end_subscription(&subscription_id, ready_tx);
         let cmd = Command::Unsubscribe { subscription_id };
         inner
-            .ws_send(tungstenite::protocol::Message::Text(serde_json::to_string(&cmd).map_err(
-                |e| {
-                    DeltasError::TransportError(format!(
-                        "Failed to serialize unsubscribe command: {e}"
-                    ))
-                },
-            )?))
+            .ws_send(tungstenite::protocol::Message::Text(
+                serde_json::to_string(&cmd)
+                    .map_err(|e| {
+                        DeltasError::TransportError(format!(
+                            "Failed to serialize unsubscribe command: {e}"
+                        ))
+                    })?
+                    .into(),
+            ))
             .await?;
         Ok(())
     }
@@ -767,11 +769,13 @@ impl DeltasClient for WsDeltasClient {
             };
             inner
                 .ws_send(tungstenite::protocol::Message::Text(
-                    serde_json::to_string(&cmd).map_err(|e| {
-                        DeltasError::TransportError(format!(
-                            "Failed to serialize subscribe command: {e}"
-                        ))
-                    })?,
+                    serde_json::to_string(&cmd)
+                        .map_err(|e| {
+                            DeltasError::TransportError(format!(
+                                "Failed to serialize subscribe command: {e}"
+                            ))
+                        })?
+                        .into(),
                 ))
                 .await?;
         }
@@ -1181,9 +1185,11 @@ mod tests {
     #[tokio::test]
     async fn test_uncompressed_subscribe_receive() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(block_deltas())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(block_deltas().into())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1227,10 +1233,14 @@ mod tests {
         let exp_comm = [
             ExpectedComm::Receive(
                 100,
-                tungstenite::protocol::Message::Text(subscribe_with_compression(true)),
+                tungstenite::protocol::Message::Text(subscribe_with_compression(true).into()),
             ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Binary(compressed_block_deltas)),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Binary(
+                compressed_block_deltas.into(),
+            )),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1266,10 +1276,12 @@ mod tests {
     #[tokio::test]
     async fn test_unsubscribe() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended().into())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1313,9 +1325,11 @@ mod tests {
     #[tokio::test]
     async fn test_subscription_unexpected_end() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended().into())),
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
 
@@ -1354,11 +1368,8 @@ mod tests {
     #[test_log::test(tokio::test)]
     async fn test_reconnect() {
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe()
-            )),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                subscription_confirmation()
-            )),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation().into())),
             ExpectedComm::Send(tungstenite::protocol::Message::Text(r#"
                 {
                     "subscription_id": "30b740d1-cf09-4e0e-8cfe-b1434d447ece",
@@ -1439,7 +1450,7 @@ mod tests {
                         }
                     }
                 }
-                "#.to_owned()
+                "#.to_owned().into()
             ))
         ];
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 1).await;
@@ -1581,12 +1592,12 @@ mod tests {
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    subscribe(),
+                    subscribe().into(),
                 ),
             ),
             // 2. Server confirms subscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                subscription_confirmation(),
+                subscription_confirmation().into(),
             )),
             // 3. Server sends first message (fills buffer)
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
@@ -1620,7 +1631,7 @@ mod tests {
                         }
                     }
                 }
-                "#.to_owned()
+                "#.to_owned().into()
             )),
             // 4. Server sends second message (triggers buffer overflow and force unsubscribe)
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
@@ -1654,18 +1665,18 @@ mod tests {
                         }
                     }
                 }
-                "#.to_owned()
+                "#.to_owned().into()
             )),
             // 5. Expect unsubscribe command due to buffer full
             ExpectedComm::Receive(
                 100,
                 tungstenite::protocol::Message::Text(
-                    unsubscribe(),
+                    unsubscribe().into(),
                 ),
             ),
             // 6. Server confirms unsubscription
             ExpectedComm::Send(tungstenite::protocol::Message::Text(
-                subscription_ended(),
+                subscription_ended().into(),
             )),
         ]
         };
@@ -1760,8 +1771,8 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1813,12 +1824,14 @@ mod tests {
 
         let exp_comm = [
             // 1. Client subscribes successfully
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
             // 2. Client tries to unsubscribe (server has "restarted" and lost subscription)
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe().into())),
             // 3. Server responds with SubscriptionNotFound (simulating server restart)
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1874,8 +1887,8 @@ mod tests {
 
         let exp_comm = [
             // subscribe first so connect can finish successfully
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1923,9 +1936,9 @@ mod tests {
             // subscribe first so connect can finish successfully
             ExpectedComm::Receive(
                 100,
-                tungstenite::protocol::Message::Text(subscribe_with_compression(true)),
+                tungstenite::protocol::Message::Text(subscribe_with_compression(true).into()),
             ),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -1970,8 +1983,8 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -2021,8 +2034,8 @@ mod tests {
         let error_json = serde_json::to_string(&error_response).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json)),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(error_json.into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;
@@ -2088,11 +2101,13 @@ mod tests {
         let subscription_id = Uuid::from_str(SUBSCRIPTION_ID).unwrap();
 
         let exp_comm = [
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_confirmation())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(subscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(
+                subscription_confirmation().into(),
+            )),
             // Expect only ONE unsubscribe message, even though force_unsubscribe is called twice
-            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe())),
-            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended())),
+            ExpectedComm::Receive(100, tungstenite::protocol::Message::Text(unsubscribe().into())),
+            ExpectedComm::Send(tungstenite::protocol::Message::Text(subscription_ended().into())),
         ];
 
         let (addr, server_thread) = mock_tycho_ws(&exp_comm, 0).await;

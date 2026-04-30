@@ -47,7 +47,7 @@ impl SubstreamsEndpoint {
         {
             "http" => Channel::builder(uri),
             "https" => Channel::builder(uri)
-                .tls_config(ClientTlsConfig::new())
+                .tls_config(ClientTlsConfig::new().with_native_roots())
                 .expect("TLS config on this host is invalid"),
             _ => panic!("invalid uri scheme for firehose endpoint"),
         }
