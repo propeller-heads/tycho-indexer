@@ -1,3 +1,11 @@
+## [0.278.4](https://github.com/propeller-heads/tycho-indexer/compare/0.278.3...0.278.4) (2026-04-30)
+
+
+### Bug Fixes
+
+* **RouterV3 model:** Curve executor token decoding ([#964](https://github.com/propeller-heads/tycho-indexer/issues/964)) ([243fef1](https://github.com/propeller-heads/tycho-indexer/commit/243fef173596c6b2a11a8385f67e18a01a76e797))
+* **RouterV3 model:** Fix curve executor decoding ([2a21bee](https://github.com/propeller-heads/tycho-indexer/commit/2a21bee2064a31f52965bf9fbe078968b8041f16))
+
 ## [0.278.3](https://github.com/propeller-heads/tycho-indexer/compare/0.278.2...0.278.3) (2026-04-30)
 
 
