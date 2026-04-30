@@ -1,3 +1,11 @@
+## [0.278.0](https://github.com/propeller-heads/tycho-indexer/compare/0.277.0...0.278.0) (2026-04-30)
+
+
+### Features
+
+* add RPC for forge test ([c65b5ab](https://github.com/propeller-heads/tycho-indexer/commit/c65b5ab7db4c9e8e012c4c6c5ecdd238707fb617))
+* add RPC for forge test ([#960](https://github.com/propeller-heads/tycho-indexer/issues/960)) ([b22a00d](https://github.com/propeller-heads/tycho-indexer/commit/b22a00d3dd90003f132926d8f219a9b890dd0abe))
+
 ## [0.277.0](https://github.com/propeller-heads/tycho-indexer/compare/0.276.0...0.277.0) (2026-04-29)
 
 
