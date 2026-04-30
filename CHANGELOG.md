@@ -1,3 +1,29 @@
+## [0.278.2](https://github.com/propeller-heads/tycho-indexer/compare/0.278.1...0.278.2) (2026-04-30)
+
+
+### Bug Fixes
+
+* handle short byte slices in ResponseAccount B256 conversion ([f85e888](https://github.com/propeller-heads/tycho-indexer/commit/f85e88805857055c72cd9ae8ce1e61434f925c89))
+* handle short byte slices in ResponseAccount B256 conversion ([#957](https://github.com/propeller-heads/tycho-indexer/issues/957)) ([42467af](https://github.com/propeller-heads/tycho-indexer/commit/42467afab8b1eb7195a8e6fd30ff19a65d110082))
+* remove dead tx fields from simulation ResponseAccount, use TryFrom ([e4df7ad](https://github.com/propeller-heads/tycho-indexer/commit/e4df7adece2b0972b52db71d4bb64517ddeb307d))
+
+## [0.278.1](https://github.com/propeller-heads/tycho-indexer/compare/0.278.0...0.278.1) (2026-04-30)
+
+## [0.278.0](https://github.com/propeller-heads/tycho-indexer/compare/0.277.0...0.278.0) (2026-04-30)
+
+
+### Features
+
+* add RPC for forge test ([c65b5ab](https://github.com/propeller-heads/tycho-indexer/commit/c65b5ab7db4c9e8e012c4c6c5ecdd238707fb617))
+* add RPC for forge test ([#960](https://github.com/propeller-heads/tycho-indexer/issues/960)) ([b22a00d](https://github.com/propeller-heads/tycho-indexer/commit/b22a00d3dd90003f132926d8f219a9b890dd0abe))
+
+## [0.277.0](https://github.com/propeller-heads/tycho-indexer/compare/0.276.0...0.277.0) (2026-04-29)
+
+
+### Features
+
+* add Router V3 model ([#961](https://github.com/propeller-heads/tycho-indexer/issues/961)) ([b5f6d8c](https://github.com/propeller-heads/tycho-indexer/commit/b5f6d8cf40f1d739c69e0b4eaa766a63bf0e8223))
+
 ## [0.276.0](https://github.com/propeller-heads/tycho-indexer/compare/0.275.1...0.276.0) (2026-04-28)
 
 

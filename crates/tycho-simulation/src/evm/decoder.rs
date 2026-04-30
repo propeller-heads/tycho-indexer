@@ -336,7 +336,10 @@ where
                     .get_vm_storage()
                     .iter()
                 {
-                    let account: ResponseAccount = value.clone().into();
+                    let account: ResponseAccount = value
+                        .clone()
+                        .try_into()
+                        .map_err(|e| StreamDecodeError::Fatal(format!("{e}")))?;
 
                     if state_guard.tokens.contains_key(key) {
                         let original_address = account.address;
@@ -638,7 +641,10 @@ where
                 // New proxy token accounts that must overwrite any existing placeholder.
                 let mut new_proxy_accounts: Vec<AccountUpdate> = Vec::new();
                 for (key, value) in deltas.account_updates.iter() {
-                    let mut update: AccountUpdate = value.clone().into();
+                    let mut update: AccountUpdate = value
+                        .clone()
+                        .try_into()
+                        .map_err(|e| StreamDecodeError::Fatal(format!("{e}")))?;
 
                     // TEMP PATCH (ENG-4993)
                     //
