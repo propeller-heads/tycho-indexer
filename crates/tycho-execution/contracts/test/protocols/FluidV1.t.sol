@@ -28,7 +28,7 @@ contract FluidV1ExecutorExposed is FluidV1Executor {
     // The first argument is the token that must be transferred to liquidity.
     function dexCallback(address tokenIn, uint256) public {
         (TransferManager.TransferType transferType, address receiver) =
-            this.getCallbackTransferData(msg.data, tokenIn);
+            this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
         if (transferType == TransferManager.TransferType.Transfer) {
             uint256 amount = abi.decode(msg.data[36:68], (uint256));
             IERC20(tokenIn).transfer(receiver, amount);
@@ -94,7 +94,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
         (TransferManager.TransferType transferType, address receiver) =
-            executor.getCallbackTransferData(data, DAI_ADDR);
+            executor.getCallbackTransferData(data, DAI_ADDR, address(this));
 
         assertEq(
             uint8(transferType), uint8(TransferManager.TransferType.Transfer)
@@ -110,7 +110,7 @@ contract FluidV1ExecutorTest is Test, Constants {
         executor.setCurrentDex(IFluidV1Dex(dexAddress));
 
         (TransferManager.TransferType transferType, address receiver) =
-            executor.getCallbackTransferData(data, address(0));
+            executor.getCallbackTransferData(data, address(0), address(this));
 
         assertEq(
             uint8(transferType), uint8(TransferManager.TransferType.Transfer)

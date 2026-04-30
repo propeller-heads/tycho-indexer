@@ -40,7 +40,16 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             tokenIn = zeroForOne ? currency0 : currency1;
         }
 
-        (, address receiver) = this.getCallbackTransferData(msg.data, tokenIn);
+        (TransferManager.TransferType transferType, address receiver) =
+            this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
+        if (tokenIn == address(0)) {
+            assert(
+                transferType
+                    == TransferManager.TransferType.TransferNativeInExecutor
+            );
+        } else {
+            assert(transferType == TransferManager.TransferType.Transfer);
+        }
         uint256 amount;
         if (sel == this.swapExactInputSingle.selector) {
             amount = uint128(bytes16(stripped[212:228]));

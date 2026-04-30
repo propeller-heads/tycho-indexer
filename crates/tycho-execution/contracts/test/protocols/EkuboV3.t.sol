@@ -21,14 +21,16 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
         // tokenIn starts at byte 72 (4 + 32 + 16 + 20 = 72)
         address tokenIn = address(bytes20(msg.data[72:92]));
 
-        bytes memory callData = abi.encodeWithSignature(
-            "getCallbackTransferData(bytes,address)", msg.data, tokenIn
-        );
-        (bool success, bytes memory result) =
-            address(this).delegatecall(callData);
-        require(success, "Delegatecall failed");
-
-        (, address receiver) = abi.decode(result, (uint8, address));
+        (TransferManager.TransferType transferType, address receiver) =
+            this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
+        if (tokenIn == address(0)) {
+            assert(
+                transferType
+                    == TransferManager.TransferType.TransferNativeInExecutor
+            );
+        } else {
+            assert(transferType == TransferManager.TransferType.Transfer);
+        }
         uint256 amount = uint128(bytes16(msg.data[36:52]));
 
         if (tokenIn != address(0)) {

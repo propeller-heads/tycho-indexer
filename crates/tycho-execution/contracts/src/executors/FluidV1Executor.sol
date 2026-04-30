@@ -157,10 +157,11 @@ contract FluidV1Executor is IExecutor, ICallback {
 
     function getCallbackTransferData(
         bytes calldata, /* data */
-        address /* tokenIn */
+        address, /* tokenIn */
+        address /* caller */
     )
         external
-        payable
+        view
         returns (TransferManager.TransferType transferType, address receiver)
     {
         // This is only called for ERC20 swaps. Native sells use swapIn() (no
