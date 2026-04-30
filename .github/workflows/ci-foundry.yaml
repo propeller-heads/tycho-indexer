@@ -64,6 +64,10 @@ jobs:
       ETH_RPC_URL: ${{ secrets.ETH_RPC_URL }}
       BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
       RPC_URL: ${{ secrets.ETH_RPC_URL }}
+      ARBITRUM_RPC_URL: ${{ secrets.ARBITRUM_RPC_URL_ARCHIVE }}
+      UNICHAIN_RPC_URL: ${{ secrets.UNICHAIN_RPC_URL_ARCHIVE }}
+      BSC_RPC_URL: ${{ secrets.BSC_RPC_URL_ARCHIVE }}
+      POLYGON_RPC_URL: ${{ secrets.POLYGON_RPC_URL_ARCHIVE }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
