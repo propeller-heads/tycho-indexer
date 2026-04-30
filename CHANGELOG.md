@@ -1,3 +1,12 @@
+## [0.278.3](https://github.com/propeller-heads/tycho-indexer/compare/0.278.2...0.278.3) (2026-04-30)
+
+
+### Bug Fixes
+
+* **indexer:** DCI cache unbounded growth from retry params ([#962](https://github.com/propeller-heads/tycho-indexer/issues/962)) ([71fe607](https://github.com/propeller-heads/tycho-indexer/commit/71fe6079bed7a83eb093ca0a7a339d3bd2937494))
+* **indexer:** read retry count across all cache layers before incrementing ([28e01bd](https://github.com/propeller-heads/tycho-indexer/commit/28e01bd8702f2850442ce757d3df5b7899b536af))
+* **indexer:** stop re-broadcasting retry params into DCI cache ([fccb715](https://github.com/propeller-heads/tycho-indexer/commit/fccb715ec02ee9fc1620a27b07334c7ee0d372b7))
+
 ## [0.278.2](https://github.com/propeller-heads/tycho-indexer/compare/0.278.1...0.278.2) (2026-04-30)
 
 
