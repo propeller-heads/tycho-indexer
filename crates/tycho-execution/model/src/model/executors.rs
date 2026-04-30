@@ -29,7 +29,9 @@ use crate::{
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, PartialOrd, Ord)]
 pub enum Executor {
-    // TODO this list is incomplete.
+    // Only executors that give the caller control over the called pool contract were modeled.
+    // When a new executor that fulfills these criteria is added, it needs to be modelled here
+    // too.
     Curve,
     ERC4626,
     FluidV1,
@@ -38,6 +40,8 @@ pub enum Executor {
     UniswapV2,
     UniswapV3,
     Weth,
+    AerodromeV1,
+    LiquidityParty,
 }
 
 /// Return value of [Executor::get_transfer_data]
@@ -58,7 +62,7 @@ pub struct CallbackTransferData {
 
 impl Executor {
     /// Array containing all [Executor]s.
-    pub const VARIANTS: [Executor; 8] = [
+    pub const VARIANTS: [Executor; 10] = [
         Executor::Curve,
         Executor::ERC4626,
         Executor::FluidV1,
@@ -67,6 +71,8 @@ impl Executor {
         Executor::UniswapV2,
         Executor::UniswapV3,
         Executor::Weth,
+        Executor::AerodromeV1,
+        Executor::LiquidityParty,
     ];
 
     /// <https://github.com/propeller-heads/tycho-execution/blob/9b0512c9580617224c7a0d7de781674a2cdc6b62/foundry/interfaces/IExecutor.sol#L41>
@@ -263,6 +269,46 @@ impl Executor {
                     output_to_router: true,
                 })
             }
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/AerodromeV1Executor.sol#L80
+            Self::AerodromeV1 => Ok(TransferData {
+                transfer_type: TransferType::Transfer,
+                receiver: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                    // trying more variants might find some very obscure bugs
+                    // in the future but slows down simulation a lot
+                    // and currently is ignored anyway
+                    Address::SENDER_CONTROLLED,
+                )?,
+                token_in: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
+                    Address::POSSIBLY_ERC20_AND_ZERO,
+                )?,
+                token_out: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
+                    Address::POSSIBLY_ERC20_AND_ZERO,
+                )?,
+                output_to_router: false,
+            }),
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/LiquidityPartyExecutor.sol#L34
+            Self::LiquidityParty => Ok(TransferData {
+                transfer_type: TransferType::Transfer,
+                receiver: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                    // trying more variants might find some very obscure bugs
+                    // in the future but slows down simulation a lot
+                    // and currently is ignored anyway
+                    Address::SENDER_CONTROLLED,
+                )?,
+                token_in: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
+                    Address::POSSIBLY_ERC20_AND_ZERO,
+                )?,
+                token_out: params.request(
+                    ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
+                    Address::POSSIBLY_ERC20_AND_ZERO,
+                )?,
+                output_to_router: false,
+            }),
         }
     }
 
@@ -484,6 +530,44 @@ impl Executor {
                 }
                 Ok(())
             }
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/AerodromeV1Executor.sol#L32
+            Self::AerodromeV1 => {
+                let pool = params.request(
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                    // trying more variants might find some very obscure bugs
+                    // in the future but slows down simulation a lot
+                    // and currently is ignored anyway
+                    Address::SENDER_CONTROLLED,
+                )?;
+                if pool.is_sender_controlled() {
+                    // if the sender controls the pool,
+                    // the actual swap logic doesn't matter
+                    Ok(())
+                } else {
+                    Err(Error::Ignore {
+                        reason: "aerodrome v1 pool not sender controlled. not low hanging fruit. would require simulating real pool".into(),
+                    })
+                }
+            }
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/LiquidityPartyExecutor.sol#L11
+            Self::LiquidityParty => {
+                let pool = params.request(
+                    ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                    // trying more variants might find some very obscure bugs
+                    // in the future but slows down simulation a lot
+                    // and currently is ignored anyway
+                    Address::SENDER_CONTROLLED,
+                )?;
+                if pool.is_sender_controlled() {
+                    // if the sender controls the pool,
+                    // the actual swap logic doesn't matter
+                    Ok(())
+                } else {
+                    Err(Error::Ignore {
+                        reason: "liquidity party pool not sender controlled. not low hanging fruit. would require simulating real pool".into(),
+                    })
+                }
+            }
         }
     }
 
@@ -516,6 +600,8 @@ impl Executor {
                 receiver: state.msg_sender(),
             }),
             Self::Weth => unimplemented!(),
+            Self::AerodromeV1 => unimplemented!(),
+            Self::LiquidityParty => unimplemented!(),
         }
     }
 
@@ -540,6 +626,8 @@ impl Executor {
             // not worth modeling as it has no reverts or side effects
             Self::UniswapV3 => Ok(()),
             Self::Weth => unimplemented!("Weth doesn't use callbacks"),
+            Self::AerodromeV1 => unimplemented!("AerodromeV1 doesn't use callbacks"),
+            Self::LiquidityParty => unimplemented!("LiquidityParty doesn't use callbacks"),
         }
     }
 
@@ -582,6 +670,22 @@ impl Executor {
             Self::UniswapV3 => Address::Router,
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/WethExecutor.sol#L33
             Self::Weth => Address::Router,
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/AerodromeV1Executor.sol#L23
+            Self::AerodromeV1 => params.request(
+                ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                // trying more variants might find some very obscure bugs
+                // in the future but slows down simulation a lot
+                // and currently is ignored anyway
+                Address::SENDER_CONTROLLED,
+            )?,
+            // https://github.com/propeller-heads/tycho-indexer/blob/0d9b01ddbe72c5518fdc79a423ffd19dc7226709/crates/tycho-execution/contracts/src/executors/LiquidityPartyExecutor.sol#L54
+            Self::LiquidityParty => params.request(
+                ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
+                // trying more variants might find some very obscure bugs
+                // in the future but slows down simulation a lot
+                // and currently is ignored anyway
+                Address::SENDER_CONTROLLED,
+            )?,
         })
     }
 }
