@@ -15,6 +15,7 @@
     }
   },
   "base": {},
+  "polygon": {},
   "unichain": {
     "vm:curve": {
       "native_token_address": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
