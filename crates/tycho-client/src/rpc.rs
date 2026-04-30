@@ -132,6 +132,10 @@ pub enum RPCError {
     #[error("Snapshot block is stale: {0}")]
     StaleBlock(String),
 
+    /// The requested extractor does not exist on the server.
+    #[error("Unknown extractor: {0}")]
+    UnknownExtractor(String),
+
     /// Other fatal errors.
     #[error("Fatal error: {0}")]
     Fatal(String),
@@ -155,6 +159,8 @@ pub enum RPCError {
 fn parse_error(err: serde_json::Error, body: &str) -> RPCError {
     if body.contains("version is older than") || body.contains("Could not find Block") {
         RPCError::StaleBlock(body.to_string())
+    } else if body.starts_with("Unknown extractor:") {
+        RPCError::UnknownExtractor(body.to_string())
     } else {
         RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
     }

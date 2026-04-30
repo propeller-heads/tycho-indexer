@@ -6,7 +6,7 @@ use std::{
 
 use chrono::{Duration as ChronoDuration, Local, NaiveDateTime};
 use futures03::{
-    future::{join_all, try_join_all},
+    future::join_all,
     stream::FuturesUnordered,
     StreamExt,
 };
@@ -671,12 +671,29 @@ where
             .synchronizers
             .take()
             .ok_or(BlockSynchronizerError::NoSynchronizers)?;
-        // init synchronizers
-        let init_tasks = synchronizers
-            .values_mut()
-            .map(|s| s.initialize())
-            .collect::<Vec<_>>();
-        try_join_all(init_tasks).await?;
+        // init synchronizers; unknown extractors are warned about and skipped rather than
+        // crashing the whole client, so a misconfigured protocol doesn't take down valid ones.
+        let extractor_ids: Vec<ExtractorIdentity> = synchronizers.keys().cloned().collect();
+        let init_results = join_all(synchronizers.values_mut().map(|s| s.initialize())).await;
+        let mut to_skip = Vec::new();
+        for (extractor_id, result) in extractor_ids.iter().zip(init_results) {
+            match result {
+                Ok(()) => {}
+                Err(SynchronizerError::RPCError(crate::rpc::RPCError::UnknownExtractor(
+                    reason,
+                ))) => {
+                    warn!(%extractor_id, %reason, "Extractor not recognised by server, skipping");
+                    to_skip.push(extractor_id.clone());
+                }
+                Err(e) => return Err(BlockSynchronizerError::InitializationError(e)),
+            }
+        }
+        for id in &to_skip {
+            synchronizers.remove(id);
+        }
+        if synchronizers.is_empty() {
+            return Err(BlockSynchronizerError::NoSynchronizers);
+        }
 
         let mut sync_streams = Vec::with_capacity(synchronizers.len());
         let mut sync_close_senders = Vec::new();
