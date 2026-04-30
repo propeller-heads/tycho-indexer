@@ -144,6 +144,9 @@ pub trait ExtractorExtension: Send + Sync {
 
     /// Returns the approximate size of the internal cache used by this extension, in bytes.
     fn cache_size(&self) -> usize;
+
+    /// Emits granular cache metrics (per-sub-cache size, key counts, top tracked contracts).
+    fn emit_cache_metrics(&self, _chain: &str, _extractor: &str) {}
 }
 
 /// Wrapper to carry a cursor along with another struct.
