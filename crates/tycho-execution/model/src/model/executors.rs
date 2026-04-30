@@ -88,15 +88,15 @@ impl Executor {
                     Address::CURVE_TOKENS,
                 )?;
 
-                if token_in == Address::CurveNative {
-                    token_in = Address::Zero;
-                }
-
                 let transfer_type = if token_in == Address::CurveNative {
                     TransferType::TransferNativeInExecutor
                 } else {
                     TransferType::ProtocolWillDebit
                 };
+
+                if token_in == Address::CurveNative {
+                    token_in = Address::Zero;
+                }
 
                 if token_out == Address::CurveNative {
                     token_out = Address::Zero;
