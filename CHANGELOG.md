@@ -1,3 +1,17 @@
+## [0.279.0](https://github.com/propeller-heads/tycho-indexer/compare/0.278.5...0.279.0) (2026-04-30)
+
+
+### Features
+
+* add gas_error_ratio histogram metric for integration tests ([a19e2ac](https://github.com/propeller-heads/tycho-indexer/commit/a19e2ace28b8f5b5db873a4497e106527e10fe18))
+* add gas_error_ratio metric histogram for integration tests ([#968](https://github.com/propeller-heads/tycho-indexer/issues/968)) ([e89e9a8](https://github.com/propeller-heads/tycho-indexer/commit/e89e9a82279d493b67367627f0b8545bd7cef837))
+* wire gas_error_ratio metric emission at execution result callsite ([fa06b51](https://github.com/propeller-heads/tycho-indexer/commit/fa06b51e76bc4b1bebdc6e9b0779a065e45e5890))
+
+
+### Bug Fixes
+
+* add missing field ([e384d5d](https://github.com/propeller-heads/tycho-indexer/commit/e384d5dfb9dd9a8d3227e9b2d7537ed91ea90c92))
+
 ## [0.278.5](https://github.com/propeller-heads/tycho-indexer/compare/0.278.4...0.278.5) (2026-04-30)
 
 ## [0.278.4](https://github.com/propeller-heads/tycho-indexer/compare/0.278.3...0.278.4) (2026-04-30)
