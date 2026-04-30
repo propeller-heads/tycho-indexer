@@ -1,3 +1,10 @@
+## [0.277.0](https://github.com/propeller-heads/tycho-indexer/compare/0.276.0...0.277.0) (2026-04-29)
+
+
+### Features
+
+* add Router V3 model ([#961](https://github.com/propeller-heads/tycho-indexer/issues/961)) ([b5f6d8c](https://github.com/propeller-heads/tycho-indexer/commit/b5f6d8cf40f1d739c69e0b4eaa766a63bf0e8223))
+
 ## [0.276.0](https://github.com/propeller-heads/tycho-indexer/compare/0.275.1...0.276.0) (2026-04-28)
 
 

@@ -3047,6 +3047,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-epoch"
 version = "0.9.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6780,7 +6790,7 @@ dependencies = [
 
 [[package]]
 name = "protocol-testing"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "alloy",
  "clap",
@@ -7673,9 +7683,9 @@ checksum = "56f7d92ca342cea22a06f2121d944b4fd82af56988c270852495420f961d4ace"
 
 [[package]]
 name = "rustc-hash"
-version = "2.1.1"
+version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
+checksum = "94300abf3f1ae2e2b8ffb7b58043de3d399c73fa6f4b73826402a5c457614dbe"
 dependencies = [
  "rand 0.8.5",
 ]
@@ -9649,7 +9659,7 @@ dependencies = [
 
 [[package]]
 name = "tycho"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "tokio",
  "tycho-client",
@@ -9660,7 +9670,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-client"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "async-trait",
  "backoff",
@@ -9694,7 +9704,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-common"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9726,7 +9736,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-ethereum"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "alloy",
  "async-trait",
@@ -9750,7 +9760,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-execution"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "alloy",
  "async-trait",
@@ -9773,7 +9783,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-indexer"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "actix",
  "actix-cors",
@@ -9839,7 +9849,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-integration-test"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "actix-web",
  "alloy",
@@ -9863,8 +9873,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "tycho-router-model"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-deque",
+ "rustc-hash",
+ "serde",
+ "serde_yaml",
+]
+
+[[package]]
 name = "tycho-simulation"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "alloy",
  "alloy-chains",
@@ -9922,7 +9942,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-storage"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -9963,7 +9983,7 @@ dependencies = [
 
 [[package]]
 name = "tycho-test"
-version = "0.276.0"
+version = "0.277.0"
 dependencies = [
  "alloy",
  "alloy-chains",
