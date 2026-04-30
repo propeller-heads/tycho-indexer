@@ -29,8 +29,9 @@ contract SlipstreamsExecutorExposed is SlipstreamsExecutor {
             ? IUniswapV3Pool(msg.sender).token0()
             : IUniswapV3Pool(msg.sender).token1();
 
-        (, address receiver) =
+        (TransferManager.TransferType transferType, address receiver) =
             this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
+        assert(transferType == TransferManager.TransferType.Transfer);
 
         uint256 amount =
             amount0Delta > 0 ? uint256(amount0Delta) : uint256(amount1Delta);
