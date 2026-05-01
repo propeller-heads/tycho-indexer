@@ -181,6 +181,7 @@ impl ProtocolStreamProcessor {
                 "cowamm".to_string(),
                 "ekubo_v3".to_string(),
                 "rocketpool".to_string(),
+                "vm:liquidityparty".to_string(),
             ],
             Chain::Base => vec![
                 "uniswap_v2".to_string(),
@@ -303,6 +304,13 @@ impl ProtocolStreamProcessor {
             }
             "cowamm" => {
                 stream = stream.exchange::<CowAMMState>("cowamm", tvl_filter.clone(), None);
+            }
+            "vm:liquidityparty" => {
+                stream = stream.exchange::<EVMPoolState<PreCachedDB>>(
+                    "vm:liquidityparty",
+                    tvl_filter.clone(),
+                    None,
+                );
             }
             _ => {
                 return Err(miette::miette!("Unknown protocol: {}", protocol));
