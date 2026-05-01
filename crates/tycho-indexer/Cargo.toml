@@ -2,6 +2,7 @@
 name = "tycho-indexer"
 version.workspace = true
 edition.workspace = true
+build = "build.rs"
 description = "Tycho indexer application binary. Runs the actual indexing. Exposes ws and http endpoints to access extracted data"
 repository.workspace = true
 homepage.workspace = true
