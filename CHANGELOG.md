@@ -1,3 +1,18 @@
+## [0.280.0](https://github.com/propeller-heads/tycho-indexer/compare/0.279.0...0.280.0) (2026-05-01)
+
+
+### Features
+
+* add build-time environment diagnostics ([8dd7604](https://github.com/propeller-heads/tycho-indexer/commit/8dd7604f93aa7752d2edd6535d144c9520d73dca))
+* **router v3 model:** Add missing executors ([1c4dfa4](https://github.com/propeller-heads/tycho-indexer/commit/1c4dfa42176fe552850af5bcdae50284c62dd6a3))
+* **router v3 model:** Add missing executors ([#969](https://github.com/propeller-heads/tycho-indexer/issues/969)) ([0894632](https://github.com/propeller-heads/tycho-indexer/commit/08946320a41f5aedb31ffe95b575792488edaacd))
+
+
+### Reverts
+
+* remove build-time feature detection script ([892425f](https://github.com/propeller-heads/tycho-indexer/commit/892425f3f6b3c1ead3f940206f2e68f21c159f8f))
+* remove build-time protocol feature flags ([f897dd3](https://github.com/propeller-heads/tycho-indexer/commit/f897dd304cb1aa1ccab52047c101dea71e2d4ddc))
+
 ## [0.279.0](https://github.com/propeller-heads/tycho-indexer/compare/0.278.5...0.279.0) (2026-04-30)
 
 
