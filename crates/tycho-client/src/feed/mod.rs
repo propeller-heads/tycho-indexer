@@ -757,13 +757,14 @@ where
             .into_iter()
             .collect::<Vec<_>>();
 
-        // Ensures we have at least one ready stream
-        Self::check_streams(&sync_streams)?;
+        // Fail fast if no synchronizer produced a ready first message.
+        Self::require_active_stream(&sync_streams)?;
         let mut block_history = BlockHistory::new(initial_headers, 15)?;
-        // Determine the starting header for synchronization
+        // Determine the starting header for synchronization.
+        // Safe: require_active_stream above guarantees at least one Ready stream,
+        // so initial_headers is non-empty and block_history.latest() is Some.
         let start_header = block_history
             .latest()
-            // Safe, as we have checked this invariant with `check_streams`
             .ok_or(BlockHistoryError::EmptyHistory)?;
         info!(
             start_block=%start_header,
@@ -909,18 +910,15 @@ where
             .any(SynchronizerStream::is_advanced)
         {
             *block_history = Self::reinit_block_history(sync_streams, block_history)?;
-        } else {
-            let header = sync_streams
-                .iter()
-                .filter_map(SynchronizerStream::get_current_header)
-                .max_by_key(|b| b.number)
-                // Safe, as we have checked this invariant with `check_streams`
-                .ok_or(BlockSynchronizerError::NoReadySynchronizers(
-                    "Expected to have at least one synchronizer that is not stale or ended"
-                        .to_string(),
-                ))?;
+        } else if let Some(header) = sync_streams
+            .iter()
+            .filter_map(SynchronizerStream::get_current_header)
+            .max_by_key(|b| b.number)
+        {
             block_history.push(header.clone())?;
         }
+        // If all synchronizers are stale (e.g. WS reconnect in progress), skip block
+        // history update and continue waiting for recovery.
         Ok(())
     }
 
@@ -971,32 +969,67 @@ where
         Ok(new_block_history)
     }
 
-    /// Checks if we still have at least one active stream else errors.
+    /// Startup check: fails if no synchronizer is active (all Stale or Ended at init time).
     ///
-    /// If there are no active streams meaning all are ended or stale, it returns a
-    /// summary error message for the state of all synchronizers.
+    /// Used once before entering the main loop, where all-Stale is a fatal configuration
+    /// problem (nothing to sync from), not a temporary disconnect.
+    fn require_active_stream(sync_streams: &[SynchronizerStream]) -> BlockSyncResult<()> {
+        if sync_streams
+            .iter()
+            .any(|s| !s.has_ended() && !s.is_stale())
+        {
+            return Ok(());
+        }
+        let reason: Vec<String> = sync_streams
+            .iter()
+            .map(|s| {
+                format!("{} reported as {} at {}", s.extractor_id, s.state, s.modify_ts)
+            })
+            .collect();
+        Err(BlockSynchronizerError::NoReadySynchronizers(reason.join(", ")))
+    }
+
+    /// Checks if the main loop should continue or exit.
+    ///
+    /// Returns `Ok` if:
+    /// - At least one synchronizer is active (Ready, Delayed, or Advanced), OR
+    /// - All synchronizers are stale but none have ended — temporary disconnect
+    ///   (e.g. WS reconnect) where recovery is still possible.
+    ///
+    /// Returns `Err` if at least one synchronizer has permanently ended while all
+    /// remaining ones are stale — no recovery path exists.
     fn check_streams(sync_streams: &[SynchronizerStream]) -> BlockSyncResult<()> {
-        let mut latest_errored_stream: Option<&SynchronizerStream> = None;
+        let mut has_any_ended = false;
+        let mut latest_ended_stream: Option<&SynchronizerStream> = None;
 
         for stream in sync_streams.iter() {
-            // If we have at least one active stream, we can return early
+            // If we have at least one active stream (ready, delayed, or advanced), continue.
             if !stream.has_ended() && !stream.is_stale() {
                 return Ok(());
             }
 
-            // Otherwise, we track the latest errored stream for reporting
-            if latest_errored_stream.is_none() ||
-                stream.modify_ts >
-                    latest_errored_stream
-                        .as_ref()
-                        .unwrap()
-                        .modify_ts
-            {
-                latest_errored_stream = Some(stream);
+            if stream.has_ended() {
+                has_any_ended = true;
+                if latest_ended_stream.is_none() ||
+                    stream.modify_ts >
+                        latest_ended_stream
+                            .as_ref()
+                            .unwrap()
+                            .modify_ts
+                {
+                    latest_ended_stream = Some(stream);
+                }
             }
         }
 
-        let last_error_reason = if let Some(stream) = latest_errored_stream {
+        // All streams are stale or ended. If none have ended, all synchronizers are
+        // temporarily disconnected — wait for recovery without exiting the main loop.
+        if !has_any_ended {
+            return Ok(());
+        }
+
+        // At least one synchronizer has permanently ended while all others are stale.
+        let last_error_reason = if let Some(stream) = latest_ended_stream {
             if let Some(err) = &stream.error {
                 format!("Synchronizer for {} errored with: {err}", stream.extractor_id)
             } else {
@@ -1276,14 +1309,14 @@ mod tests {
     }
 
     async fn shutdown_block_synchronizer(
-        v2_sync: &MockStateSync,
-        v3_sync: &MockStateSync,
         nanny_handle: JoinHandle<()>,
+        rx: Receiver<BlockSyncResult<FeedMessage>>,
     ) {
-        v3_sync.trigger_close().await;
-        v2_sync.trigger_close().await;
-
-        timeout(Duration::from_millis(100), nanny_handle)
+        // Dropping the receiver causes the main loop's next send to fail, which exits
+        // the loop. The nanny then calls cleanup_synchronizers, which sends close signals
+        // to the synchronizer tasks via their handle-side channels.
+        drop(rx);
+        timeout(Duration::from_secs(2), nanny_handle)
             .await
             .expect("Nanny failed to exit within time")
             .expect("Nanny panicked");
@@ -1346,7 +1379,7 @@ mod tests {
         };
         assert_eq!(second_feed_msg, exp2);
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
@@ -1427,7 +1460,7 @@ mod tests {
             SynchronizerState::Ready(header) if header.number == 3
         ));
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
@@ -1501,7 +1534,7 @@ mod tests {
             SynchronizerState::Ready(header) if header.number == 3
         ));
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, jh).await;
+        shutdown_block_synchronizer(jh, rx).await;
     }
 
     #[test(tokio::test)]
@@ -1570,7 +1603,7 @@ mod tests {
     #[test(tokio::test)]
     async fn test_one_synchronizer_goes_stale_while_other_works() {
         // Test Case 1: One protocol goes stale and is removed while another protocol works normally
-        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+        let (_v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Send block 2 only to v3, v2 will timeout and become delayed
         let block2_msg = header_message(2);
@@ -1629,81 +1662,178 @@ mod tests {
         }
         assert!(stale_found, "v2 synchronizer should be stale");
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
-    async fn test_all_synchronizers_go_stale_main_loop_exits() {
-        // Test Case 2: All protocols go stale and main loop exits gracefully
+    async fn test_all_synchronizers_stale_loop_continues() {
+        // When all synchronizers go stale simultaneously (simulating a WS reconnect), the
+        // main loop must NOT exit — it should keep running and wait for recovery.
         let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
-        // Stop sending messages to both synchronizers - they should both timeout and go stale
-        // Don't send any more messages, let them timeout and become delayed, then stale
-
-        // Monitor the state transitions to ensure proper delayed -> stale progression
+        // Stop sending messages — both should timeout, go Delayed, then Stale.
         let mut seen_delayed = false;
-
-        // Consume messages and track state transitions
-        // Give enough time for the synchronizers to transition through states
-        let timeout_duration = Duration::from_millis(500); // Generous timeout
+        let mut seen_stale = false;
         let start_time = tokio::time::Instant::now();
 
         while let Ok(Some(Ok(msg))) =
             tokio::time::timeout(Duration::from_millis(50), rx.recv()).await
         {
-            // Track when synchronizers transition to delayed
-            if !seen_delayed {
-                let v2_state = msg.sync_states.get("uniswap-v2");
-                let v3_state = msg.sync_states.get("uniswap-v3");
+            let v2_state = msg.sync_states.get("uniswap-v2");
+            let v3_state = msg.sync_states.get("uniswap-v3");
 
-                if matches!(v2_state, Some(SynchronizerState::Delayed(_))) ||
-                    matches!(v3_state, Some(SynchronizerState::Delayed(_)))
-                {
-                    seen_delayed = true;
-                    // Verify nanny is still running when synchronizers are just delayed
-                    assert!(!nanny_handle.is_finished(),
-                        "Nanny should still be running when synchronizers are delayed (not stale yet)");
-                    // Once we've seen delayed and verified nanny is running, we can break
-                    break;
-                }
+            if !seen_delayed &&
+                (matches!(v2_state, Some(SynchronizerState::Delayed(_))) ||
+                    matches!(v3_state, Some(SynchronizerState::Delayed(_))))
+            {
+                seen_delayed = true;
+                assert!(
+                    !nanny_handle.is_finished(),
+                    "Nanny must still run when synchronizers are Delayed"
+                );
             }
 
-            // Safety timeout to avoid infinite loop
-            if start_time.elapsed() > timeout_duration {
+            if matches!(v2_state, Some(SynchronizerState::Stale(_))) &&
+                matches!(v3_state, Some(SynchronizerState::Stale(_)))
+            {
+                seen_stale = true;
+                assert!(
+                    !nanny_handle.is_finished(),
+                    "Main loop must not exit when all synchronizers are Stale (awaiting recovery)"
+                );
+                break;
+            }
+
+            if start_time.elapsed() > Duration::from_millis(500) {
                 break;
             }
         }
-        // Verify that synchronizers went through proper state transitions
-        assert!(seen_delayed, "Synchronizers should transition to Delayed state first");
 
+        assert!(seen_delayed, "Synchronizers should transition through Delayed first");
+        assert!(seen_stale, "Both synchronizers should reach Stale state");
+
+        // Simulate the underlying synchronizer tasks permanently dying:
+        // trigger_close makes the mock tasks exit (dropping their tx clones), and
+        // dropping the MockStateSyncs closes the original sender side.
+        // This causes SynchronizerStream.rx to return None → Ended → check_streams error.
+        v2_sync.trigger_close().await;
+        v3_sync.trigger_close().await;
+        drop(v2_sync);
+        drop(v3_sync);
+
+        // Now the main loop should detect all-ended and report an error.
         let mut error_reported = false;
-        // Consume any remaining messages until channel closes
         while let Some(msg) = rx.recv().await {
-            if let Err(e) = msg {
-                assert!(e
-                    .to_string()
-                    .contains("became: Stale(1)"));
-                assert!(e
-                    .to_string()
-                    .contains("reported as Stale(1)"));
+            if msg.is_err() {
                 error_reported = true;
             }
         }
-        assert!(error_reported, "Expected the channel to report an error before closing");
+        assert!(error_reported, "Expected an error after all synchronizers ended");
 
-        // The nanny should complete when the main loop exits due to no ready synchronizers
         let nanny_result = timeout(Duration::from_secs(2), nanny_handle).await;
-        assert!(nanny_result.is_ok(), "Nanny should complete when main loop exits");
+        assert!(nanny_result.is_ok(), "Nanny should complete after all synchronizers ended");
+    }
 
-        // Verify cleanup was triggered for both synchronizers
-        assert!(
-            v2_sync.was_close_received().await,
-            "v2_sync should have received close signal during cleanup"
+    #[test(tokio::test)]
+    async fn test_all_synchronizers_recover_after_going_stale() {
+        // Simulates a full WS reconnect: both synchronizers go stale, then reconnect
+        // and send an advanced block. The main loop should rebase block history and resume.
+        let v2_sync = MockStateSync::new();
+        let v3_sync = MockStateSync::new();
+        let block_sync = BlockSynchronizer::new(
+            Duration::from_millis(20),
+            Duration::from_millis(10),
+            3,
+        )
+        .register_synchronizer(
+            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+            v2_sync.clone(),
+        )
+        .register_synchronizer(
+            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+            v3_sync.clone(),
         );
-        assert!(
-            v3_sync.was_close_received().await,
-            "v3_sync should have received close signal during cleanup"
-        );
+
+        v2_sync
+            .send_header(header_message(1))
+            .await
+            .unwrap();
+        v3_sync
+            .send_header(header_message(1))
+            .await
+            .unwrap();
+
+        let (nanny_handle, mut rx) = block_sync
+            .run()
+            .await
+            .expect("BlockSynchronizer start failed");
+
+        let first_msg = receive_message(&mut rx).await;
+        assert!(matches!(
+            first_msg.sync_states.get("uniswap-v2").unwrap(),
+            SynchronizerState::Ready(h) if h.number == 1
+        ));
+        assert!(matches!(
+            first_msg.sync_states.get("uniswap-v3").unwrap(),
+            SynchronizerState::Ready(h) if h.number == 1
+        ));
+
+        // Stop sending messages — both should go Stale.
+        let mut seen_stale = false;
+        let start_time = tokio::time::Instant::now();
+        while let Ok(Some(Ok(msg))) =
+            tokio::time::timeout(Duration::from_millis(50), rx.recv()).await
+        {
+            let v2 = msg.sync_states.get("uniswap-v2").unwrap();
+            let v3 = msg.sync_states.get("uniswap-v3").unwrap();
+            if matches!(v2, SynchronizerState::Stale(_)) &&
+                matches!(v3, SynchronizerState::Stale(_))
+            {
+                seen_stale = true;
+                assert!(
+                    !nanny_handle.is_finished(),
+                    "Main loop must not exit while synchronizers are Stale"
+                );
+                break;
+            }
+            if start_time.elapsed() > Duration::from_millis(500) {
+                break;
+            }
+        }
+        assert!(seen_stale, "Both synchronizers should go Stale");
+
+        // Simulate reconnect: send block 5 (advanced — not connected to block 1).
+        v2_sync
+            .send_header(header_message(5))
+            .await
+            .unwrap();
+        v3_sync
+            .send_header(header_message(5))
+            .await
+            .unwrap();
+
+        // The main loop should detect the advanced blocks, rebase block history, and
+        // reclassify both synchronizers as Ready at block 5.
+        let mut recovered = false;
+        for _ in 0..20 {
+            let msg = receive_message(&mut rx).await;
+            let v2 = msg.sync_states.get("uniswap-v2").unwrap();
+            let v3 = msg.sync_states.get("uniswap-v3").unwrap();
+            if matches!(v2, SynchronizerState::Ready(h) if h.number == 5) &&
+                matches!(v3, SynchronizerState::Ready(h) if h.number == 5)
+            {
+                recovered = true;
+                break;
+            }
+        }
+        assert!(recovered, "Both synchronizers should recover to Ready at block 5");
+
+        // Drop rx to signal the main loop to stop, then await nanny cleanup.
+        drop(rx);
+        timeout(Duration::from_secs(2), nanny_handle)
+            .await
+            .expect("Nanny timed out")
+            .expect("Nanny panicked");
     }
 
     #[test(tokio::test)]
@@ -1794,7 +1924,7 @@ mod tests {
             SynchronizerState::Ready(_)
         ));
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
 
         // Verify cleanup was triggered for both synchronizers
         assert!(
@@ -1838,7 +1968,7 @@ mod tests {
             SynchronizerState::Ready(_)
         );
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
@@ -1870,14 +2000,14 @@ mod tests {
             SynchronizerState::Delayed(_)
         );
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
     async fn test_partial_blocks_normal_operation() {
         // Normal operation: partials with arbitrary index increments, then advance to next block
         // Scenario: block 1 → partials 0,3,7 for block 2 → partials 0,2 for block 3
-        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+        let (v2_sync, _v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Partials for block 2 with arbitrary increments (only v2, v3 ignored)
         send_and_assert_ready(
@@ -1928,14 +2058,14 @@ mod tests {
         )
         .await;
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
     async fn test_partial_blocks_handles_reverts() {
         // Revert resets state and allows continuation on new fork with full blocks
         // Scenario: block 1 → block 2 → partials for block 3 → revert to 2 → full block 3
-        let (v2_sync, v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
+        let (v2_sync, _v3_sync, nanny_handle, mut rx) = setup_block_sync().await;
 
         // Advance to full block 2 (only v2, v3 ignored)
         send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, header_message(2), 2, None).await;
@@ -1967,7 +2097,7 @@ mod tests {
         // New fork: full block 3
         send_and_assert_ready(&v2_sync, "uniswap-v2", &mut rx, header_message(3), 3, None).await;
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 
     #[test(tokio::test)]
@@ -2031,6 +2161,6 @@ mod tests {
         }
         assert!(v3_ready, "v3 caught up to partial 2");
 
-        shutdown_block_synchronizer(&v2_sync, &v3_sync, nanny_handle).await;
+        shutdown_block_synchronizer(nanny_handle, rx).await;
     }
 }
