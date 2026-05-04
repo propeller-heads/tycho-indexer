@@ -7,7 +7,7 @@ use std::{
     fmt::Debug,
     str::FromStr,
     sync::{Arc, RwLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use alloy::{
@@ -155,6 +155,12 @@ struct Cli {
     /// Enable partial block updates (flashblocks) on the tycho stream for lower latency
     #[arg(long, default_value_t = false)]
     partial_blocks: bool,
+
+    /// Seconds without a protocol update before marking all known protocols as stale in metrics.
+    /// Should be at least 2× the chain's expected block time (e.g. 30 for Ethereum at ~12s
+    /// blocks).
+    #[arg(long, default_value_t = 30)]
+    stale_threshold_secs: u64,
 }
 
 impl Debug for Cli {
@@ -329,6 +335,36 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let mut protocol_stream_open = true;
     let mut rfq_stream_open = !cli.disable_rfq;
 
+    // Staleness watchdog: if no protocol update arrives within stale_threshold_secs, mark all
+    // known protocols as Stale in metrics. This catches stream disconnections where the
+    // SynchronizerState gauge would otherwise remain frozen at its last known value.
+    let known_protocols: Arc<RwLock<HashSet<String>>> = Arc::new(RwLock::new(HashSet::new()));
+    let last_protocol_update: Arc<RwLock<Instant>> = Arc::new(RwLock::new(Instant::now()));
+    if !cli.disable_onchain && cli.stale_threshold_secs > 0 {
+        let checker_known = known_protocols.clone();
+        let checker_last = last_protocol_update.clone();
+        let threshold = Duration::from_secs(cli.stale_threshold_secs);
+        tokio::spawn(async move {
+            let interval = threshold / 2;
+            loop {
+                tokio::time::sleep(interval).await;
+                if checker_last
+                    .read()
+                    .expect("Failed to acquire read lock on last_protocol_update")
+                    .elapsed() >
+                    threshold
+                {
+                    let protocols = checker_known
+                        .read()
+                        .expect("Failed to acquire read lock on known_protocols");
+                    for protocol in protocols.iter() {
+                        metrics::mark_protocol_stale(protocol);
+                    }
+                }
+            }
+        });
+    }
+
     loop {
         if !protocol_stream_open && !rfq_stream_open {
             info!("All streams closed, exiting");
@@ -387,6 +423,22 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 continue;
                             }
                         };
+
+                        // Reset the staleness watchdog: record this moment as the last time we saw
+                        // a live update, and register any newly-seen protocol names.
+                        {
+                            let now = Instant::now();
+                            *last_protocol_update
+                                .write()
+                                .expect("Failed to acquire write lock on last_protocol_update") =
+                                now;
+                            let mut protocols = known_protocols
+                                .write()
+                                .expect("Failed to acquire write lock on known_protocols");
+                            for protocol in update.update.sync_states.keys() {
+                                protocols.insert(protocol.clone());
+                            }
+                        }
 
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {
