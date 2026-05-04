@@ -20,11 +20,10 @@ use tycho_indexer::{
         SubstreamsEndpoint,
     },
 };
+use tycho_common::models::protocol::{ProtocolComponent, ProtocolComponentState};
 use tycho_substreams::pb::tycho::evm::v1::BlockChanges;
 use tycho_substreams::pb::tycho::evm::v1::TransactionChanges as ProcessorTxChanges;
-use uniswap_v3_core::processor::{
-    ComponentSnapshot, LogInput, StateSnapshot, TxInput, UniswapV3Processor,
-};
+use uniswap_v3_core::processor::{LogInput, TxInput, UniswapV3Processor};
 
 // UV3 factory deployed at this block on mainnet.
 const START_BLOCK: u64 = 12_369_621;
@@ -364,7 +363,7 @@ async fn test_processor_matches_substreams_genesis_range() {
     // component_changes carry the pool address (id) and its token list.
     // This avoids any RPC calls for pool metadata — the substreams output
     // is the authoritative source.
-    let mut components: Vec<ComponentSnapshot> = Vec::new();
+    let mut components: Vec<ProtocolComponent> = Vec::new();
     let mut known_pool_ids: HashSet<String> = HashSet::new();
 
     for (_, block_changes) in &all_block_changes {
@@ -372,9 +371,10 @@ async fn test_processor_matches_substreams_genesis_range() {
             for comp in &tx.component_changes {
                 let pool_id = normalise_str_id(&comp.id);
                 if known_pool_ids.insert(pool_id.clone()) {
-                    components.push(ComponentSnapshot {
+                    components.push(ProtocolComponent {
                         id: pool_id,
-                        tokens: comp.tokens.clone(),
+                        tokens: comp.tokens.iter().map(|t| t.clone().into()).collect(),
+                        ..Default::default()
                     });
                 }
             }
@@ -395,13 +395,9 @@ async fn test_processor_matches_substreams_genesis_range() {
     );
 
     // ── Step 3: build empty state snapshots (genesis start = zero state) ─────
-    let states: Vec<StateSnapshot> = components
+    let states: Vec<ProtocolComponentState> = components
         .iter()
-        .map(|c| StateSnapshot {
-            component_id: c.id.clone(),
-            attributes: HashMap::new(),
-            balances: HashMap::new(),
-        })
+        .map(|c| ProtocolComponentState::new(&c.id, HashMap::new(), HashMap::new()))
         .collect();
 
     // ── Step 4: fetch tx inputs for the full block range ─────────────────────

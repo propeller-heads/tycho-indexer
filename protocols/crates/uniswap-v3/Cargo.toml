@@ -8,6 +8,7 @@ description = "Shared UniswapV3 indexing logic for native and WASM builds"
 substreams = "0.5.22"
 substreams-ethereum = "0.9.9"
 tycho-substreams = { path = "../../substreams/crates/tycho-substreams" }
+tycho-common = { path = "../../../crates/tycho-common" }
 ethabi = "18.0.0"
 hex = "0.4.3"
 num-bigint = "0.4.4"
