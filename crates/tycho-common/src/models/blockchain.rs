@@ -71,10 +71,32 @@ impl Transaction {
 /// [`ProtocolProcessor`]: crate::traits::ProtocolProcessor
 #[derive(Debug, Clone)]
 pub struct LogInput {
-    pub address: Bytes,
-    pub topics: Vec<Bytes>,
-    pub data: Bytes,
-    pub log_index: u32,
+    address: Bytes,
+    topics: Vec<Bytes>,
+    data: Bytes,
+    log_index: u32,
+}
+
+impl LogInput {
+    pub fn new(address: Bytes, topics: Vec<Bytes>, data: Bytes, log_index: u32) -> Self {
+        Self { address, topics, data, log_index }
+    }
+
+    pub fn address(&self) -> &Bytes {
+        &self.address
+    }
+
+    pub fn topics(&self) -> &[Bytes] {
+        &self.topics
+    }
+
+    pub fn data(&self) -> &Bytes {
+        &self.data
+    }
+
+    pub fn log_index(&self) -> u32 {
+        self.log_index
+    }
 }
 
 /// Raw EVM transaction with its associated logs.
@@ -83,12 +105,49 @@ pub struct LogInput {
 /// have the processor skip reverted ones, avoiding a separate pre-filter.
 #[derive(Debug, Clone)]
 pub struct TxInput {
-    pub hash: Bytes,
-    pub from: Bytes,
-    pub to: Bytes,
-    pub index: u64,
-    pub logs: Vec<LogInput>,
-    pub succeeded: bool,
+    hash: Bytes,
+    from: Bytes,
+    to: Bytes,
+    index: u64,
+    logs: Vec<LogInput>,
+    succeeded: bool,
+}
+
+impl TxInput {
+    pub fn new(
+        hash: Bytes,
+        from: Bytes,
+        to: Bytes,
+        index: u64,
+        logs: Vec<LogInput>,
+        succeeded: bool,
+    ) -> Self {
+        Self { hash, from, to, index, logs, succeeded }
+    }
+
+    pub fn hash(&self) -> &Bytes {
+        &self.hash
+    }
+
+    pub fn from(&self) -> &Bytes {
+        &self.from
+    }
+
+    pub fn to(&self) -> &Bytes {
+        &self.to
+    }
+
+    pub fn index(&self) -> u64 {
+        self.index
+    }
+
+    pub fn logs(&self) -> &[LogInput] {
+        &self.logs
+    }
+
+    pub fn succeeded(&self) -> bool {
+        self.succeeded
+    }
 }
 
 pub struct BlockTransactionDeltas<T> {
