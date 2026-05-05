@@ -169,6 +169,10 @@ Three implementations (`evm/strategy_encoder/`), each targeting a TychoRouter me
 
 There is no `ClientFeeParams` struct on the Rust side. The Solidity struct is encoded as a raw ABI tuple `(uint16,address,uint256,uint256,bytes)` embedded in the function signature strings within each strategy encoder. The caller provides the pre-signed bytes; the Rust encoder just passes them through.
 
+### Gas estimation
+
+`Swap::new(component, token_in: Token, token_out: Token, estimated_gas_usage: BigUint)` carries a per-swap simulation gas estimate (zero if unknown). Encoders aggregate these into `EncodedSolution.gas_usage`, exposing a single estimate for the whole solution. Tokens are passed as `tycho_common::models::token::Token` (not raw `Bytes`); the test helper `default_token(addr)` builds a minimal Token from an address.
+
 ## Build & Test
 
 ### Solidity (Foundry)

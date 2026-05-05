@@ -269,6 +269,8 @@ impl PartialEq for Swap {
 /// * `interacting_with`: Address of the contract to be called.
 /// * `function_signature`: The signature of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
+/// * `gas_usage`: Estimated gas usage for the encoded solution, summed from each swap's
+///   `estimated_gas_usage`.
 #[derive(Clone, Debug)]
 pub struct EncodedSolution {
     /// Encoded swaps to be executed.
