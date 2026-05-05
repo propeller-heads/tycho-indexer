@@ -1,3 +1,11 @@
+## [0.281.1](https://github.com/propeller-heads/tycho-indexer/compare/0.281.0...0.281.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* liquidity party protocol name ([cd0680b](https://github.com/propeller-heads/tycho-indexer/commit/cd0680b29935ae36df087384a501fb4551d0ea69))
+* liquidity party protocol name ([#980](https://github.com/propeller-heads/tycho-indexer/issues/980)) ([163b772](https://github.com/propeller-heads/tycho-indexer/commit/163b772120b9e82ddb80d1880d122a19ccb2866e))
+
 ## [0.281.0](https://github.com/propeller-heads/tycho-indexer/compare/0.280.1...0.281.0) (2026-05-05)
 
 
