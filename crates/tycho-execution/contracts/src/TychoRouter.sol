@@ -680,7 +680,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
 
         uint256 amountOutBeforeFees;
         {
-            address finalReceiver = determineFinalReceiver(
+            address finalReceiver = _determineFinalReceiver(
                 receiver, clientFeeParams.clientFeeBps, routerFeeOnOutputBps
             );
             amountOutBeforeFees = _splitSwap(
@@ -754,7 +754,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         uint16 routerFeeOnOutputBps =
             _callGetEffectiveRouterFeeOnOutput(_feeCalculator, client);
 
-        address finalReceiver = determineFinalReceiver(
+        address finalReceiver = _determineFinalReceiver(
             receiver, clientFeeParams.clientFeeBps, routerFeeOnOutputBps
         );
         uint256 amountOutBeforeFees = _callSwapOnExecutor(
@@ -823,7 +823,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         uint16 routerFeeOnOutputBps =
             _callGetEffectiveRouterFeeOnOutput(_feeCalculator, client);
 
-        address finalReceiver = determineFinalReceiver(
+        address finalReceiver = _determineFinalReceiver(
             receiver, clientFeeParams.clientFeeBps, routerFeeOnOutputBps
         );
         uint256 amountOutBeforeFees =
@@ -1214,7 +1214,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * @param routerFeeOnOutputBps Router fee on output in basis points
      * @return The final receiver address - either the router (for fee processing) or the intended receiver
      */
-    function determineFinalReceiver(
+    function _determineFinalReceiver(
         address receiver,
         uint16 clientFeeBps,
         uint16 routerFeeOnOutputBps

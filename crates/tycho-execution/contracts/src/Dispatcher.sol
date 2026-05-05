@@ -74,7 +74,7 @@ contract Dispatcher is TransferManager {
         }
 
         uint256 timelockExpiresAt = block.timestamp + DELAY_EXECUTOR_ACTIVATION;
-        executorsActivationTimestamp[target] = uint256(timelockExpiresAt);
+        executorsActivationTimestamp[target] = timelockExpiresAt;
         emit ExecutorSet(target, timelockExpiresAt);
     }
 
