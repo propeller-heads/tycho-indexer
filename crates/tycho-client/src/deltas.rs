@@ -482,15 +482,31 @@ impl WsDeltasClient {
 
     /// Waits for the client to be connected
     ///
-    /// This method acquires the lock for inner for a short period, then waits until the  
+    /// This method acquires the lock for inner for a short period, then waits until the
     /// connection is established if not already connected.
     async fn ensure_connection(&self) -> Result<(), DeltasError> {
         if self.dead.load(Ordering::SeqCst) {
-            return Err(DeltasError::NotConnected)
-        };
+            return Err(DeltasError::NotConnected);
+        }
+        if self.is_connected().await {
+            return Ok(());
+        }
+        // Enable the future BEFORE re-checking is_connected to close the race window where
+        // the reconnect task calls notify_waiters() between is_connected() returning false and
+        // notified().await — without enable(), that notification would be lost and this call
+        // would block until the next reconnect.
+        let notified = self.conn_notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
         if !self.is_connected().await {
-            self.conn_notify.notified().await;
-        };
+            notified.await;
+        }
+        if self.dead.load(Ordering::SeqCst) {
+            return Err(DeltasError::NotConnected);
+        }
+        if !self.is_connected().await {
+            return Err(DeltasError::NotConnected);
+        }
         Ok(())
     }
 
@@ -639,7 +655,11 @@ impl WsDeltasClient {
             Ok(tungstenite::protocol::Message::Pong(_)) => {
                 // Do nothing.
             }
-            Ok(tungstenite::protocol::Message::Close(_)) => {
+            Ok(tungstenite::protocol::Message::Close(frame)) => {
+                match &frame {
+                    Some(f) => warn!(code = ?f.code, reason = %f.reason, "WebSocket closed by server"),
+                    None => warn!("WebSocket closed by server (no close frame)"),
+                }
                 return Err(DeltasError::ConnectionClosed);
             }
             Ok(unknown_msg) => {
@@ -776,9 +796,16 @@ impl DeltasClient for WsDeltasClient {
                 .await?;
         }
         trace!("Waiting for subscription response");
-        let res = ready_rx.await.map_err(|_| {
-            DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
-        })??;
+        let res = tokio::time::timeout(Duration::from_secs(30), ready_rx)
+            .await
+            .map_err(|_| {
+                DeltasError::TransportError(
+                    "Subscribe confirmation timed out after 30s".to_string(),
+                )
+            })?
+            .map_err(|_| {
+                DeltasError::TransportError("Subscription channel closed unexpectedly".to_string())
+            })??;
         trace!("Subscription successful");
         Ok(res)
     }
@@ -795,9 +822,17 @@ impl DeltasClient for WsDeltasClient {
 
             WsDeltasClient::unsubscribe_inner(inner, subscription_id, ready_tx).await?;
         }
-        ready_rx.await.map_err(|_| {
-            DeltasError::TransportError("Unsubscribe channel closed unexpectedly".to_string())
-        })?;
+        tokio::time::timeout(Duration::from_secs(5), ready_rx)
+            .await
+            .map_err(|_| {
+                warn!(?subscription_id, "Unsubscribe confirmation timed out after 5s");
+                DeltasError::TransportError(
+                    "Unsubscribe confirmation timed out after 5s".to_string(),
+                )
+            })?
+            .map_err(|_| {
+                DeltasError::TransportError("Unsubscribe channel closed unexpectedly".to_string())
+            })?;
 
         Ok(())
     }
@@ -863,6 +898,20 @@ impl DeltasClient for WsDeltasClient {
                         let mut guard = this.inner.as_ref().lock().await;
                         *guard = None;
 
+                        if let tungstenite::Error::Http(response) = &e {
+                            if response.status() == tungstenite::http::StatusCode::TOO_MANY_REQUESTS
+                            {
+                                let reason = response
+                                    .body()
+                                    .as_deref()
+                                    .and_then(|b| std::str::from_utf8(b).ok())
+                                    .unwrap_or("")
+                                    .to_string();
+                                warn!(reason, "WebSocket connection rejected: rate limited");
+                                continue 'retry;
+                            }
+                        }
+
                         warn!(
                             e = e.to_string(),
                             "Failed to connect to WebSocket server; Reconnecting"
@@ -883,16 +932,31 @@ impl DeltasClient for WsDeltasClient {
                 this.conn_notify.notify_waiters();
                 result = Ok(());
 
+                // If no WS frame arrives within this window the TCP connection is
+                // considered stalled (e.g. network cut without a TCP RST/FIN). The OS
+                // default keepalive fires after ~2 hours; this gives us an
+                // application-level detection that is orders of magnitude faster.
+                const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
                 loop {
                     let res = tokio::select! {
-                        msg = msg_rx.next() => match msg {
-                            Some(msg) => this.handle_msg(msg).await,
-                            None => {
-                                // This code should not be reachable since the stream
-                                // should return ConnectionClosed in the case above
-                                // before it returns None here.
-                                warn!("Websocket connection silently closed, giving up!");
-                                break 'retry
+                        msg_result = tokio::time::timeout(IDLE_TIMEOUT, msg_rx.next()) => {
+                            match msg_result {
+                                Err(_elapsed) => {
+                                    warn!("No WS frame received for {IDLE_TIMEOUT:?}, \
+                                           treating connection as stalled; Reconnecting...");
+                                    retry_count += 1;
+                                    let mut guard = this.inner.as_ref().lock().await;
+                                    *guard = None;
+                                    break; // break inner loop → reconnect
+                                }
+                                Ok(Some(msg)) => this.handle_msg(msg).await,
+                                Ok(None) => {
+                                    // This code should not be reachable since the stream
+                                    // should return ConnectionClosed in the case above
+                                    // before it returns None here.
+                                    warn!("Websocket connection silently closed, giving up!");
+                                    break 'retry
+                                }
                             }
                         },
                         _ = cmd_rx.recv() => {break 'retry},
