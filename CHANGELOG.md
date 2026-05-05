@@ -1,3 +1,11 @@
+## [0.283.0](https://github.com/propeller-heads/tycho-indexer/compare/0.282.0...0.283.0) (2026-05-05)
+
+
+### Features
+
+* **router v3 model:** Consider wasted router funds ([725c59f](https://github.com/propeller-heads/tycho-indexer/commit/725c59f6037a9498a80679ac80fbc9dab9807e41))
+* **router v3 model:** Consider wasted router funds ([#970](https://github.com/propeller-heads/tycho-indexer/issues/970)) ([643e7f8](https://github.com/propeller-heads/tycho-indexer/commit/643e7f8903beaf77c49d39e27a7ae89692a326ad))
+
 ## [0.282.0](https://github.com/propeller-heads/tycho-indexer/compare/0.281.1...0.282.0) (2026-05-05)
 
 
