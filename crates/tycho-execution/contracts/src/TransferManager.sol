@@ -86,25 +86,13 @@ contract TransferManager is Vault {
         bool isPermit2,
         bool useVault
     ) internal {
-        uint256 amountAllowed;
-        uint256 useVaultValue;
-
-        if (useVault) {
-            // Don't allow any transferFrom, and allow vault usage
-            amountAllowed = 0;
-            useVaultValue = 1;
-        } else {
-            // Allow transferFrom for the input amount
-            amountAllowed = amountIn;
-            useVaultValue = 0;
-        }
-
+        uint256 amountAllowed = useVault ? 0 : amountIn;
         assembly {
             tstore(_TOKEN_IN_SLOT, tokenIn)
             tstore(_AMOUNT_ALLOWED_SLOT, amountAllowed)
             tstore(_IS_PERMIT2_SLOT, isPermit2)
             tstore(_SENDER_SLOT, caller())
-            tstore(_USE_VAULT_SLOT, useVaultValue)
+            tstore(_USE_VAULT_SLOT, useVault)
         }
     }
 
