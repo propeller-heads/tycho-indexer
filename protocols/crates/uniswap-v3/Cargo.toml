@@ -12,6 +12,7 @@ tycho-common = { path = "../../../crates/tycho-common" }
 ethabi = "18.0.0"
 hex = "0.4.3"
 num-bigint = "0.4.4"
+num-traits = { workspace = true }
 
 [target.wasm32-unknown-unknown.dependencies]
 getrandom = { version = "0.2", features = ["custom"] }

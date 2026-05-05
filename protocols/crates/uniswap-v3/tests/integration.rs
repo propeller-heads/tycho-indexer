@@ -13,6 +13,11 @@ use alloy::{
 };
 use prost::Message;
 use tokio_stream::StreamExt;
+use tycho_common::{
+    models::blockchain::{LogInput, TxInput, TxWithChanges},
+    traits::ProtocolProcessor,
+    Bytes,
+};
 use tycho_indexer::{
     pb::sf::substreams::v1::Package,
     substreams::{
@@ -22,8 +27,7 @@ use tycho_indexer::{
 };
 use tycho_common::models::protocol::{ProtocolComponent, ProtocolComponentState};
 use tycho_substreams::pb::tycho::evm::v1::BlockChanges;
-use tycho_substreams::pb::tycho::evm::v1::TransactionChanges as ProcessorTxChanges;
-use uniswap_v3_core::processor::{LogInput, TxInput, UniswapV3Processor};
+use uniswap_v3_core::processor::UniswapV3Processor;
 
 // UV3 factory deployed at this block on mainnet.
 const START_BLOCK: u64 = 12_369_621;
@@ -188,12 +192,12 @@ async fn fetch_range_tx_inputs(
         logs_by_key
             .entry((block_num, hash))
             .or_default()
-            .push(LogInput {
-                address: log.address().to_vec(),
-                topics: log.topics().iter().map(|t| t.to_vec()).collect(),
-                data: log.data().data.to_vec(),
-                log_index: log.log_index.unwrap_or_default() as u32,
-            });
+            .push(LogInput::new(
+                Bytes::from(log.address().to_vec()),
+                log.topics().iter().map(|t| Bytes::from(t.to_vec())).collect(),
+                Bytes::from(log.data().data.to_vec()),
+                log.log_index.unwrap_or_default() as u32,
+            ));
     }
 
     let mut result: HashMap<u64, Vec<TxInput>> = HashMap::new();
@@ -205,10 +209,17 @@ async fn fetch_range_tx_inputs(
             .filter_map(|hash| {
                 let (from, to, index) = meta.get(&hash)?.clone();
                 let logs = logs_by_key.remove(&(block_num, hash)).unwrap_or_default();
-                Some(TxInput { hash: hash.to_vec(), from, to, index, logs, succeeded: true })
+                Some(TxInput::new(
+                    Bytes::from(hash.to_vec()),
+                    Bytes::from(from),
+                    Bytes::from(to),
+                    index,
+                    logs,
+                    true,
+                ))
             })
             .collect();
-        tx_inputs.sort_unstable_by_key(|t| t.index);
+        tx_inputs.sort_unstable_by_key(|t| t.index());
         result.insert(block_num, tx_inputs);
     }
 
@@ -287,27 +298,24 @@ fn substreams_to_comparable(
     Some(ComparableTxChanges { tx_hash, attributes, balances })
 }
 
-fn processor_to_comparable(changes: &ProcessorTxChanges) -> ComparableTxChanges {
-    let tx_hash = changes
-        .tx
-        .as_ref()
-        .map_or(String::new(), |t| hex::encode(&t.hash));
+fn processor_to_comparable(changes: &TxWithChanges) -> ComparableTxChanges {
+    let tx_hash = hex::encode(&changes.tx.hash);
 
     let mut attributes: HashMap<String, HashMap<String, Vec<u8>>> = HashMap::new();
     let mut balances: HashMap<(String, String), Vec<u8>> = HashMap::new();
 
-    for ec in &changes.entity_changes {
-        let entry = attributes.entry(ec.component_id.clone()).or_default();
-        for attr in &ec.attributes {
-            entry.insert(attr.name.clone(), attr.value.clone());
+    for (comp_id, state_delta) in &changes.state_updates {
+        let entry = attributes.entry(comp_id.clone()).or_default();
+        for (attr_name, attr_val) in &state_delta.updated_attributes {
+            entry.insert(attr_name.clone(), attr_val.to_vec());
         }
     }
 
-    for bc in &changes.balance_changes {
-        // Processor emits raw address bytes in component_id; encode to hex for comparison.
-        let cid = hex::encode(&bc.component_id);
-        let token = hex::encode(&bc.token);
-        balances.insert((cid, token), bc.balance.clone());
+    for (comp_id, token_balances) in &changes.balance_changes {
+        for (token, cb) in token_balances {
+            let token_hex = hex::encode(token.as_ref());
+            balances.insert((comp_id.clone(), token_hex), cb.balance.to_vec());
+        }
     }
 
     ComparableTxChanges { tx_hash, attributes, balances }
@@ -405,7 +413,7 @@ async fn test_processor_matches_substreams_genesis_range() {
         fetch_range_tx_inputs(&rpc_url, START_BLOCK, stop_block).await;
 
     // ── Step 5: run the native processor block by block ──────────────────────
-    let mut processor = UniswapV3Processor::from_tycho_snapshot(&components, &states);
+    let mut processor = UniswapV3Processor::from_snapshot(&components, &states);
 
     let mut attr_mismatches: Vec<String> = Vec::new();
     let mut balance_mismatches: Vec<String> = Vec::new();
@@ -417,7 +425,7 @@ async fn test_processor_matches_substreams_genesis_range() {
 
     for (block_num, substreams_block) in &all_block_changes {
         let tx_inputs = per_block_inputs.remove(block_num).unwrap_or_default();
-        let processor_output = processor.process_iteration(&tx_inputs);
+        let processor_output = processor.process_block(&tx_inputs);
 
         let substreams_map: HashMap<String, ComparableTxChanges> = substreams_block
             .changes

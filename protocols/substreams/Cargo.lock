@@ -3531,6 +3531,7 @@ dependencies = [
  "getrandom 0.2.17",
  "hex",
  "num-bigint",
+ "num-traits",
  "substreams 0.5.22",
  "substreams-ethereum 0.9.13",
  "tycho-common",
