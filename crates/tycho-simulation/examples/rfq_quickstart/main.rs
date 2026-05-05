@@ -753,10 +753,9 @@ fn create_solution(
     gas_usage: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap =
-        Swap::new(component, sell_token.address.clone(), buy_token.address.clone(), gas_usage)
-            .with_protocol_state(state)
-            .with_estimated_amount_in(sell_amount.clone());
+    let simple_swap = Swap::new(component, sell_token.clone(), buy_token.clone(), gas_usage)
+        .with_protocol_state(state)
+        .with_estimated_amount_in(sell_amount.clone());
 
     // Compute a minimum amount out
     //

@@ -62,7 +62,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         if number_of_groups != 1 {
             return Err(EncodingError::InvalidInput(format!(
                 "Single strategy only supports exactly one swap for non-groupable protocols. Found {number_of_groups}",
-            )))
+            )));
         }
 
         let grouped_swap = grouped_swaps
@@ -72,7 +72,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         if grouped_swap.split != 0f64 {
             return Err(EncodingError::InvalidInput(
                 "Splits not supported for single swaps.".to_string(),
-            ))
+            ));
         }
 
         let protocol = &grouped_swap.protocol_system;
@@ -94,7 +94,7 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
         let mut initial_protocol_data: Vec<u8> = vec![];
         for swap in grouped_swap.swaps.iter() {
             let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-            if encoding_context.group_token_in == *swap.token_in() {
+            if encoding_context.group_token_in == *swap.token_in().address {
                 initial_protocol_data = protocol_data;
             } else {
                 grouped_protocol_data.push(protocol_data);
@@ -201,7 +201,7 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == *swap.token_in() {
+                if encoding_context.group_token_in == *swap.token_in().address {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -346,7 +346,7 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
             let mut initial_protocol_data: Vec<u8> = vec![];
             for swap in grouped_swap.swaps.iter() {
                 let protocol_data = swap_encoder.encode_swap(swap, &encoding_context)?;
-                if encoding_context.group_token_in == *swap.token_in() {
+                if encoding_context.group_token_in == *swap.token_in().address {
                     initial_protocol_data = protocol_data;
                 } else {
                     grouped_protocol_data.push(protocol_data);
@@ -432,7 +432,7 @@ mod tests {
 
     mod single {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
         #[test]
         fn test_single_swap_strategy_encoder() {
             // Performs a single swap from WETH to DAI on a USV2 pool, with no grouping
@@ -447,8 +447,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -486,7 +486,7 @@ mod tests {
 
     mod sequential {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
 
         #[test]
         fn test_sequential_swap_strategy_encoder_no_permit2() {
@@ -504,8 +504,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                wbtc.clone(),
+                default_token(weth.clone()),
+                default_token(wbtc.clone()),
                 BigUint::ZERO,
             );
             let swap_wbtc_usdc = Swap::new(
@@ -514,8 +514,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                wbtc.clone(),
-                usdc.clone(),
+                default_token(wbtc.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -564,7 +564,7 @@ mod tests {
 
     mod split {
         use super::*;
-        use crate::encoding::models::Swap;
+        use crate::encoding::models::{default_token, Swap};
 
         #[test]
         fn test_split_input_cyclic_swap() {
@@ -595,8 +595,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.6f64);
@@ -617,8 +617,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
                 BigUint::ZERO,
             );
 
@@ -638,8 +638,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
@@ -732,8 +732,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
                 BigUint::ZERO,
             );
 
@@ -752,8 +752,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.6f64);
@@ -773,8 +773,8 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             );
 

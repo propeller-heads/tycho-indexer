@@ -7,7 +7,7 @@ use alloy::{
 };
 use num_bigint::{BigInt, BigUint};
 use tycho_common::{
-    models::{protocol::ProtocolComponent, Chain},
+    models::{protocol::ProtocolComponent, token::Token, Chain},
     Bytes,
 };
 use tycho_execution::encoding::{
@@ -73,6 +73,10 @@ fn main() {
     let usdc_addr = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
     let usdt_addr = Bytes::from_str("0xdAC17F958D2ee523a2206206994597C13D831ec7").unwrap();
 
+    let dai = Token::new(&dai_addr, "DAI", 18, 0, &[], Chain::Ethereum, 100);
+    let usdc = Token::new(&usdc_addr, "USDC", 6, 0, &[], Chain::Ethereum, 100);
+    let usdt = Token::new(&usdt_addr, "USDT", 6, 0, &[], Chain::Ethereum, 100);
+
     let swap_dai_usdc = Swap::new(
         ProtocolComponent {
             id: "0x5777d92f208679DB4b9778590Fa3CAB3aC9e2168".to_string(),
@@ -85,8 +89,8 @@ fn main() {
             },
             ..Default::default()
         },
-        dai_addr.clone(),
-        usdc_addr.clone(),
+        dai.clone(),
+        usdc.clone(),
         BigUint::ZERO,
     );
     let swap_usdc_usdt = Swap::new(
@@ -101,8 +105,8 @@ fn main() {
             },
             ..Default::default()
         },
-        usdc_addr.clone(),
-        usdt_addr.clone(),
+        usdc.clone(),
+        usdt.clone(),
         BigUint::ZERO,
     );
 

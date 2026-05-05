@@ -22,11 +22,11 @@ pub trait SwapValidator {
         let mut all_tokens = HashSet::new();
         for swap in swaps {
             graph
-                .entry(swap.token_in())
+                .entry(&swap.token_in().address)
                 .or_default()
-                .insert(swap.token_out());
-            all_tokens.insert(swap.token_in());
-            all_tokens.insert(swap.token_out());
+                .insert(&swap.token_out().address);
+            all_tokens.insert(&swap.token_in().address);
+            all_tokens.insert(&swap.token_out().address);
         }
 
         // BFS from validation_given
@@ -98,7 +98,7 @@ impl SplitSwapValidator {
                 )));
             }
             swaps_by_token
-                .entry(swap.token_in())
+                .entry(&swap.token_in().address)
                 .or_default()
                 .push(swap);
         }
@@ -169,7 +169,7 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::{default_token, Swap};
 
     #[test]
     fn test_validate_path_single_swap() {
@@ -182,8 +182,8 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
             BigUint::ZERO,
         )];
         let result = validator.validate_swap_path(&swaps, &weth, &dai);
@@ -203,8 +203,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.5f64),
@@ -214,8 +214,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                dai.clone(),
-                usdc.clone(),
+                default_token(dai.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             ),
         ];
@@ -238,8 +238,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.5f64),
@@ -250,8 +250,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                wbtc.clone(),
-                usdc.clone(),
+                default_token(wbtc.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             ),
         ];
@@ -275,8 +275,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                usdc.clone(),
-                weth.clone(),
+                default_token(usdc.clone()),
+                default_token(weth.clone()),
                 BigUint::ZERO,
             ),
             Swap::new(
@@ -285,8 +285,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                usdc.clone(),
+                default_token(weth.clone()),
+                default_token(usdc.clone()),
                 BigUint::ZERO,
             ),
         ];
@@ -309,8 +309,8 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
             BigUint::ZERO,
         )
         .with_split(1.0)];
@@ -346,8 +346,8 @@ mod tests {
                 protocol_system: "uniswap_v2".to_string(),
                 ..Default::default()
             },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
             BigUint::ZERO,
         )];
         let result = validator.validate_split_percentages(&swaps);
@@ -368,8 +368,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.5),
@@ -379,8 +379,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.3),
@@ -390,8 +390,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             ),
         ];
@@ -413,8 +413,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.7),
@@ -424,8 +424,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.3),
@@ -449,8 +449,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             ),
             Swap::new(
@@ -459,8 +459,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.5),
@@ -484,8 +484,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.6),
@@ -495,8 +495,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             )
             .with_split(0.5),
@@ -506,8 +506,8 @@ mod tests {
                     protocol_system: "uniswap_v2".to_string(),
                     ..Default::default()
                 },
-                weth.clone(),
-                dai.clone(),
+                default_token(weth.clone()),
+                default_token(dai.clone()),
                 BigUint::ZERO,
             ),
         ];
