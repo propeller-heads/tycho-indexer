@@ -898,6 +898,12 @@ impl HttpRPCClient {
                     .and_then(|h| h.to_str().ok())
                     .and_then(parse_retry_value);
 
+                let reason = response
+                    .text()
+                    .await
+                    .unwrap_or_default();
+                warn!(reason, retry_after = ?retry_after_raw, "Rate limited by server");
+
                 Err(RPCError::RateLimited(retry_after_raw))
             }
             StatusCode::BAD_GATEWAY |

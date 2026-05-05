@@ -655,7 +655,11 @@ impl WsDeltasClient {
             Ok(tungstenite::protocol::Message::Pong(_)) => {
                 // Do nothing.
             }
-            Ok(tungstenite::protocol::Message::Close(_)) => {
+            Ok(tungstenite::protocol::Message::Close(frame)) => {
+                match &frame {
+                    Some(f) => warn!(code = ?f.code, reason = %f.reason, "WebSocket closed by server"),
+                    None => warn!("WebSocket closed by server (no close frame)"),
+                }
                 return Err(DeltasError::ConnectionClosed);
             }
             Ok(unknown_msg) => {
@@ -893,6 +897,19 @@ impl DeltasClient for WsDeltasClient {
                         retry_count += 1;
                         let mut guard = this.inner.as_ref().lock().await;
                         *guard = None;
+
+                        if let tungstenite::Error::Http(response) = &e {
+                            if response.status() == tungstenite::http::StatusCode::TOO_MANY_REQUESTS {
+                                let reason = response
+                                    .body()
+                                    .as_deref()
+                                    .and_then(|b| std::str::from_utf8(b).ok())
+                                    .unwrap_or("")
+                                    .to_string();
+                                warn!(reason, "WebSocket connection rejected: rate limited");
+                                continue 'retry;
+                            }
+                        }
 
                         warn!(
                             e = e.to_string(),
