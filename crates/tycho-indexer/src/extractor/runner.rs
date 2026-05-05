@@ -620,7 +620,7 @@ impl ExtractorBuilder {
                 self.s3_bucket.as_ref().ok_or_else(|| {
                     ExtractionError::Setup(format!(
                         "Missing spkg and s3 bucket config for {}",
-                        &self.config.spkg
+                        self.config.spkg
                     ))
                 })?,
                 &self.config.spkg,
@@ -630,7 +630,7 @@ impl ExtractorBuilder {
             .map_err(|e| {
                 ExtractionError::Setup(format!(
                     "Failed to download {} from s3. {}",
-                    &self.config.spkg, e
+                    self.config.spkg, e
                 ))
             })?;
         }

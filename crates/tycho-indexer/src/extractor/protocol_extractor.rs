@@ -1688,13 +1688,13 @@ impl ExtractorGateway for ExtractorPgGateway {
             let hash: TxHash = tx_update.tx.hash.clone();
 
             // Map new protocol components
-            for (_component_id, new_protocol_component) in tx_update.protocol_components.iter() {
+            for new_protocol_component in tx_update.protocol_components.values() {
                 new_protocol_components.push(new_protocol_component.clone());
                 protocol_tokens.extend(new_protocol_component.tokens.clone());
             }
 
             // Map new accounts/contracts
-            for (_, account_update) in tx_update.account_deltas.iter() {
+            for account_update in tx_update.account_deltas.values() {
                 if account_update.is_creation() {
                     let new: Account = account_update.ref_into_account(&tx_update.tx);
                     info!(block_number = ?changes.block.number, contract_address = ?new.address, "NewContract");

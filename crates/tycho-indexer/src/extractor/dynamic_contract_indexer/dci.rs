@@ -788,7 +788,7 @@ where
             );
 
         // First, populate all TracingParams with None
-        for (_entrypoint_id, params_set) in entrypoints_with_params.iter() {
+        for params_set in entrypoints_with_params.values() {
             for entrypoint_with_params in params_set.iter() {
                 self.cache
                     .entrypoint_results
