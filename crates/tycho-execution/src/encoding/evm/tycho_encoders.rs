@@ -65,7 +65,7 @@ impl TychoRouterEncoder {
 
         let groups = group_swaps(solution.swaps());
 
-        let encoded_solution = if groups.len() == 1 {
+        let mut encoded_solution = if groups.len() == 1 {
             self.single_swap_strategy
                 .encode_strategy(&solution)?
         } else if solution
@@ -79,6 +79,8 @@ impl TychoRouterEncoder {
             self.split_swap_strategy
                 .encode_strategy(&solution)?
         };
+
+        self.estimate_gas_usage(solution, encoded_solution);
 
         Ok(encoded_solution)
     }
@@ -141,6 +143,20 @@ impl TychoRouterEncoder {
         } else {
             None
         }
+    }
+
+    fn estimate_gas_usage(&self, solution: Solution, mut encoded_solution: EncodedSolution) {
+        // loop through solution to see the swaps and if they have estimated_gas_usage assigned
+        //   - if not -> skip and do nothing
+        //   - if yes ->
+        //      - sum up all the swap costs
+        //      - add router overhead
+        //      - add token transfer costs depend on the swap type. also depend on if fees are being
+        //        taken or not
+        //         - for single swaps: is it worth to model properly?
+        //         - for sequential swaps: is it worth to model properly?
+        //         - for split swaps: all transfers need to go through the router
+        //      - add total gas usage to EncodedSolution
     }
 }
 

@@ -169,6 +169,8 @@ pub struct Swap {
     /// Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value
     /// is used to request the quote
     estimated_amount_in: Option<BigUint>,
+    /// Estimated gas usage for this swap by simulation
+    estimated_gas_usage: Option<BigUint>,
 }
 
 impl Swap {
@@ -185,6 +187,7 @@ impl Swap {
             user_data: None,
             protocol_state: None,
             estimated_amount_in: None,
+            estimated_gas_usage: None,
         }
     }
 
@@ -209,6 +212,12 @@ impl Swap {
     /// Sets the estimated amount in for RFQ protocols
     pub fn with_estimated_amount_in(mut self, estimated_amount_in: BigUint) -> Self {
         self.estimated_amount_in = Some(estimated_amount_in);
+        self
+    }
+
+    /// Sets the estimated gas usage
+    pub fn with_estimated_gas_usage(mut self, estimated_gas_usage: BigUint) -> Self {
+        self.estimated_gas_usage = Some(estimated_gas_usage);
         self
     }
 
@@ -239,6 +248,10 @@ impl Swap {
     pub fn estimated_amount_in(&self) -> &Option<BigUint> {
         &self.estimated_amount_in
     }
+
+    pub fn estimated_gas_usage(&self) -> &Option<BigUint> {
+        &self.estimated_gas_usage
+    }
 }
 
 impl PartialEq for Swap {
@@ -259,6 +272,7 @@ impl PartialEq for Swap {
 /// * `interacting_with`: Address of the contract to be called.
 /// * `function_signature`: The signature of the function to be called.
 /// * `n_tokens`: Number of tokens in the swap.
+/// * `gas_usage`: Estimated gas usage for this solution
 #[derive(Clone, Debug)]
 pub struct EncodedSolution {
     /// Encoded swaps to be executed.
@@ -269,6 +283,8 @@ pub struct EncodedSolution {
     function_signature: String,
     /// Number of tokens in the swap.
     n_tokens: usize,
+    /// Estimated gas usage for this solution
+    gas_usage: Option<BigUint>,
 }
 
 impl EncodedSolution {
@@ -278,7 +294,7 @@ impl EncodedSolution {
         function_signature: String,
         n_tokens: usize,
     ) -> Self {
-        Self { swaps, interacting_with, function_signature, n_tokens }
+        Self { swaps, interacting_with, function_signature, n_tokens, gas_usage: None }
     }
 
     pub fn swaps(&self) -> &[u8] {
@@ -295,6 +311,11 @@ impl EncodedSolution {
 
     pub fn n_tokens(&self) -> usize {
         self.n_tokens
+    }
+
+    pub fn with_gas_usage(mut self, gas_usage: BigUint) -> Self {
+        self.gas_usage = Some(gas_usage);
+        self
     }
 }
 
