@@ -5,13 +5,40 @@ use async_trait::async_trait;
 
 use crate::{
     models::{
-        blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint},
+        blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint, TxInput,
+            TxWithChanges},
         contract::AccountDelta,
+        protocol::{ProtocolComponent, ProtocolComponentState},
         token::{Token, TokenQuality, TransferCost, TransferTax},
         Address, Balance, BlockHash, StoreKey,
     },
     Bytes,
 };
+
+/// Processes raw EVM transactions and produces protocol state changes expressed
+/// as [`TxWithChanges`].
+///
+/// Implementors maintain the running in-memory state required to compute
+/// deltas (e.g. running balances, tick liquidity maps) and are initialised
+/// from a Tycho snapshot via [`from_snapshot`][ProtocolProcessor::from_snapshot].
+pub trait ProtocolProcessor: Sized {
+    /// Builds the processor state from a Tycho component/state snapshot.
+    ///
+    /// Components carry the static metadata (token addresses, pool address),
+    /// states carry the dynamic baseline (tick liquidity, balances at snapshot
+    /// height).
+    fn from_snapshot(
+        components: &[ProtocolComponent],
+        states: &[ProtocolComponentState],
+    ) -> Self;
+
+    /// Processes all transactions in one block and returns one [`TxWithChanges`]
+    /// per transaction that produced protocol-relevant changes.
+    ///
+    /// Transactions where `succeeded == false` are silently skipped.
+    /// The returned vec is ordered by transaction index within the block.
+    fn process_block(&mut self, txs: &[TxInput]) -> Vec<TxWithChanges>;
+}
 
 /// A struct representing a request to get an account state.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

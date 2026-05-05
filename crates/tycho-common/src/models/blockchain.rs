@@ -64,6 +64,33 @@ impl Transaction {
     }
 }
 
+/// Raw EVM log emitted by a contract during transaction execution.
+///
+/// Used as the primary input to [`ProtocolProcessor`] implementations.
+///
+/// [`ProtocolProcessor`]: crate::traits::ProtocolProcessor
+#[derive(Debug, Clone)]
+pub struct LogInput {
+    pub address: Bytes,
+    pub topics: Vec<Bytes>,
+    pub data: Bytes,
+    pub log_index: u32,
+}
+
+/// Raw EVM transaction with its associated logs.
+///
+/// The `succeeded` flag allows callers to pass all transactions in a block and
+/// have the processor skip reverted ones, avoiding a separate pre-filter.
+#[derive(Debug, Clone)]
+pub struct TxInput {
+    pub hash: Bytes,
+    pub from: Bytes,
+    pub to: Bytes,
+    pub index: u64,
+    pub logs: Vec<LogInput>,
+    pub succeeded: bool,
+}
+
 pub struct BlockTransactionDeltas<T> {
     pub extractor: String,
     pub chain: Chain,
