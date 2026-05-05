@@ -899,7 +899,8 @@ impl DeltasClient for WsDeltasClient {
                         *guard = None;
 
                         if let tungstenite::Error::Http(response) = &e {
-                            if response.status() == tungstenite::http::StatusCode::TOO_MANY_REQUESTS {
+                            if response.status() == tungstenite::http::StatusCode::TOO_MANY_REQUESTS
+                            {
                                 let reason = response
                                     .body()
                                     .as_deref()
