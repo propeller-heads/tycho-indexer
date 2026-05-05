@@ -35,6 +35,7 @@ fn test_evm_sequential_swap_strategy_encoder() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -44,6 +45,7 @@ fn test_evm_sequential_swap_strategy_encoder() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -98,6 +100,7 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -107,6 +110,7 @@ fn test_sequential_swap_strategy_encoder_transfer_from_integration() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -213,6 +217,7 @@ fn test_evm_sequential_strategy_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
+        BigUint::ZERO,
     );
 
     // WETH -> USDC (Pool 2)
@@ -233,6 +238,7 @@ fn test_evm_sequential_strategy_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -336,6 +342,7 @@ fn test_evm_sequential_strategy_cyclic_swap_and_vault() {
         },
         usdc.clone(),
         weth.clone(),
+        BigUint::ZERO,
     );
 
     // WETH -> USDC (Pool 2)
@@ -356,6 +363,7 @@ fn test_evm_sequential_strategy_cyclic_swap_and_vault() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -449,6 +457,7 @@ fn test_evm_sequential_swap_strategy_encoder_with_fees() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -458,6 +467,7 @@ fn test_evm_sequential_swap_strategy_encoder_with_fees() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 

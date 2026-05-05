@@ -7,6 +7,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         constants::NON_PLE_ENCODED_PROTOCOLS,
+        gas_estimator::estimate_gas_usage,
         group_swaps::group_swaps,
         strategy_encoder::strategy_validators::{
             SequentialSwapValidator, SplitSwapValidator, SwapValidator,
@@ -14,7 +15,7 @@ use crate::encoding::{
         swap_encoder::swap_encoder_registry::SwapEncoderRegistry,
         utils::{get_token_position, percentage_to_uint24, ple_encode},
     },
-    models::{EncodedSolution, EncodingContext, Solution, UserTransferType},
+    models::{EncodedSolution, EncodingContext, Solution, Strategy, UserTransferType},
     strategy_encoder::StrategyEncoder,
     swap_encoder::SwapEncoder,
 };
@@ -112,7 +113,14 @@ impl StrategyEncoder for SingleSwapStrategyEncoder {
 
         let swap_data =
             self.encode_swap_header(swap_encoder.executor_address().clone(), initial_protocol_data);
-        Ok(EncodedSolution::new(swap_data, self.router_address.clone(), function_signature, 0))
+        let gas_usage = estimate_gas_usage(solution, Strategy::Single);
+        Ok(EncodedSolution::new(
+            swap_data,
+            self.router_address.clone(),
+            function_signature,
+            0,
+            gas_usage,
+        ))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -216,7 +224,14 @@ impl StrategyEncoder for SequentialSwapStrategyEncoder {
         }
 
         let encoded_swaps = ple_encode(swaps);
-        Ok(EncodedSolution::new(encoded_swaps, self.router_address.clone(), function_signature, 0))
+        let gas_usage = estimate_gas_usage(solution, Strategy::Sequential);
+        Ok(EncodedSolution::new(
+            encoded_swaps,
+            self.router_address.clone(),
+            function_signature,
+            0,
+            gas_usage,
+        ))
     }
 
     fn get_swap_encoder(&self, protocol_system: &str) -> Option<&Box<dyn SwapEncoder>> {
@@ -364,11 +379,13 @@ impl StrategyEncoder for SplitSwapStrategyEncoder {
         } else {
             tokens.len()
         };
+        let gas_usage = estimate_gas_usage(solution, Strategy::Split);
         Ok(EncodedSolution::new(
             encoded_swaps,
             self.router_address.clone(),
             function_signature,
             tokens_len,
+            gas_usage,
         ))
     }
 
@@ -432,6 +449,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder =
@@ -488,6 +506,7 @@ mod tests {
                 },
                 weth.clone(),
                 wbtc.clone(),
+                BigUint::ZERO,
             );
             let swap_wbtc_usdc = Swap::new(
                 ProtocolComponent {
@@ -497,6 +516,7 @@ mod tests {
                 },
                 wbtc.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder =
@@ -577,6 +597,7 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.6f64);
 
@@ -598,6 +619,7 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
+                BigUint::ZERO,
             );
 
             // WETH -> USDC (Pool 2)
@@ -618,6 +640,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             );
             let swap_encoder_registry = get_swap_encoder_registry();
             let encoder = SplitSwapStrategyEncoder::new(
@@ -711,6 +734,7 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
+                BigUint::ZERO,
             );
 
             let swap_weth_usdc_v3_pool1 = Swap::new(
@@ -730,6 +754,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.6f64);
 
@@ -750,6 +775,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             );
 
             let swap_encoder_registry = get_swap_encoder_registry();

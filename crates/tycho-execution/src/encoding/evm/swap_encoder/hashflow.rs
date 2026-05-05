@@ -146,8 +146,9 @@ mod test {
         let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
         let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
 
-        let swap = Swap::new(hashflow_component, token_in.clone(), token_out.clone())
-            .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
+        let swap =
+            Swap::new(hashflow_component, token_in.clone(), token_out.clone(), BigUint::ZERO)
+                .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
@@ -234,9 +235,10 @@ mod test {
         let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"); // USDC
         let token_out = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"); // WETH
 
-        let swap = Swap::new(hashflow_component, token_in.clone(), token_out.clone())
-            .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
-            .with_protocol_state(Arc::new(hashflow_state));
+        let swap =
+            Swap::new(hashflow_component, token_in.clone(), token_out.clone(), BigUint::ZERO)
+                .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap())
+                .with_protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),

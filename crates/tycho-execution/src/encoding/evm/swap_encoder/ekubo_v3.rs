@@ -78,6 +78,7 @@ mod tests {
     use std::str::FromStr as _;
 
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -96,7 +97,7 @@ mod tests {
 
         let component = ProtocolComponent { static_attributes, ..Default::default() };
 
-        let swap = Swap::new(component, token_in.clone(), token_out.clone());
+        let swap = Swap::new(component, token_in.clone(), token_out.clone(), BigUint::ZERO);
 
         let encoding_context = EncodingContext {
             group_token_in: token_in.clone(),
@@ -153,6 +154,7 @@ mod tests {
             },
             group_token_in.clone(),
             intermediary_token.clone(),
+            BigUint::ZERO,
         );
 
         let second_swap = Swap::new(
@@ -166,6 +168,7 @@ mod tests {
             },
             intermediary_token.clone(),
             group_token_out.clone(),
+            BigUint::ZERO,
         );
 
         let first_encoded_swap = encoder

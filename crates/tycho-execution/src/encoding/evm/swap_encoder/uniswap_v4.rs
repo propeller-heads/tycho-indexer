@@ -243,7 +243,7 @@ mod tests {
     use std::collections::HashMap;
 
     use alloy::hex::encode;
-    use num_bigint::BigInt;
+    use num_bigint::{BigInt, BigUint};
     use tycho_common::{
         models::{protocol::ProtocolComponent, Chain},
         Bytes,
@@ -273,7 +273,7 @@ mod tests {
             static_attributes,
             ..Default::default()
         };
-        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             // Same as the executor address
             router_address: Some(Bytes::from("0x5615deb798bb3e4dfa0139dfa1b3d433cc23b72f")),
@@ -335,7 +335,7 @@ mod tests {
             ..Default::default()
         };
 
-        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(usv4_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
 
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
@@ -423,10 +423,18 @@ mod tests {
             ..Default::default()
         };
 
-        let initial_swap =
-            Swap::new(usde_usdt_component, usde_address.clone(), usdt_address.clone());
-        let second_swap =
-            Swap::new(usdt_wbtc_component, usdt_address.clone(), wbtc_address.clone());
+        let initial_swap = Swap::new(
+            usde_usdt_component,
+            usde_address.clone(),
+            usdt_address.clone(),
+            BigUint::ZERO,
+        );
+        let second_swap = Swap::new(
+            usdt_wbtc_component,
+            usdt_address.clone(),
+            wbtc_address.clone(),
+            BigUint::ZERO,
+        );
 
         let encoder = UniswapV4SwapEncoder::new(
             Bytes::from("0xF62849F9A0B5Bf2913b396098F7c7019b51A820a"),
@@ -579,8 +587,18 @@ mod tests {
                 ..Default::default()
             };
 
-            let first_swap = Swap::new(usdc_weth_pool, usdc_address.clone(), weth_address.clone());
-            let second_swap = Swap::new(weth_usdt_pool, weth_address.clone(), usdt_address.clone());
+            let first_swap = Swap::new(
+                usdc_weth_pool,
+                usdc_address.clone(),
+                weth_address.clone(),
+                BigUint::ZERO,
+            );
+            let second_swap = Swap::new(
+                weth_usdt_pool,
+                weth_address.clone(),
+                usdt_address.clone(),
+                BigUint::ZERO,
+            );
 
             // Encoder reads Angstrom config from environment variables:
             // - ANGSTROM_API_KEY (required)

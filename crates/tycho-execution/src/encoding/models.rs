@@ -169,6 +169,8 @@ pub struct Swap {
     /// Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value
     /// is used to request the quote
     estimated_amount_in: Option<BigUint>,
+    /// Estimated gas usage for this swap by simulation
+    estimated_gas_usage: BigUint,
 }
 
 impl Swap {
@@ -176,6 +178,7 @@ impl Swap {
         component: T,
         token_in: Bytes,
         token_out: Bytes,
+        estimated_gas_usage: BigUint,
     ) -> Self {
         Self {
             component: component.into(),
@@ -185,6 +188,7 @@ impl Swap {
             user_data: None,
             protocol_state: None,
             estimated_amount_in: None,
+            estimated_gas_usage,
         }
     }
 
@@ -239,6 +243,10 @@ impl Swap {
     pub fn estimated_amount_in(&self) -> &Option<BigUint> {
         &self.estimated_amount_in
     }
+
+    pub fn estimated_gas_usage(&self) -> &BigUint {
+        &self.estimated_gas_usage
+    }
 }
 
 impl PartialEq for Swap {
@@ -269,6 +277,8 @@ pub struct EncodedSolution {
     function_signature: String,
     /// Number of tokens in the swap.
     n_tokens: usize,
+    /// Estimated gas usage for this solution
+    gas_usage: BigUint,
 }
 
 impl EncodedSolution {
@@ -277,8 +287,9 @@ impl EncodedSolution {
         interacting_with: Bytes,
         function_signature: String,
         n_tokens: usize,
+        gas_usage: BigUint,
     ) -> Self {
-        Self { swaps, interacting_with, function_signature, n_tokens }
+        Self { swaps, interacting_with, function_signature, n_tokens, gas_usage }
     }
 
     pub fn swaps(&self) -> &[u8] {
@@ -295,6 +306,10 @@ impl EncodedSolution {
 
     pub fn n_tokens(&self) -> usize {
         self.n_tokens
+    }
+
+    pub fn gas_usage(&self) -> &BigUint {
+        &self.gas_usage
     }
 }
 
@@ -395,6 +410,12 @@ pub struct EncodingContext {
     pub group_token_out: Bytes,
 }
 
+pub(crate) enum Strategy {
+    Single,
+    Sequential,
+    Split,
+}
+
 mod tests {
     use super::*;
 
@@ -427,7 +448,7 @@ mod tests {
             protocol_system: "uniswap_v2".to_string(),
         };
         let user_data = Bytes::from("0x1234");
-        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("0x34"))
+        let swap = Swap::new(component, Bytes::from("0x12"), Bytes::from("0x34"), BigUint::ZERO)
             .with_split(0.5)
             .with_user_data(user_data.clone());
 

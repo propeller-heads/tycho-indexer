@@ -60,6 +60,7 @@ impl SwapEncoder for RocketpoolSwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -76,7 +77,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
         let token_out = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
-        let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),
@@ -109,7 +110,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xae78736Cd615f374D3085123A210448E74Fc6393");
         let token_out = Bytes::from("0x0000000000000000000000000000000000000000");
-        let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(rocketpool_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),

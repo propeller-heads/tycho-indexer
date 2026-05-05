@@ -47,6 +47,7 @@ impl SwapEncoder for ERC4626SwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -61,7 +62,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
         let token_out = Bytes::from("0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f");
-        let swap = Swap::new(sp_eth_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(sp_eth_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
@@ -101,7 +102,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xfE6eb3b609a7C8352A241f7F3A21CEA4e9209B8f");
         let token_out = Bytes::from("0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2");
-        let swap = Swap::new(sp_eth_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(sp_eth_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),

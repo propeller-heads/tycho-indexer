@@ -54,6 +54,7 @@ impl SwapEncoder for AerodromeV1SwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -71,7 +72,7 @@ mod tests {
 
         let token_in = Bytes::from("0x236aa50979d5f3de3bd1eeb40e81137f22ab794b");
         let token_out = Bytes::from("0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca");
-        let swap = Swap::new(pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),

@@ -177,7 +177,7 @@ async fn main() {
         buy_symbol = buy_token.symbol
     );
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
-    let mut amounts_out: HashMap<String, BigUint> = HashMap::new();
+    let mut amounts_out: HashMap<String, (BigUint, BigUint)> = HashMap::new();
 
     let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain);
 
@@ -266,7 +266,7 @@ async fn main() {
             &mut amounts_out,
         );
 
-        if let Some((best_pool, expected_amount)) = best_swap {
+        if let Some((best_pool, expected_amount, gas_usage)) = best_swap {
             let component = pairs
                 .get(&best_pool)
                 .expect("Best pool not found")
@@ -303,6 +303,7 @@ async fn main() {
                 amount_in.clone(),
                 Bytes::from(signer.address().to_vec()),
                 expected_amount,
+                gas_usage,
             );
 
             // Encode the swaps of the solution
@@ -543,8 +544,8 @@ fn get_best_swap(
     amount_in: BigUint,
     sell_token: Token,
     buy_token: Token,
-    amounts_out: &mut HashMap<String, BigUint>,
-) -> Option<(String, BigUint)> {
+    amounts_out: &mut HashMap<String, (BigUint, BigUint)>,
+) -> Option<(String, BigUint, BigUint)> {
     println!(
         "\n==================== Received block {block:?} ====================",
         block = message.block_number_or_timestamp
@@ -570,7 +571,7 @@ fn get_best_swap(
                     .ok();
 
                 if let Some(amount_out) = amount_out_result {
-                    amounts_out.insert(id.clone(), amount_out.amount);
+                    amounts_out.insert(id.clone(), (amount_out.amount, amount_out.gas));
                 }
 
                 // If you would like to know how much of each token you are able to swap on the
@@ -586,9 +587,9 @@ fn get_best_swap(
             }
         }
     }
-    if let Some((key, amount_out)) = amounts_out
+    if let Some((key, (amount_out, gas))) = amounts_out
         .iter()
-        .max_by_key(|(_, value)| value.to_owned())
+        .max_by_key(|(_, (amount, _))| amount.to_owned())
     {
         println!(
             "\nThe best swap (out of {amounts} possible pools) is:",
@@ -614,7 +615,7 @@ fn get_best_swap(
             sell_symbol = sell_token.symbol,
             buy_symbol = buy_token.symbol,
         );
-        Some((key.to_string(), amount_out.clone()))
+        Some((key.to_string(), amount_out.clone(), gas.clone()))
     } else {
         println!("\nThere aren't pools with the tokens we are looking for");
         None
@@ -629,9 +630,11 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
+    gas_usage: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone());
+    let simple_swap =
+        Swap::new(component, sell_token.address.clone(), buy_token.address.clone(), gas_usage);
 
     // Compute a minimum amount out
     //

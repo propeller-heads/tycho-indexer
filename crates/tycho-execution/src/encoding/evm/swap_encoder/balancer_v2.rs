@@ -52,6 +52,7 @@ impl SwapEncoder for BalancerV2SwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -68,7 +69,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
         let token_out = Bytes::from("0xba100000625a3754423978a60c9317c58a424e3D");
-        let swap = Swap::new(balancer_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(balancer_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),

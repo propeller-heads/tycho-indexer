@@ -1235,6 +1235,7 @@ async fn process_state(
             amount_in.clone(),
             chain,
             None,
+            estimated_gas.clone(),
         ) {
             Ok(res) => res,
             Err(e) => {
@@ -1252,7 +1253,7 @@ async fn process_state(
                 component_id: component.id.to_string(),
                 token_in: token_in.address.to_string(),
                 token_out: token_out.address.to_string(),
-                estimated_gas,
+                estimated_gas, // TODO: change this to be the full solution gas estimation
             },
         );
     }

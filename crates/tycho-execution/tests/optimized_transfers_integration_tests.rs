@@ -46,6 +46,7 @@ fn test_uniswap_v3_uniswap_v2() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -55,6 +56,7 @@ fn test_uniswap_v3_uniswap_v2() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -121,6 +123,7 @@ fn test_uniswap_v3_uniswap_v3() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -138,6 +141,7 @@ fn test_uniswap_v3_uniswap_v3() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -203,6 +207,7 @@ fn test_uniswap_v3_curve() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
 
     let swap_wbtc_usdt = Swap::new(
@@ -220,16 +225,17 @@ fn test_uniswap_v3_curve() {
                     ),
                 );
                 attrs.insert(
-                    "coins".into(),
-                    Bytes::from_str("0x5b22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d")
-                        .unwrap(),
-                );
+                "coins".into(),
+                Bytes::from_str("0x5b22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d")
+                    .unwrap(),
+            );
                 attrs
             },
             ..Default::default()
         },
         wbtc.clone(),
         usdt.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -287,6 +293,7 @@ fn test_balancer_v2_uniswap_v2() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
 
     let swap_wbtc_usdc = Swap::new(
@@ -297,6 +304,7 @@ fn test_balancer_v2_uniswap_v2() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -357,6 +365,7 @@ fn test_evm_multi_protocol() {
         },
         dai.clone(),
         weth.clone(),
+        BigUint::ZERO,
     );
 
     let balancer_swap_weth_wbtc = Swap::new(
@@ -367,6 +376,7 @@ fn test_evm_multi_protocol() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
 
     let curve_swap_wbtc_usdt = Swap::new(
@@ -384,16 +394,17 @@ fn test_evm_multi_protocol() {
                     ),
                 );
                 attrs.insert(
-                    "coins".into(),
-                    Bytes::from_str("0x5b22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d")
-                        .unwrap(),
-                );
+                "coins".into(),
+                Bytes::from_str("0x5b22307864616331376639353864326565353233613232303632303639393435393763313364383331656337222c22307832323630666163356535353432613737336161343466626366656466376331393362633263353939222c22307863303261616133396232323366653864306130653563346632376561643930383363373536636332225d")
+                    .unwrap(),
+            );
                 attrs
             },
             ..Default::default()
         },
         wbtc.clone(),
         usdt.clone(),
+        BigUint::ZERO,
     );
 
     // Ekubo
@@ -410,7 +421,7 @@ fn test_evm_multi_protocol() {
         ]),
         ..Default::default()
     };
-    let ekubo_swap_usdt_usdc = Swap::new(component, usdt.clone(), usdc.clone());
+    let ekubo_swap_usdt_usdc = Swap::new(component, usdt.clone(), usdc.clone(), BigUint::ZERO);
 
     // USV4
     // Fee and tick spacing information for this test is obtained by querying the
@@ -431,6 +442,7 @@ fn test_evm_multi_protocol() {
         },
         usdc.clone(),
         eth.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -502,6 +514,7 @@ fn test_uniswap_v3_balancer_v3() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_qnt = Swap::new(
         ProtocolComponent {
@@ -511,6 +524,7 @@ fn test_uniswap_v3_balancer_v3() {
         },
         wbtc.clone(),
         qnt.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 

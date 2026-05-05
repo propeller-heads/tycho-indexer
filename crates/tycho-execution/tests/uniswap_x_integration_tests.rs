@@ -49,6 +49,7 @@ fn test_evm_sequential_swap_usx() {
         },
         dai.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let swap_usdc_usdt = Swap::new(
         ProtocolComponent {
@@ -64,6 +65,7 @@ fn test_evm_sequential_swap_usx() {
         },
         usdc.clone(),
         usdt.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 

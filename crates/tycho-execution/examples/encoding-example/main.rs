@@ -44,6 +44,7 @@ fn main() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO, // gas usage comes from tycho-simulation
     );
     // Split defines the fraction of the amount to be swapped. A value of 0 indicates 100% of
     // the amount or the total remaining balance. (0 is default, so no need to set it)
@@ -95,6 +96,7 @@ fn main() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     )
     .with_split(0.5);
 
@@ -108,6 +110,7 @@ fn main() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
 
     let swap_dai_usdc = Swap::new(
@@ -118,6 +121,7 @@ fn main() {
         },
         dai.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -127,6 +131,7 @@ fn main() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let complex_solution = solution.clone().with_swaps(vec![
         swap_weth_dai,

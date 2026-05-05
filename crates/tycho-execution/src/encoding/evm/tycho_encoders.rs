@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use num_bigint::BigUint;
 use tycho_common::{
     models::{protocol::ProtocolComponent, Chain},
     Bytes,
@@ -131,12 +132,14 @@ impl TychoRouterEncoder {
                 ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
                 weth.address.clone(),
                 eth.address.clone(),
+                BigUint::from(35_000u32),
             ))
         } else if token_a == &eth.address && token_b == &weth.address {
             Some(Swap::new(
                 ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
                 eth.address.clone(),
                 weth.address.clone(),
+                BigUint::from(30_000u32),
             ))
         } else {
             None
@@ -276,6 +279,7 @@ impl TychoExecutorEncoder {
             swap_encoder.executor_address().clone(),
             "".to_string(),
             0,
+            grouped_swap.estimated_gas_usage.clone(),
         ))
     }
 }
@@ -354,6 +358,7 @@ mod tests {
             },
             usdc().clone(),
             eth().clone(),
+            BigUint::ZERO,
         )
     }
 
@@ -373,6 +378,7 @@ mod tests {
             },
             eth().clone(),
             pepe().clone(),
+            BigUint::ZERO,
         )
     }
 
@@ -436,6 +442,7 @@ mod tests {
                 },
                 dai().clone(),
                 usdc().clone(),
+                BigUint::ZERO,
             );
 
             let swap_weth_dai = Swap::new(
@@ -446,6 +453,7 @@ mod tests {
                 },
                 weth().clone(),
                 dai().clone(),
+                BigUint::ZERO,
             );
 
             let solution = Solution::new(
@@ -485,6 +493,7 @@ mod tests {
                 },
                 weth().clone(),
                 dai().clone(),
+                BigUint::ZERO,
             );
 
             let solution = Solution::new(
@@ -540,6 +549,7 @@ mod tests {
                 ProtocolComponent { protocol_system: "weth".to_string(), ..Default::default() },
                 eth(),
                 weth(),
+                BigUint::ZERO,
             );
 
             let input_swaps = vec![swap_usdc_eth_univ4(), eth_weth_swap];
@@ -599,6 +609,7 @@ mod tests {
                     },
                     dai().clone(),
                     weth().clone(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -608,6 +619,7 @@ mod tests {
                     },
                     dai().clone(),
                     weth().clone(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -617,6 +629,7 @@ mod tests {
                     },
                     weth().clone(),
                     dai().clone(),
+                    BigUint::ZERO,
                 ),
             ];
 
@@ -650,6 +663,7 @@ mod tests {
                     },
                     dai().clone(),
                     weth().clone(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -659,6 +673,7 @@ mod tests {
                     },
                     weth().clone(),
                     usdc().clone(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -668,6 +683,7 @@ mod tests {
                     },
                     usdc().clone(),
                     dai().clone(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -677,6 +693,7 @@ mod tests {
                     },
                     dai().clone(),
                     wbtc().clone(),
+                    BigUint::ZERO,
                 ),
             ];
 
@@ -717,6 +734,7 @@ mod tests {
                     },
                     weth(),
                     dai(),
+                    BigUint::ZERO,
                 ),
                 Swap::new(
                     ProtocolComponent {
@@ -726,6 +744,7 @@ mod tests {
                     },
                     dai(),
                     weth(),
+                    BigUint::ZERO,
                 )
                 .with_split(0.5),
                 Swap::new(
@@ -736,6 +755,7 @@ mod tests {
                     },
                     dai(),
                     weth(),
+                    BigUint::ZERO,
                 ),
             ];
 
@@ -781,6 +801,7 @@ mod tests {
                 },
                 token_in.clone(),
                 token_out.clone(),
+                BigUint::ZERO,
             );
 
             let solution = Solution::new(
@@ -833,6 +854,7 @@ mod tests {
                 },
                 token_in.clone(),
                 token_out.clone(),
+                BigUint::ZERO,
             );
 
             let solution = Solution::new(

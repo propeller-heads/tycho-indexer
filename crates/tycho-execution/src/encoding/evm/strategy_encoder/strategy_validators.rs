@@ -165,6 +165,7 @@ impl SwapValidator for SequentialSwapValidator {}
 mod tests {
     use std::str::FromStr;
 
+    use num_bigint::BigUint;
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
@@ -183,6 +184,7 @@ mod tests {
             },
             weth.clone(),
             dai.clone(),
+            BigUint::ZERO,
         )];
         let result = validator.validate_swap_path(&swaps, &weth, &dai);
         assert_eq!(result, Ok(()));
@@ -203,6 +205,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.5f64),
             Swap::new(
@@ -213,6 +216,7 @@ mod tests {
                 },
                 dai.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             ),
         ];
         let result = validator.validate_swap_path(&swaps, &weth, &usdc);
@@ -236,6 +240,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.5f64),
             // This swap is disconnected from the WETH->DAI path
@@ -247,6 +252,7 @@ mod tests {
                 },
                 wbtc.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             ),
         ];
         let result = validator.validate_swap_path(&disconnected_swaps, &weth, &usdc);
@@ -271,6 +277,7 @@ mod tests {
                 },
                 usdc.clone(),
                 weth.clone(),
+                BigUint::ZERO,
             ),
             Swap::new(
                 ProtocolComponent {
@@ -280,6 +287,7 @@ mod tests {
                 },
                 weth.clone(),
                 usdc.clone(),
+                BigUint::ZERO,
             ),
         ];
 
@@ -303,6 +311,7 @@ mod tests {
             },
             weth.clone(),
             dai.clone(),
+            BigUint::ZERO,
         )
         .with_split(1.0)];
         let result = validator.validate_swap_path(&unreachable_swaps, &weth, &usdc);
@@ -339,6 +348,7 @@ mod tests {
             },
             weth.clone(),
             dai.clone(),
+            BigUint::ZERO,
         )];
         let result = validator.validate_split_percentages(&swaps);
         assert_eq!(result, Ok(()));
@@ -360,6 +370,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.5),
             Swap::new(
@@ -370,6 +381,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.3),
             Swap::new(
@@ -380,6 +392,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             ),
         ];
         assert!(validator
@@ -402,6 +415,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.7),
             Swap::new(
@@ -412,6 +426,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.3),
         ];
@@ -436,6 +451,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             ),
             Swap::new(
                 ProtocolComponent {
@@ -445,6 +461,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.5),
         ];
@@ -469,6 +486,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.6),
             Swap::new(
@@ -479,6 +497,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             )
             .with_split(0.5),
             Swap::new(
@@ -489,6 +508,7 @@ mod tests {
                 },
                 weth.clone(),
                 dai.clone(),
+                BigUint::ZERO,
             ),
         ];
         assert!(matches!(

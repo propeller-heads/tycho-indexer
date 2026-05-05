@@ -40,6 +40,7 @@ fn test_evm_split_swap_strategy_encoder() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     )
     .with_split(0.5f64);
     let swap_weth_wbtc = Swap::new(
@@ -50,6 +51,7 @@ fn test_evm_split_swap_strategy_encoder() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_dai_usdc = Swap::new(
         ProtocolComponent {
@@ -59,6 +61,7 @@ fn test_evm_split_swap_strategy_encoder() {
         },
         dai.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -68,6 +71,7 @@ fn test_evm_split_swap_strategy_encoder() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -118,22 +122,18 @@ fn test_evm_split_input_cyclic_swap() {
     let usdc = usdc();
 
     // USDC -> WETH (Pool 1) - 60% of input
-    let swap_usdc_weth_pool1 = Swap::new(
-        ProtocolComponent {
-            id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
-                                                                           * Pool 1 */
-            protocol_system: "uniswap_v3".to_string(),
-            static_attributes: {
-                let mut attrs = HashMap::new();
-                attrs
-                    .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
-                attrs
-            },
-            ..Default::default()
+    let swap_usdc_weth_pool1 = Swap::new(ProtocolComponent {
+        id: "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".to_string(), /* USDC-WETH USV3
+                                                                       * Pool 1 */
+        protocol_system: "uniswap_v3".to_string(),
+        static_attributes: {
+            let mut attrs = HashMap::new();
+            attrs
+                .insert("fee".to_string(), Bytes::from(BigInt::from(500).to_signed_bytes_be()));
+            attrs
         },
-        usdc.clone(),
-        weth.clone(),
-    )
+        ..Default::default()
+    }, usdc.clone(), weth.clone(), BigUint::ZERO)
     .with_split(0.6f64) // 60% of input
     ;
 
@@ -155,6 +155,7 @@ fn test_evm_split_input_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
+        BigUint::ZERO,
     );
 
     // WETH -> USDC (Pool 2)
@@ -175,6 +176,7 @@ fn test_evm_split_input_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -293,6 +295,7 @@ fn test_evm_split_output_cyclic_swap() {
         },
         usdc.clone(),
         weth.clone(),
+        BigUint::ZERO,
     );
 
     let swap_weth_usdc_v3_pool1 = Swap::new(
@@ -310,6 +313,7 @@ fn test_evm_split_output_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     )
     .with_split(0.6f64);
 
@@ -330,6 +334,7 @@ fn test_evm_split_output_cyclic_swap() {
         },
         weth.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -445,6 +450,7 @@ fn test_evm_split_swap_strategy_with_fees() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     )
     .with_split(0.5f64);
     let swap_weth_wbtc = Swap::new(
@@ -455,6 +461,7 @@ fn test_evm_split_swap_strategy_with_fees() {
         },
         weth.clone(),
         wbtc.clone(),
+        BigUint::ZERO,
     );
     let swap_dai_usdc = Swap::new(
         ProtocolComponent {
@@ -464,6 +471,7 @@ fn test_evm_split_swap_strategy_with_fees() {
         },
         dai.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let swap_wbtc_usdc = Swap::new(
         ProtocolComponent {
@@ -473,6 +481,7 @@ fn test_evm_split_swap_strategy_with_fees() {
         },
         wbtc.clone(),
         usdc.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 

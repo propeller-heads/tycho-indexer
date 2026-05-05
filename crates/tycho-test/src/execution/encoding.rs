@@ -55,6 +55,7 @@ pub fn encode_swap(
     amount_in: BigUint,
     chain: Chain,
     executors_json: Option<String>,
+    gas_usage: BigUint,
 ) -> miette::Result<(Solution, Transaction)> {
     let solution = create_solution(
         component.clone(),
@@ -62,6 +63,7 @@ pub fn encode_swap(
         sell_token.clone(),
         buy_token.clone(),
         amount_in.clone(),
+        gas_usage.clone(),
     )?;
     let swap_encoder_registry = SwapEncoderRegistry::new(chain)
         .add_default_encoders(executors_json)
@@ -87,19 +89,21 @@ pub fn encode_swap(
     Ok((solution, transaction))
 }
 
-fn create_solution(
+pub fn create_solution(
     component: ProtocolComponent,
     state: Option<Arc<dyn ProtocolSim>>,
     sell_token: Token,
     buy_token: Token,
     amount_in: BigUint,
+    gas_usage: BigUint,
 ) -> miette::Result<Solution> {
     let user_address = Bytes::from_str(USER_ADDR).into_diagnostic()?;
 
     // Prepare data to encode. First we need to create a swap object
     let simple_swap = {
-        let mut swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
-            .with_estimated_amount_in(amount_in.clone());
+        let mut swap =
+            Swap::new(component, sell_token.address.clone(), buy_token.address.clone(), gas_usage)
+                .with_estimated_amount_in(amount_in.clone());
 
         if let Some(state) = state {
             swap = swap.with_protocol_state(state);

@@ -87,6 +87,7 @@ fn main() {
         },
         dai_addr.clone(),
         usdc_addr.clone(),
+        BigUint::ZERO,
     );
     let swap_usdc_usdt = Swap::new(
         ProtocolComponent {
@@ -102,6 +103,7 @@ fn main() {
         },
         usdc_addr.clone(),
         usdt_addr.clone(),
+        BigUint::ZERO,
     );
 
     // Then we create a solution object with the previous swaps

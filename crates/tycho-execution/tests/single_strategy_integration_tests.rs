@@ -31,6 +31,7 @@ fn test_evm_single_swap_strategy_encoder() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     );
 
     let encoder = get_tycho_router_encoder();
@@ -113,6 +114,7 @@ fn test_single_swap_strategy_encoder_transfer_from() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -196,6 +198,7 @@ fn test_single_swap_with_client_fees() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 
@@ -251,6 +254,7 @@ fn test_single_swap_with_fees_and_client_contribution() {
         },
         weth.clone(),
         dai.clone(),
+        BigUint::ZERO,
     );
     let encoder = get_tycho_router_encoder();
 

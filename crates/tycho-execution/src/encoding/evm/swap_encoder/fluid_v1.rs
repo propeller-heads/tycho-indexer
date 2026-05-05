@@ -75,6 +75,7 @@ impl FluidV1SwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use tycho_common::models::protocol::ProtocolComponent;
 
     use super::*;
@@ -90,7 +91,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x9d39a5de30e57443bff2a8307a4256c8797a3497");
         let token_out = Bytes::from("0xdac17f958d2ee523a2206206994597c13d831ec7");
-        let swap = Swap::new(fluid_dex, token_in.clone(), token_out.clone());
+        let swap = Swap::new(fluid_dex, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: Some(Bytes::default()),
             group_token_in: token_in.clone(),

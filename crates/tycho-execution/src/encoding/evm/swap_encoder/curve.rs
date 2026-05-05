@@ -199,6 +199,7 @@ impl SwapEncoder for CurveSwapEncoder {
 #[cfg(test)]
 mod tests {
     use alloy::hex::encode;
+    use num_bigint::BigUint;
     use rstest::rstest;
     use tycho_common::models::protocol::ProtocolComponent;
 
@@ -281,6 +282,7 @@ mod tests {
             },
             Bytes::from(token_in),
             Bytes::from(token_out),
+            BigUint::ZERO,
         );
 
         let encoder =
@@ -316,7 +318,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x6B175474E89094C44Da98b954EedeAC495271d0F");
         let token_out = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
-        let swap = Swap::new(curve_tri_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(curve_tri_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
 
         let encoding_context = EncodingContext {
             router_address: None,
@@ -373,7 +375,7 @@ mod tests {
         };
         let token_in = Bytes::from("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
         let token_out = Bytes::from("0x4c9EDD5852cd905f086C759E8383e09bff1E68B3");
-        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: None,
             group_token_in: token_in.clone(),
@@ -430,7 +432,7 @@ mod tests {
         };
         let token_in = Bytes::from("0x0000000000000000000000000000000000000000");
         let token_out = Bytes::from("0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84");
-        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone());
+        let swap = Swap::new(curve_pool, token_in.clone(), token_out.clone(), BigUint::ZERO);
         let encoding_context = EncodingContext {
             router_address: None,
             group_token_in: token_in.clone(),

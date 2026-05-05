@@ -1118,6 +1118,7 @@ impl TestRunner {
                         amount_in.clone(),
                         chain_model,
                         Some(executors_json.to_string()),
+                        amount_out_result.gas.clone(),
                     )?;
 
                     // Create unique simulation ID
