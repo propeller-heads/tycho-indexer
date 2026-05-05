@@ -86,6 +86,10 @@ contract TychoRouterExposed is TychoRouter {
     function exposedDeltaAccounting(address token, uint256 amount) external {
         _updateDeltaAccounting(token, int256(amount));
     }
+
+    function exposedGetFeeCalculator() external view returns (address) {
+        return this.getFeeCalculator();
+    }
 }
 
 contract TychoRouterTestSetup is
@@ -155,7 +159,10 @@ contract TychoRouterTestSetup is
         deployFeeCalculator();
         vm.prank(FEE_SETTER);
         tychoRouter.setFeeCalculator(address(feeCalculator));
-        vm.stopPrank();
+        // Warp past the timelock and activate
+        vm.warp(block.timestamp + tychoRouter.DELAY_FEE_CALCULATOR_ACTIVATION());
+        vm.prank(FEE_SETTER);
+        tychoRouter.activateFeeCalculator();
         vm.warp(forkTimestamp);
     }
 
