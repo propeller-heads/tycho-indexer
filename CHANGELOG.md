@@ -1,3 +1,11 @@
+## [0.281.0](https://github.com/propeller-heads/tycho-indexer/compare/0.280.1...0.281.0) (2026-05-05)
+
+
+### Features
+
+* **config:** add liquidityparty address to executor_addresses.json ([230a6fa](https://github.com/propeller-heads/tycho-indexer/commit/230a6faa8e5e1c2c7f63f5d8c052bee4ad7b846f))
+* **config:** add liquidityparty address to executor_addresses.json ([#979](https://github.com/propeller-heads/tycho-indexer/issues/979)) ([33dae2c](https://github.com/propeller-heads/tycho-indexer/commit/33dae2c2f4ad36d39b7c50449639381846e17a95))
+
 ## [0.280.1](https://github.com/propeller-heads/tycho-indexer/compare/0.280.0...0.280.1) (2026-05-05)
 
 
