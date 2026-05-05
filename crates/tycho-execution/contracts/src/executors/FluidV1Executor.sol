@@ -8,6 +8,7 @@ import {
     IERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 
 interface IFluidV1Dex {
     function swapInWithCallback(
@@ -147,7 +148,7 @@ contract FluidV1Executor is IExecutor, ICallback {
         // instead of dex.swapInWithCallback.
         if (isNativeSell) {
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
-            tokenIn = address(0);
+            tokenIn = ETH_ADDRESS;
         } else {
             transferType = TransferManager.TransferType.None;
             tokenIn = address(bytes20(data[21:41]));

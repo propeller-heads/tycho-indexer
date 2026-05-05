@@ -24,6 +24,7 @@ import {
     MAX_SQRT_RATIO
 } from "@ekubo-v3/types/sqrtRatio.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 import {PoolKey} from "@ekubo-v3/types/poolKey.sol";
 import {PoolConfig} from "@ekubo-v3/types/poolConfig.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo-v3/math/constants.sol";
@@ -78,6 +79,8 @@ contract EkuboV3Executor is IExecutor, ICallback {
         uint256 lastHopOffset = 20 + (hopsLength - 1) * _HOP_BYTE_LEN;
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[lastHopOffset:lastHopOffset + 20]));
+        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
+        if (tokenOut == address(0)) tokenOut = ETH_ADDRESS;
         // Ekubo uses flash accounting: no pre-swap transfer needed.
         // Tokens are paid during the callback in the Dispatcher
         return (
@@ -155,7 +158,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
     {
         receiver = CORE_ADDRESS;
 
-        if (tokenIn == NATIVE_TOKEN_ADDRESS) {
+        if (tokenIn == ETH_ADDRESS) {
             // Native ETH: Dispatcher updates delta accounting; actual transfer
             // happens inside _pay() via safeTransferETH.
             transferType = TransferManager.TransferType.TransferNativeInExecutor;

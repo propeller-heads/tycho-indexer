@@ -19,6 +19,7 @@ import {
     SqrtRatio
 } from "@ekubo/types/sqrtRatio.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
@@ -263,6 +264,8 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         uint256 lastHopOffset = 20 + (hopsLength - 1) * _HOP_BYTE_LEN;
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[lastHopOffset:lastHopOffset + 20]));
+        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
+        if (tokenOut == address(0)) tokenOut = ETH_ADDRESS;
         return (
             TransferManager.TransferType.None,
             address(0),
@@ -287,7 +290,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
             receiver = address(_core);
         } else {
             // _LOCKED_SELECTOR
-            if (tokenIn == address(0)) {
+            if (tokenIn == ETH_ADDRESS) {
                 // ETH transfers are handled in the Executor, so we need to set the
                 // transferType to TransferNativeInExecutor to update delta accounting.
                 transferType =

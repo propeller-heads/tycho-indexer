@@ -20,10 +20,15 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
         // swapData layout in msg.data: selector(4) | id(32) | amountIn(16) | receiver(20) | tokenIn(20) | ...
         // tokenIn starts at byte 72 (4 + 32 + 16 + 20 = 72)
         address tokenIn = address(bytes20(msg.data[72:92]));
+        // Protocol data uses address(0) for ETH; translate to
+        // ETH_ADDRESS so the callback check matches the router
+        // convention (mirrors what the Dispatcher does via
+        // getTransferData).
+        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
 
         (TransferManager.TransferType transferType, address receiver) =
             this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
-        if (tokenIn == address(0)) {
+        if (tokenIn == ETH_ADDRESS) {
             assert(
                 transferType
                     == TransferManager.TransferType.TransferNativeInExecutor
@@ -33,7 +38,7 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
         }
         uint256 amount = uint128(bytes16(msg.data[36:52]));
 
-        if (tokenIn != address(0)) {
+        if (tokenIn != ETH_ADDRESS) {
             IERC20(tokenIn).transfer(receiver, amount);
         }
         bytes memory res = handleCallback(msg.data);

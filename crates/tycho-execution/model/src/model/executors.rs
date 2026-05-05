@@ -85,28 +85,20 @@ impl Executor {
         match self {
             // https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/executors/CurveExecutor.sol#L139
             Self::Curve => {
-                let mut token_in = params.request(
+                let token_in = params.request(
                     ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
-                    Address::CURVE_TOKENS,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?;
-                let mut token_out = params.request(
+                let token_out = params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::CURVE_TOKENS,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?;
 
-                let transfer_type = if token_in == Address::CurveNative {
+                let transfer_type = if token_in == Address::NativeETH {
                     TransferType::TransferNativeInExecutor
                 } else {
                     TransferType::ProtocolWillDebit
                 };
-
-                if token_in == Address::CurveNative {
-                    token_in = Address::Zero;
-                }
-
-                if token_out == Address::CurveNative {
-                    token_out = Address::Zero;
-                }
 
                 Ok(TransferData {
                     transfer_type,
@@ -126,7 +118,7 @@ impl Executor {
             Self::ERC4626 => {
                 let token_in = params.request(
                     ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?;
                 let receiver = params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
@@ -141,7 +133,7 @@ impl Executor {
                 let token_out = if is_redeem {
                     params.request(
                         ParamKey::SwapIndexed { prefix: "IERC4626.asset()", swap_index },
-                        Address::POSSIBLY_ERC20_AND_ZERO,
+                        Address::POSSIBLY_ERC20_AND_NATIVE,
                     )?
                 } else {
                     receiver
@@ -173,12 +165,12 @@ impl Executor {
                     } else {
                         params.request(
                             ParamKey::ProtocolData { swap_index, start: 21, end: 41 },
-                            Address::POSSIBLY_ERC20_AND_ZERO,
+                            Address::POSSIBLY_ERC20_AND_NATIVE,
                         )?
                     },
                     token_out: params.request(
                         ParamKey::ProtocolData { swap_index, start: 41, end: 61 },
-                        Address::POSSIBLY_ERC20_AND_ZERO,
+                        Address::POSSIBLY_ERC20_AND_NATIVE,
                     )?,
                     output_to_router: false,
                 })
@@ -195,11 +187,11 @@ impl Executor {
                 )?,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -209,11 +201,11 @@ impl Executor {
                 receiver: Address::Zero,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -229,11 +221,11 @@ impl Executor {
                 )?,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -243,11 +235,11 @@ impl Executor {
                 receiver: Address::Zero,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 0, end: 20 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -264,8 +256,8 @@ impl Executor {
                         TransferType::ProtocolWillDebit
                     },
                     receiver: Address::Router,
-                    token_in: if is_wrapping { Address::Zero } else { Address::WETH },
-                    token_out: if is_wrapping { Address::WETH } else { Address::Zero },
+                    token_in: if is_wrapping { Address::NativeETH } else { Address::WETH },
+                    token_out: if is_wrapping { Address::WETH } else { Address::NativeETH },
                     output_to_router: true,
                 })
             }
@@ -281,11 +273,11 @@ impl Executor {
                 )?,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -301,11 +293,11 @@ impl Executor {
                 )?,
                 token_in: params.request(
                     ParamKey::ProtocolData { swap_index, start: 20, end: 40 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 token_out: params.request(
                     ParamKey::ProtocolData { swap_index, start: 40, end: 60 },
-                    Address::POSSIBLY_ERC20_AND_ZERO,
+                    Address::POSSIBLY_ERC20_AND_NATIVE,
                 )?,
                 output_to_router: false,
             }),
@@ -347,7 +339,7 @@ impl Executor {
                 )?;
 
                 // this simulates the transfer of eth to the pool
-                if token_in == Address::CurveNative {
+                if token_in == Address::NativeETH {
                     state.eth_send_value(Address::Router, pool, amount)?;
                 }
 

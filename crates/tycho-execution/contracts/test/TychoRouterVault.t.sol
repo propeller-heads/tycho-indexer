@@ -123,7 +123,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         );
         tychoRouter.singleSwap{value: amountIn - 1}(
             amountIn,
-            address(0), // ETH
+            ETH_ADDR,
             DAI_ADDR,
             1, // min amount
             ALICE, // receiver
@@ -152,11 +152,11 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
         tychoRouter.deposit{value: existingVaultBalance}(
-            address(0), existingVaultBalance
+            ETH_ADDR, existingVaultBalance
         );
         uint256 amountOut = tychoRouter.singleSwap{value: amountIn}(
             amountIn,
-            address(0), // ETH
+            ETH_ADDR,
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
@@ -171,7 +171,10 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         // Alice's ETH vault balance should NOT be touched (still has 2 ether)
         assertEq(tychoRouterAddr.balance, existingVaultBalance);
-        assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultBalance);
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(ETH_ADDR))),
+            existingVaultBalance
+        );
     }
 
     function testTransferNativeInExecutorForgotToSendETH() public {
@@ -184,7 +187,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
         tychoRouter.deposit{value: existingVaultBalance}(
-            address(0), existingVaultBalance
+            ETH_ADDR, existingVaultBalance
         );
         vm.expectRevert(
             abi.encodeWithSelector(Vault__UnexpectedNonZeroCount.selector, 1)
@@ -192,7 +195,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         tychoRouter.singleSwap(
             // No msg.value sent!
             amountIn,
-            address(0), // ETH
+            ETH_ADDR,
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
@@ -210,11 +213,11 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
         // Deposit ETH to vault
-        tychoRouter.deposit{value: amountIn}(address(0), amountIn);
+        tychoRouter.deposit{value: amountIn}(ETH_ADDR, amountIn);
 
         uint256 amountOut = tychoRouter.singleSwapUsingVault(
             amountIn,
-            address(0), // ETH
+            ETH_ADDR,
             RETH_ADDR,
             1, // min amount
             ALICE, // receiver
@@ -228,7 +231,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         assertEq(IERC20(RETH_ADDR).balanceOf(ALICE), amountOut);
 
         // Vault balance should be zero
-        assertEq(tychoRouter.balanceOf(ALICE, 0), 0);
+        assertEq(tychoRouter.balanceOf(ALICE, uint256(uint160(ETH_ADDR))), 0);
     }
 
     function testSequentialSwapNativeETHCredit() public {
@@ -239,7 +242,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         // First swap: USDC -> ETH
         bytes memory pool = abi.encodePacked(
-            address(0), // intermediary token
+            address(0), // intermediary token (V4 uses address(0) for ETH)
             bytes3(uint24(3000)), // fee
             int24(60), // tick spacing
             address(0), // hook
@@ -249,7 +252,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         bytes memory protocolData = abi.encodePacked(
             USDC_ADDR,
-            address(0), // ETH_ADDR
+            address(0), // ETH in V4 pool key
             false, // zeroForOne
             pool
         );
@@ -269,7 +272,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
         IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
 
         tychoRouter.deposit{value: existingVaultETHBalance}(
-            address(0), existingVaultETHBalance
+            ETH_ADDR, existingVaultETHBalance
         );
 
         uint256 amountOut = tychoRouter.sequentialSwap(
@@ -289,7 +292,10 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         // Router ETH balance should not have changed
         assertEq(address(tychoRouter).balance, existingVaultETHBalance);
-        assertEq(tychoRouter.balanceOf(ALICE, 0), existingVaultETHBalance);
+        assertEq(
+            tychoRouter.balanceOf(ALICE, uint256(uint160(ETH_ADDR))),
+            existingVaultETHBalance
+        );
     }
 
     // ==================== ProtocolWillDebit tests ====================

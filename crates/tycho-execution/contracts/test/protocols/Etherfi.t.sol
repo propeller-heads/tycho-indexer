@@ -40,7 +40,7 @@ contract EtherfiExecutorTest is Constants, TestUtils {
         uint256 forkBlock = 23934489;
         vm.createSelectFork(vm.rpcUrl("mainnet"), forkBlock);
         etherfiExposed = new EtherfiExecutorExposed(
-            ETH_ADDR_FOR_CURVE,
+            ETH_ADDR,
             EETH_ADDR,
             LIQUIDITY_POOL_ADDR,
             WEETH_ADDR,

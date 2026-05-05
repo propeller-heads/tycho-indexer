@@ -23,6 +23,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Dispatcher} from "./Dispatcher.sol";
 import {LibSwap} from "../lib/LibSwap.sol";
 import {TransferManager} from "./TransferManager.sol";
+import {ETH_ADDRESS} from "../lib/NativeETH.sol";
 import {FeeRecipient} from "../lib/FeeStructs.sol";
 
 //                                         ✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷✷
@@ -183,8 +184,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -237,8 +238,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -290,8 +291,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param nTokens The total number of tokens involved in the swap graph (used to initialize arrays for internal calculations).
      * @param receiver The address to receive the output tokens.
@@ -324,7 +325,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             swaps
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
-        if (tokenIn != address(0)) {
+        if (tokenIn != ETH_ADDRESS) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, false);
@@ -351,8 +352,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -402,8 +403,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -451,8 +452,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -483,7 +484,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             swaps
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
-        if (tokenIn != address(0)) {
+        if (tokenIn != ETH_ADDRESS) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
 
@@ -509,8 +510,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -559,8 +560,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -608,8 +609,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      * - Reverts with `TychoRouter__NegativeSlippage` if the output amount is less than `minAmountOut`.
      *
      * @param amountIn The input token amount to be swapped.
-     * @param tokenIn The address of the input token. Use `address(0)` for native ETH
-     * @param tokenOut The address of the output token. Use `address(0)` for native ETH
+     * @param tokenIn The address of the input token. Use `ETH_ADDRESS` for native ETH
+     * @param tokenOut The address of the output token. Use `ETH_ADDRESS` for native ETH
      * @param minAmountOut The minimum acceptable amount of the output token. Reverts if this condition is not met. This should always be set to avoid losing funds due to slippage.
      * @param receiver The address to receive the output tokens.
      * @param clientFeeParams Client fee parameters including fee bps, receiver, max contribution, deadline and signature.
@@ -640,7 +641,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             swapData
         );
         // For native ETH, assume funds already in our router. Else, handle approval.
-        if (tokenIn != address(0)) {
+        if (tokenIn != ETH_ADDRESS) {
             permit2.permit(msg.sender, permitSingle, signature);
         }
         _tstoreTransferFromInfo(tokenIn, amountIn, true, false);
@@ -679,7 +680,10 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (amountIn == 0) {
             revert TychoRouter__ZeroInput();
         }
-        if (receiver == address(0)) {
+        if (
+            receiver == address(0) || tokenIn == address(0)
+                || tokenOut == address(0)
+        ) {
             revert TychoRouter__AddressZero();
         }
         if (minAmountOut == 0) {
@@ -751,7 +755,10 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (amountIn == 0) {
             revert TychoRouter__ZeroInput();
         }
-        if (receiver == address(0)) {
+        if (
+            receiver == address(0) || tokenIn == address(0)
+                || tokenOut == address(0)
+        ) {
             revert TychoRouter__AddressZero();
         }
         if (minAmountOut == 0) {
@@ -820,7 +827,10 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (amountIn == 0) {
             revert TychoRouter__ZeroInput();
         }
-        if (receiver == address(0)) {
+        if (
+            receiver == address(0) || tokenIn == address(0)
+                || tokenOut == address(0)
+        ) {
             revert TychoRouter__AddressZero();
         }
         if (minAmountOut == 0) {
@@ -1204,7 +1214,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
                     msg.value, amountIn
                 );
             }
-            _updateDeltaAccounting(address(0), int256(msg.value));
+            _updateDeltaAccounting(ETH_ADDRESS, int256(msg.value));
         }
     }
 
@@ -1240,7 +1250,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             } else if (outputDelta == 0) {
                 if (receiver == address(this)) {
                     _creditVault(msg.sender, tokenOut, requiredContribution);
-                } else if (tokenOut == address(0)) {
+                } else if (tokenOut == ETH_ADDRESS) {
                     Address.sendValue(payable(receiver), requiredContribution);
                 } else {
                     IERC20(tokenOut)

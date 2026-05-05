@@ -29,6 +29,17 @@ pub fn get_router_address(chain: &Chain) -> Result<&'static Bytes, EncodingError
         })
 }
 
+/// The address used by the TychoRouter to represent native ETH.
+///
+/// Callers must use this address (not `address(0)`) for the `tokenIn` / `tokenOut`
+/// parameters when ABI-encoding router function calls that involve native ETH.
+/// The encoding pipeline's `EncodedSolution` only contains the inner swap bytes;
+/// the outer function arguments — including the token addresses — are the caller's
+/// responsibility.
+pub static ROUTER_ETH_ADDRESS: LazyLock<Bytes> = LazyLock::new(|| {
+    Bytes::from(alloy::primitives::hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE").to_vec())
+});
+
 /// The number of blocks in the future for which to fetch Angstrom Attestations
 ///
 /// It is important to note that fetching more blocks will send more attestations to the

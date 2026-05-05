@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {ICallback} from "@interfaces/ICallback.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 import {
     IERC20,
     SafeERC20
@@ -531,6 +532,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
+        // V4 uses address(0) for native ETH in pool keys, but the
+        // router uses ETH_ADDRESS for balance tracking and deltas.
+        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
+        if (tokenOut == address(0)) tokenOut = ETH_ADDRESS;
         return (
             TransferManager.TransferType.None,
             address(0),
@@ -550,7 +555,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         returns (TransferManager.TransferType transferType, address receiver)
     {
         receiver = address(poolManager);
-        if (tokenIn == address(0)) {
+        if (tokenIn == ETH_ADDRESS) {
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             transferType = TransferManager.TransferType.Transfer;
