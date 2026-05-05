@@ -982,9 +982,7 @@ where
         }
         let reason: Vec<String> = sync_streams
             .iter()
-            .map(|s| {
-                format!("{} reported as {} at {}", s.extractor_id, s.state, s.modify_ts)
-            })
+            .map(|s| format!("{} reported as {} at {}", s.extractor_id, s.state, s.modify_ts))
             .collect();
         Err(BlockSynchronizerError::NoReadySynchronizers(reason.join(", ")))
     }
@@ -993,8 +991,8 @@ where
     ///
     /// Returns `Ok` if:
     /// - At least one synchronizer is active (Ready, Delayed, or Advanced), OR
-    /// - All synchronizers are stale but none have ended — temporary disconnect
-    ///   (e.g. WS reconnect) where recovery is still possible.
+    /// - All synchronizers are stale but none have ended — temporary disconnect (e.g. WS reconnect)
+    ///   where recovery is still possible.
     ///
     /// Returns `Err` if at least one synchronizer has permanently ended while all
     /// remaining ones are stale — no recovery path exists.
@@ -1740,19 +1738,16 @@ mod tests {
         // and send an advanced block. The main loop should rebase block history and resume.
         let v2_sync = MockStateSync::new();
         let v3_sync = MockStateSync::new();
-        let block_sync = BlockSynchronizer::new(
-            Duration::from_millis(20),
-            Duration::from_millis(10),
-            3,
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
-            v2_sync.clone(),
-        )
-        .register_synchronizer(
-            ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
-            v3_sync.clone(),
-        );
+        let block_sync =
+            BlockSynchronizer::new(Duration::from_millis(20), Duration::from_millis(10), 3)
+                .register_synchronizer(
+                    ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v2".to_string() },
+                    v2_sync.clone(),
+                )
+                .register_synchronizer(
+                    ExtractorIdentity { chain: Chain::Ethereum, name: "uniswap-v3".to_string() },
+                    v3_sync.clone(),
+                );
 
         v2_sync
             .send_header(header_message(1))
@@ -1784,8 +1779,14 @@ mod tests {
         while let Ok(Some(Ok(msg))) =
             tokio::time::timeout(Duration::from_millis(50), rx.recv()).await
         {
-            let v2 = msg.sync_states.get("uniswap-v2").unwrap();
-            let v3 = msg.sync_states.get("uniswap-v3").unwrap();
+            let v2 = msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap();
+            let v3 = msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap();
             if matches!(v2, SynchronizerState::Stale(_)) &&
                 matches!(v3, SynchronizerState::Stale(_))
             {
@@ -1817,8 +1818,14 @@ mod tests {
         let mut recovered = false;
         for _ in 0..20 {
             let msg = receive_message(&mut rx).await;
-            let v2 = msg.sync_states.get("uniswap-v2").unwrap();
-            let v3 = msg.sync_states.get("uniswap-v3").unwrap();
+            let v2 = msg
+                .sync_states
+                .get("uniswap-v2")
+                .unwrap();
+            let v3 = msg
+                .sync_states
+                .get("uniswap-v3")
+                .unwrap();
             if matches!(v2, SynchronizerState::Ready(h) if h.number == 5) &&
                 matches!(v3, SynchronizerState::Ready(h) if h.number == 5)
             {

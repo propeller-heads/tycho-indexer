@@ -147,22 +147,24 @@ pub enum RPCError {
     ServerUnreachable(String),
 }
 
-/// Converts an HTTP response body parse failure into the correct `RPCError`.
-///
-/// The tycho server returns plain-text error messages (not JSON) when a requested block falls
-/// outside its retention window. Detecting these here gives callers a typed signal to retry
-/// with a more recent block rather than treating it as an unrecoverable parse failure.
-///
-/// NOTE: The string matching below is coupled to the server's error message text. If those
-/// messages change server-side this silently regresses to `ParseResponse`. Replace with a
-/// structured error code if the server ever returns typed error responses.
-fn parse_error(err: serde_json::Error, body: &str) -> RPCError {
-    if body.contains("version is older than") || body.contains("Could not find Block") {
-        RPCError::StaleBlock(body.to_string())
-    } else if body.starts_with("Unknown extractor:") {
-        RPCError::UnknownExtractor(body.to_string())
-    } else {
-        RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+impl RPCError {
+    /// Converts an HTTP response body parse failure into the correct `RPCError`.
+    ///
+    /// The tycho server returns plain-text error messages (not JSON) when a requested block falls
+    /// outside its retention window. Detecting these here gives callers a typed signal to retry
+    /// with a more recent block rather than treating it as an unrecoverable parse failure.
+    ///
+    /// NOTE: The string matching below is coupled to the server's error message text. If those
+    /// messages change server-side this silently regresses to `ParseResponse`. Replace with a
+    /// structured error code if the server ever returns typed error responses.
+    fn from_parse_error(err: serde_json::Error, body: &str) -> Self {
+        if body.contains("version is older than") || body.contains("Could not find Block") {
+            RPCError::StaleBlock(body.to_string())
+        } else if body.starts_with("Unknown extractor:") {
+            RPCError::UnknownExtractor(body.to_string())
+        } else {
+            RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+        }
     }
 }
 
@@ -1047,7 +1049,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let accounts = serde_json::from_str::<StateRequestResponse>(&body)
-            .map_err(|err| parse_error(err, &body))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
@@ -1078,7 +1080,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
-            .map_err(|err| parse_error(err, &body))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?components, "Received protocol_components response from Tycho server");
 
         Ok(components)
@@ -1130,7 +1132,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
-            .map_err(|err| parse_error(err, &body))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?states, "Received protocol_states response from Tycho server");
 
         Ok(states)
