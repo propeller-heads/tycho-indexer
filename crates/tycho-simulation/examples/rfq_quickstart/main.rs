@@ -260,7 +260,7 @@ async fn main() {
 
         println!(
             "Received RFQ price levels with {} new pairs for block/timestamp {}",
-            &update.states.len(),
+            update.states.len(),
             update.block_number_or_timestamp
         );
 
