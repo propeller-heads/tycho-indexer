@@ -1,3 +1,11 @@
+## [0.282.0](https://github.com/propeller-heads/tycho-indexer/compare/0.281.1...0.282.0) (2026-05-05)
+
+
+### Features
+
+* **integration test:** Consider input token gas ([42c2ef9](https://github.com/propeller-heads/tycho-indexer/commit/42c2ef991b9e61f6c65fd12d7d7a060179343494))
+* **integration test:** Consider input token gas ([#975](https://github.com/propeller-heads/tycho-indexer/issues/975)) ([849ec05](https://github.com/propeller-heads/tycho-indexer/commit/849ec0525ea847d494941c0af135f8b1bb68bac0))
+
 ## [0.281.1](https://github.com/propeller-heads/tycho-indexer/compare/0.281.0...0.281.1) (2026-05-05)
 
 
