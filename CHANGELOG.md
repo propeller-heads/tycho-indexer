@@ -1,3 +1,20 @@
+## [0.280.1](https://github.com/propeller-heads/tycho-indexer/compare/0.280.0...0.280.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* **client:** address review feedback on ws-connections fixes ([c7677b9](https://github.com/propeller-heads/tycho-indexer/commit/c7677b9943ec7f37413e3cf3cbaf2e0dae3319a7))
+* **client:** handle stale snapshot blocks during initialization ([31d0d0e](https://github.com/propeller-heads/tycho-indexer/commit/31d0d0e52a870f1490262d4b02741a223cb571ec))
+* **client:** improve rate limit and WS close logging ([f75b366](https://github.com/propeller-heads/tycho-indexer/commit/f75b3666e54e0dcc7f0073f42c2eee83325d92bc))
+* **client:** keep main loop alive when all synchronizers are temporarily stale ([9dfd288](https://github.com/propeller-heads/tycho-indexer/commit/9dfd288f282913ed7fa9f662dd9cd35e19625653))
+* **client:** skip unrecognised extractors instead of crashing on init ([a7beec6](https://github.com/propeller-heads/tycho-indexer/commit/a7beec676a33e1dcc2201a2230fe8bea2d7bf420))
+* **deltas:** add timeouts to subscribe/unsubscribe confirmation waits ([0291430](https://github.com/propeller-heads/tycho-indexer/commit/0291430ef17b4d8e83b00f1a896134c0d7f52d08))
+* **deltas:** close TOCTOU race in ensure_connection using Notify::enable ([8d58128](https://github.com/propeller-heads/tycho-indexer/commit/8d58128aedeeefe7772f86d4f032011026180174))
+* **deltas:** detect stalled TCP connections with a 60s WS idle timeout ([f898479](https://github.com/propeller-heads/tycho-indexer/commit/f89847922a06bbb1553b9a3256d17db6549e2aca))
+* reduce client timeout time ([034d103](https://github.com/propeller-heads/tycho-indexer/commit/034d10372617d08f226ec72065ed8732009ae2fe))
+* **synchronizer:** reset retry count after a successful synchronization run ([b78f4b0](https://github.com/propeller-heads/tycho-indexer/commit/b78f4b0ff99feaaf9be6733311f1998eff680bf7))
+* **tycho-client:** improve WS connection handling ([#967](https://github.com/propeller-heads/tycho-indexer/issues/967)) ([56757e8](https://github.com/propeller-heads/tycho-indexer/commit/56757e826dc55511aae6eb866e64396d9c705e28))
+
 ## [0.280.0](https://github.com/propeller-heads/tycho-indexer/compare/0.279.0...0.280.0) (2026-05-01)
 
 
