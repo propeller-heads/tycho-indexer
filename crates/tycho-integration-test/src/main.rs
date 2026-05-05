@@ -152,13 +152,13 @@ struct Cli {
     #[arg(long)]
     max_days_since_last_trade: Option<u64>,
 
-    /// Enable partial block updates (flashblocks) on the tycho stream for lower latency
+    /// Enable partial block updates (flashblocks) on the tycho stream.
+    /// Be aware this significantly increases the frequency of simulations. You may need to
+    /// consider adjusting the max-simulations and max-simulations-stale values.
     #[arg(long, default_value_t = false)]
     partial_blocks: bool,
 
     /// Seconds without a protocol update before marking all known protocols as stale in metrics.
-    /// Should be at least 2× the chain's expected block time (e.g. 30 for Ethereum at ~12s
-    /// blocks).
     #[arg(long, default_value_t = 30)]
     stale_threshold_secs: u64,
 }
