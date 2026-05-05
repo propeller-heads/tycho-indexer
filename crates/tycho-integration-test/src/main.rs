@@ -7,7 +7,7 @@ use std::{
     fmt::Debug,
     str::FromStr,
     sync::{Arc, RwLock},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use alloy::{
@@ -338,32 +338,11 @@ async fn run(cli: Cli) -> miette::Result<()> {
     // Staleness watchdog: if no protocol update arrives within stale_threshold_secs, mark all
     // known protocols as Stale in metrics. This catches stream disconnections where the
     // SynchronizerState gauge would otherwise remain frozen at its last known value.
-    let known_protocols: Arc<RwLock<HashSet<String>>> = Arc::new(RwLock::new(HashSet::new()));
-    let last_protocol_update: Arc<RwLock<Instant>> = Arc::new(RwLock::new(Instant::now()));
-    if !cli.disable_onchain && cli.stale_threshold_secs > 0 {
-        let checker_known = known_protocols.clone();
-        let checker_last = last_protocol_update.clone();
-        let threshold = Duration::from_secs(cli.stale_threshold_secs);
-        tokio::spawn(async move {
-            let interval = threshold / 2;
-            loop {
-                tokio::time::sleep(interval).await;
-                if checker_last
-                    .read()
-                    .expect("Failed to acquire read lock on last_protocol_update")
-                    .elapsed() >
-                    threshold
-                {
-                    let protocols = checker_known
-                        .read()
-                        .expect("Failed to acquire read lock on known_protocols");
-                    for protocol in protocols.iter() {
-                        metrics::mark_protocol_stale(protocol);
-                    }
-                }
-            }
-        });
-    }
+    let stale_threshold = Duration::from_secs(cli.stale_threshold_secs);
+    let stale_enabled = !cli.disable_onchain && cli.stale_threshold_secs > 0;
+    let mut known_protocols: HashSet<String> = HashSet::new();
+    let stale_sleep = tokio::time::sleep(stale_threshold);
+    tokio::pin!(stale_sleep);
 
     loop {
         if !protocol_stream_open && !rfq_stream_open {
@@ -412,6 +391,16 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             }
 
+            // Staleness watchdog fires when no protocol update arrives within the threshold
+            _ = &mut stale_sleep, if stale_enabled => {
+                for protocol in &known_protocols {
+                    metrics::mark_protocol_stale(protocol);
+                }
+                stale_sleep
+                    .as_mut()
+                    .reset(tokio::time::Instant::now() + stale_threshold);
+            }
+
             // Process protocol updates
             update = protocol_rx.recv(), if protocol_stream_open => {
                 match update {
@@ -424,21 +413,13 @@ async fn run(cli: Cli) -> miette::Result<()> {
                             }
                         };
 
-                        // Reset the staleness watchdog: record this moment as the last time we saw
-                        // a live update, and register any newly-seen protocol names.
-                        {
-                            let now = Instant::now();
-                            *last_protocol_update
-                                .write()
-                                .expect("Failed to acquire write lock on last_protocol_update") =
-                                now;
-                            let mut protocols = known_protocols
-                                .write()
-                                .expect("Failed to acquire write lock on known_protocols");
-                            for protocol in update.update.sync_states.keys() {
-                                protocols.insert(protocol.clone());
-                            }
+                        // Reset the staleness watchdog and register any newly-seen protocols.
+                        for protocol in update.update.sync_states.keys() {
+                            known_protocols.insert(protocol.clone());
                         }
+                        stale_sleep
+                            .as_mut()
+                            .reset(tokio::time::Instant::now() + stale_threshold);
 
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {
