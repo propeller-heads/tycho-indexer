@@ -225,7 +225,7 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     };
 
     let chain = Chain::from_str(&args.chain)
-        .map_err(|_| format!("Unknown chain: {chain}", chain = &args.chain))?;
+        .map_err(|_| format!("Unknown chain: {chain}", chain = args.chain))?;
 
     let mut builder = TychoStreamBuilder::new(&args.tycho_url, chain)
         .auth_key(args.auth_key)

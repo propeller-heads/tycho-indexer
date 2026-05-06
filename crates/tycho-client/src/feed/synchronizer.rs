@@ -422,122 +422,158 @@ where
 
         let result = async {
             info!("Waiting for deltas...");
-            let mut warned_waiting_for_new_block = false;
-            let mut warned_skipping_synced = false;
             // Track the last seen block number such that we know when we get the first partial
             let mut last_block_number: Option<u64> = None;
-            let mut first_msg = loop {
-                let msg = select! {
-                    deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
-                        deltas_result
-                            .map_err(|_| {
-                                SynchronizerError::Timeout(format!(
-                                    "First deltas took longer than {t}s to arrive",
-                                    t = self.timeout
-                                ))
-                            })?
-                            .ok_or_else(|| {
-                                SynchronizerError::ConnectionError(
-                                    "Deltas channel closed before first message".to_string(),
-                                )
-                            })?
-                    },
-                    _ = &mut end_rx => {
-                        info!("Received close signal while waiting for first deltas");
-                        return Ok(());
-                    }
-                };
 
-                let incoming: BlockHeader = (&msg).into();
-
-                // Determine if this message is a candidate for starting synchronization.
-                // In partial mode, we wait for a new block to start (block number increases).
-                // In non-partial mode, all messages are candidates.
-                let is_new_block_candidate = if self.partial_blocks {
-                    match msg.partial_block_index {
-                        None => {
-                            // If we get a full block, it is a candidate
-                            last_block_number = Some(incoming.number);
-                            true
+            // Outer loop: find a suitable first block and fetch its snapshot. Retries within the
+            // same subscription when the snapshot endpoint rejects the block as too old — this
+            // happens after a server restart whose persisted state is outside the plan retention
+            // window. Consuming the stale delta and waiting for the next one lets the server catch
+            // up without tearing down the WS subscription and rebuilding state from scratch.
+            const MAX_STALE_RETRIES: u32 = 5;
+            let mut stale_retries: u32 = 0;
+            let (msg, header) = 'init: loop {
+                let mut warned_waiting_for_new_block = false;
+                let mut warned_skipping_synced = false;
+                let mut first_msg = loop {
+                    let msg = select! {
+                        deltas_result = timeout(Duration::from_secs(self.timeout), msg_rx.recv()) => {
+                            deltas_result
+                                .map_err(|_| {
+                                    SynchronizerError::Timeout(format!(
+                                        "First deltas took longer than {t}s to arrive",
+                                        t = self.timeout
+                                    ))
+                                })?
+                                .ok_or_else(|| {
+                                    SynchronizerError::ConnectionError(
+                                        "Deltas channel closed before first message".to_string(),
+                                    )
+                                })?
+                        },
+                        _ = &mut end_rx => {
+                            info!("Received close signal while waiting for first deltas");
+                            return Ok(());
                         }
-                        Some(current_partial_idx) => {
-                            let is_new_block = last_block_number
-                                .map(|prev_block| incoming.number > prev_block)
-                                .unwrap_or(false);
+                    };
 
-                            if !warned_waiting_for_new_block {
-                                info!(
-                                    extractor=%self.extractor_id,
-                                    block=incoming.number,
-                                    partial_idx=current_partial_idx,
-                                    "Syncing. Waiting for new block to start"
-                                );
-                                warned_waiting_for_new_block = true;
+                    let incoming: BlockHeader = (&msg).into();
+
+                    // Determine if this message is a candidate for starting synchronization.
+                    // In partial mode, we wait for a new block to start (block number increases).
+                    // In non-partial mode, all messages are candidates.
+                    let is_new_block_candidate = if self.partial_blocks {
+                        match msg.partial_block_index {
+                            None => {
+                                // If we get a full block, it is a candidate
+                                last_block_number = Some(incoming.number);
+                                true
                             }
-                            last_block_number = Some(incoming.number);
-                            is_new_block
-                        }
-                    }
-                } else {
-                    true // Non-partial mode: all messages are candidates
-                };
+                            Some(current_partial_idx) => {
+                                let is_new_block = last_block_number
+                                    .map(|prev_block| incoming.number > prev_block)
+                                    .unwrap_or(false);
 
-                if !is_new_block_candidate {
-                    continue;
-                }
-
-                // Check if we've already synced this block (applies to both modes)
-                if let Some(current) = &self.last_synced_block {
-                    if current.number >= incoming.number && !self.is_next_expected(&incoming) {
-                        if !warned_skipping_synced {
-                            info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping already synced block");
-                            warned_skipping_synced = true;
+                                if !warned_waiting_for_new_block {
+                                    info!(
+                                        extractor=%self.extractor_id,
+                                        block=incoming.number,
+                                        partial_idx=current_partial_idx,
+                                        "Syncing. Waiting for new block to start"
+                                    );
+                                    warned_waiting_for_new_block = true;
+                                }
+                                last_block_number = Some(incoming.number);
+                                is_new_block
+                            }
                         }
+                    } else {
+                        true // Non-partial mode: all messages are candidates
+                    };
+
+                    if !is_new_block_candidate {
                         continue;
                     }
-                }
-                break msg;
-            };
 
-            self.filter_deltas(&mut first_msg);
+                    // Check if we've already synced this block (applies to both modes)
+                    if let Some(current) = &self.last_synced_block {
+                        if current.number >= incoming.number && !self.is_next_expected(&incoming) {
+                            if !warned_skipping_synced {
+                                info!(extractor=%self.extractor_id, from=incoming.number, to=current.number, "Syncing. Skipping already synced block");
+                                warned_skipping_synced = true;
+                            }
+                            continue;
+                        }
+                    }
+                    break msg;
+                };
 
-            // initial snapshot
-            info!(height = first_msg.get_block().number, "First deltas received");
-            let header: BlockHeader = (&first_msg).into();
-            let deltas_msg = StateSyncMessage {
-                header: header.clone(),
-                snapshots: Default::default(),
-                deltas: Some(first_msg),
-                removed_components: Default::default(),
-            };
+                self.filter_deltas(&mut first_msg);
 
-            // If possible skip retrieving snapshots
-            let msg = if !self.is_next_expected(&header) {
-                info!("Retrieving snapshot");
-                // With partial blocks, the server only has full blocks in its buffer; pass the
-                // previous block's header so we request state at N-1, then merge with deltas.
-                let snapshot_header = if self.partial_blocks && header.number > 0 {
-                    BlockHeader {
-                        number: header.number - 1,
-                        hash: header.parent_hash.clone(),
-                        ..Default::default()
+                // initial snapshot
+                info!(height = first_msg.get_block().number, "First deltas received");
+                let header: BlockHeader = (&first_msg).into();
+                let deltas_msg = StateSyncMessage {
+                    header: header.clone(),
+                    snapshots: Default::default(),
+                    deltas: Some(first_msg),
+                    removed_components: Default::default(),
+                };
+
+                // If possible skip retrieving snapshots
+                if !self.is_next_expected(&header) {
+                    info!("Retrieving snapshot");
+                    // With partial blocks, the server only has full blocks in its buffer; pass the
+                    // previous block's header so we request state at N-1, then merge with deltas.
+                    let snapshot_header = if self.partial_blocks && header.number > 0 {
+                        BlockHeader {
+                            number: header.number - 1,
+                            hash: header.parent_hash.clone(),
+                            ..Default::default()
+                        }
+                    } else {
+                        BlockHeader { revert: false, ..header.clone() }
+                    };
+                    match self
+                        .get_snapshots::<Vec<&String>>(snapshot_header, None)
+                        .await
+                    {
+                        Ok(snapshot) => {
+                            let n_components = self.component_tracker.components.len();
+                            let n_snapshots = snapshot.snapshots.states.len();
+                            info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
+                            break 'init (snapshot.merge(deltas_msg), header);
+                        }
+                        Err(SynchronizerError::RPCError(crate::rpc::RPCError::StaleBlock(
+                            reason,
+                        ))) => {
+                            stale_retries += 1;
+                            if stale_retries > MAX_STALE_RETRIES {
+                                return Err(SynchronizerError::RPCError(
+                                    crate::rpc::RPCError::StaleBlock(reason),
+                                ));
+                            }
+                            // The server's persisted state for this block is outside the plan
+                            // retention window. Discard this delta and wait for a fresher block
+                            // from the same subscription rather than restarting from scratch.
+                            warn!(
+                                block = header.number,
+                                stale_retries,
+                                %reason,
+                                "Snapshot block is outside server retention window; \
+                                 waiting for a more recent block"
+                            );
+                            continue 'init;
+                        }
+                        Err(e) => return Err(e),
                     }
                 } else {
-                    BlockHeader { revert: false, ..header.clone() }
-                };
-                let snapshot = self
-                    .get_snapshots::<Vec<&String>>(snapshot_header, None)
-                    .await?
-                    .merge(deltas_msg);
-                let n_components = self.component_tracker.components.len();
-                let n_snapshots = snapshot.snapshots.states.len();
-                info!(n_components, n_snapshots, "Initial snapshot retrieved, starting delta message feed");
-                snapshot
-            } else {
-                deltas_msg
+                    break 'init (deltas_msg, header);
+                }
             };
+
             block_tx.send(Ok(msg)).await?;
-            self.last_synced_block = Some(header.clone());
+            self.last_synced_block = Some(header);
             loop {
                 select! {
                     deltas_opt = msg_rx.recv() => {
@@ -721,9 +757,18 @@ where
             while retry_count < self.max_retries {
                 info!(extractor_id=%&self.extractor_id, retry_count, "(Re)starting synchronization loop");
 
+                let prev_block = self
+                    .last_synced_block
+                    .as_ref()
+                    .map(|h| h.number);
                 let res = self
                     .state_sync(&mut tx, current_end_rx)
                     .await;
+                let made_progress = self
+                    .last_synced_block
+                    .as_ref()
+                    .map(|h| h.number) >
+                    prev_block;
                 match res {
                     Ok(()) => {
                         info!(
@@ -764,7 +809,13 @@ where
                     }
                 }
                 sleep(self.retry_cooldown).await;
-                retry_count += 1;
+                // A run that processed blocks is a healthy run — reset the counter so
+                // transient failures after a long successful period get a fresh retry budget.
+                if made_progress {
+                    retry_count = 0;
+                } else {
+                    retry_count += 1;
+                }
             }
             if let Some(e) = final_error {
                 warn!(extractor_id=%&self.extractor_id, retry_count, error=%e, "Max retries exceeded");

@@ -914,7 +914,7 @@ where
         }
 
         // Remove components from persistent state
-        for (id, _) in removed_pairs.iter() {
+        for id in removed_pairs.keys() {
             state_guard.components.remove(id);
         }
 

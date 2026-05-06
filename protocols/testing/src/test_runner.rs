@@ -1030,7 +1030,7 @@ impl TestRunner {
                 .ok_or_else(|| miette!("Couldn't find protocol component {id}"))?;
 
             let tokens = component.tokens.clone();
-            let formatted_token_str = format!("{:}/{:}", &tokens[0].symbol, &tokens[1].symbol);
+            let formatted_token_str = format!("{:}/{:}", tokens[0].symbol, tokens[1].symbol);
             state
                 .spot_price(&tokens[0], &tokens[1])
                 .map(|price| info!("[{}] Spot price {:?}: {:?}", id, formatted_token_str, price))

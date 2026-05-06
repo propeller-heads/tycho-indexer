@@ -94,7 +94,7 @@ impl LiquoriceClient {
         }
 
         for approved_quote_token in &self.quote_tokens {
-            for (_mm, token_prices) in prices_by_mm.iter() {
+            for token_prices in prices_by_mm.values() {
                 for token_price in token_prices {
                     if token_price.base_token == quote_token &&
                         token_price.quote_token == *approved_quote_token
