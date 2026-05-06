@@ -1,3 +1,11 @@
+## [0.284.0](https://github.com/propeller-heads/tycho-indexer/compare/0.283.1...0.284.0) (2026-05-06)
+
+
+### Features
+
+* add liquidityparty to integration test ([dc99f9e](https://github.com/propeller-heads/tycho-indexer/commit/dc99f9ef0ce8cc75a8c4fa234019e482a8407dff))
+* add liquidityparty to integration test ([#974](https://github.com/propeller-heads/tycho-indexer/issues/974)) ([bca8a62](https://github.com/propeller-heads/tycho-indexer/commit/bca8a62663e36d8503b1292971ec21ddc5ee375a))
+
 ## [0.283.1](https://github.com/propeller-heads/tycho-indexer/compare/0.283.0...0.283.1) (2026-05-06)
 
 
