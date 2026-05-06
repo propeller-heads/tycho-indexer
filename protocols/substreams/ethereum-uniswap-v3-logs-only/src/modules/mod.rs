@@ -5,14 +5,13 @@ use substreams_ethereum::pb::eth::v2::TransactionTrace;
 
 use crate::pb::uniswap::v3::{
     events::{pool_event, PoolEvent as ProtoPoolEvent},
-    LiquidityChange,
-    LiquidityChangeType,
-    TickDelta as ProtoTickDelta,
-    Transaction,
+    LiquidityChange, LiquidityChangeType, TickDelta as ProtoTickDelta, Transaction,
 };
-use uniswap_v3_core::events::{PoolEvent as CorePoolEvent, PoolEventKind, TxRef};
-use uniswap_v3_core::liquidity::{LiquidityChangeKind, LiquidityDelta as CoreLiquidityDelta};
-use uniswap_v3_core::ticks::TickDelta as CoreTickDelta;
+use uniswap_v3_core::{
+    events::{PoolEvent as CorePoolEvent, PoolEventKind, TxRef},
+    liquidity::{LiquidityChangeKind, LiquidityDelta as CoreLiquidityDelta},
+    ticks::TickDelta as CoreTickDelta,
+};
 
 #[path = "1_map_pool_created.rs"]
 mod map_pool_created;
@@ -185,16 +184,14 @@ impl From<CorePoolEvent> for ProtoPoolEvent {
                     amount_1: amount1,
                 })
             }
-            PoolEventKind::Flash { paid0, paid1 } => {
-                pool_event::Type::Flash(pool_event::Flash {
-                    sender: String::new(),
-                    recipient: String::new(),
-                    amount_0: String::new(),
-                    amount_1: String::new(),
-                    paid_0: paid0,
-                    paid_1: paid1,
-                })
-            }
+            PoolEventKind::Flash { paid0, paid1 } => pool_event::Type::Flash(pool_event::Flash {
+                sender: String::new(),
+                recipient: String::new(),
+                amount_0: String::new(),
+                amount_1: String::new(),
+                paid_0: paid0,
+                paid_1: paid1,
+            }),
             PoolEventKind::CollectProtocol { amount0, amount1 } => {
                 pool_event::Type::CollectProtocol(pool_event::CollectProtocol {
                     sender: String::new(),
@@ -228,7 +225,9 @@ impl From<CoreTickDelta> for ProtoTickDelta {
         Self {
             pool_address: d.pool_address,
             tick_index: d.tick_index,
-            liquidity_net_delta: d.liquidity_net_delta.to_signed_bytes_be(),
+            liquidity_net_delta: d
+                .liquidity_net_delta
+                .to_signed_bytes_be(),
             ordinal: 0,
             transaction: None,
         }
@@ -250,4 +249,3 @@ impl From<CoreLiquidityDelta> for LiquidityChange {
         }
     }
 }
-

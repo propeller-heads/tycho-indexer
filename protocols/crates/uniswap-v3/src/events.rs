@@ -1,7 +1,8 @@
+use substreams_ethereum::Event;
+
 use crate::abi::pool::events::{
     Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
 };
-use substreams_ethereum::Event;
 
 pub struct Pool {
     pub address: Vec<u8>,
@@ -22,47 +23,14 @@ pub struct TxRef {
 }
 
 pub enum PoolEventKind {
-    Initialize {
-        sqrt_price: String,
-        tick: i32,
-    },
-    Swap {
-        amount0: String,
-        amount1: String,
-        sqrt_price: String,
-        liquidity: String,
-        tick: i32,
-    },
-    Mint {
-        tick_lower: i32,
-        tick_upper: i32,
-        amount: String,
-        amount0: String,
-        amount1: String,
-    },
-    Burn {
-        tick_lower: i32,
-        tick_upper: i32,
-        amount: String,
-        amount0: String,
-        amount1: String,
-    },
-    Collect {
-        amount0: String,
-        amount1: String,
-    },
-    Flash {
-        paid0: String,
-        paid1: String,
-    },
-    CollectProtocol {
-        amount0: String,
-        amount1: String,
-    },
-    SetFeeProtocol {
-        fee0_new: u64,
-        fee1_new: u64,
-    },
+    Initialize { sqrt_price: String, tick: i32 },
+    Swap { amount0: String, amount1: String, sqrt_price: String, liquidity: String, tick: i32 },
+    Mint { tick_lower: i32, tick_upper: i32, amount: String, amount0: String, amount1: String },
+    Burn { tick_lower: i32, tick_upper: i32, amount: String, amount0: String, amount1: String },
+    Collect { amount0: String, amount1: String },
+    Flash { paid0: String, paid1: String },
+    CollectProtocol { amount0: String, amount1: String },
+    SetFeeProtocol { fee0_new: u64, fee1_new: u64 },
 }
 
 pub struct PoolEvent {
@@ -79,12 +47,8 @@ pub fn decode_log(
     pool: &Pool,
     tx: &TxRef,
 ) -> Option<PoolEvent> {
-    let tx_ref = TxRef {
-        hash: tx.hash.clone(),
-        from: tx.from.clone(),
-        to: tx.to.clone(),
-        index: tx.index,
-    };
+    let tx_ref =
+        TxRef { hash: tx.hash.clone(), from: tx.from.clone(), to: tx.to.clone(), index: tx.index };
 
     if let Some(init) = Initialize::match_and_decode(log) {
         return Some(PoolEvent {

@@ -1,5 +1,6 @@
-use num_bigint::BigInt;
 use std::str::FromStr;
+
+use num_bigint::BigInt;
 
 use crate::events::{PoolEvent, PoolEventKind};
 

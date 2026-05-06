@@ -16,7 +16,11 @@ pub fn map_balance_changes(events: Events) -> Result<BlockBalanceDeltas, anyhow:
             let core_event = CorePoolEvent::from(&proto_event);
             uniswap_v3_core::balance::event_to_balance_deltas(&core_event)
                 .into_iter()
-                .map(move |d| BalanceDelta { ord: ordinal, tx: tx.as_ref().map(Into::into), ..d.into() })
+                .map(move |d| BalanceDelta {
+                    ord: ordinal,
+                    tx: tx.as_ref().map(Into::into),
+                    ..d.into()
+                })
         })
         .collect();
 

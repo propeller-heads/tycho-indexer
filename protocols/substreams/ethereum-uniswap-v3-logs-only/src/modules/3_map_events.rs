@@ -21,7 +21,10 @@ pub fn map_events(
                 to: tx.to.clone(),
                 index: tx.index as u64,
             };
-            let receipt = tx.receipt.as_ref().expect("receipt missing");
+            let receipt = tx
+                .receipt
+                .as_ref()
+                .expect("receipt missing");
             receipt
                 .logs
                 .iter()
@@ -43,4 +46,3 @@ pub fn map_events(
     pool_events.sort_unstable_by_key(|e| e.log_ordinal);
     Ok(Events { pool_events })
 }
-

@@ -34,7 +34,7 @@ pub fn map_liquidity_changes(
         .into_iter()
         .filter_map(|proto_event| {
             let current_tick = pools_current_tick_store
-                .get_at(proto_event.log_ordinal, format!("pool:{0}", &proto_event.pool_address))
+                .get_at(proto_event.log_ordinal, format!("pool:{0}", proto_event.pool_address))
                 .unwrap_or(0);
             let ordinal = proto_event.log_ordinal;
             let transaction = proto_event.transaction.clone();

@@ -14,7 +14,10 @@ use alloy::{
 use prost::Message;
 use tokio_stream::StreamExt;
 use tycho_common::{
-    models::blockchain::{LogInput, TxInput, TxWithChanges},
+    models::{
+        blockchain::{LogInput, TxInput, TxWithChanges},
+        protocol::{ProtocolComponent, ProtocolComponentState},
+    },
     traits::ProtocolProcessor,
     Bytes,
 };
@@ -25,7 +28,6 @@ use tycho_indexer::{
         SubstreamsEndpoint,
     },
 };
-use tycho_common::models::protocol::{ProtocolComponent, ProtocolComponentState};
 use tycho_substreams::pb::tycho::evm::v1::BlockChanges;
 use uniswap_v3_core::processor::UniswapV3Processor;
 
@@ -73,7 +75,10 @@ async fn stream_block_range(
     loop {
         match stream.next().await {
             Some(Ok(BlockResponse::New(data))) => {
-                let block_num = data.clock.as_ref().map_or(0, |c| c.number);
+                let block_num = data
+                    .clock
+                    .as_ref()
+                    .map_or(0, |c| c.number);
                 let map_output = data
                     .output
                     .as_ref()
@@ -117,8 +122,11 @@ const UV3_EVENT_SIGNATURES: [&str; 8] = [
 /// Chunked into 10,000-block pages to stay within Alchemy's eth_getLogs limit.
 async fn fetch_range_logs(rpc_url: &str, start_block: u64, stop_block: u64) -> Vec<Log> {
     const CHUNK: u64 = 10_000;
-    let provider = ProviderBuilder::new()
-        .connect_http(rpc_url.parse::<Url>().expect("invalid RPC URL"));
+    let provider = ProviderBuilder::new().connect_http(
+        rpc_url
+            .parse::<Url>()
+            .expect("invalid RPC URL"),
+    );
     let mut logs = Vec::new();
     let mut chunk_start = start_block;
     while chunk_start <= stop_block {
@@ -145,8 +153,11 @@ async fn fetch_block_tx_meta(
 ) -> HashMap<B256, (Vec<u8>, Vec<u8>, u64)> {
     use alloy::network::{BlockResponse as _, TransactionResponse as _};
 
-    let provider = ProviderBuilder::new()
-        .connect_http(rpc_url.parse::<Url>().expect("invalid RPC URL"));
+    let provider = ProviderBuilder::new().connect_http(
+        rpc_url
+            .parse::<Url>()
+            .expect("invalid RPC URL"),
+    );
     let block = provider
         .get_block_by_number(BlockNumberOrTag::Number(block_num))
         .full()
@@ -160,8 +171,14 @@ async fn fetch_block_tx_meta(
             let hash = tx.tx_hash();
             let from = tx.from().to_vec();
             // `to()` lives on the inner consensus transaction.
-            let to = tx.inner.to().map(|a| a.to_vec()).unwrap_or_default();
-            let index = tx.transaction_index().unwrap_or_default();
+            let to = tx
+                .inner
+                .to()
+                .map(|a| a.to_vec())
+                .unwrap_or_default();
+            let index = tx
+                .transaction_index()
+                .unwrap_or_default();
             map.insert(hash, (from, to, index));
         }
     }
@@ -188,13 +205,19 @@ async fn fetch_range_tx_inputs(
     for log in &logs {
         let Some(block_num) = log.block_number else { continue };
         let Some(hash) = log.transaction_hash else { continue };
-        blocks_with_tx_hashes.entry(block_num).or_default().insert(hash);
+        blocks_with_tx_hashes
+            .entry(block_num)
+            .or_default()
+            .insert(hash);
         logs_by_key
             .entry((block_num, hash))
             .or_default()
             .push(LogInput::new(
                 Bytes::from(log.address().to_vec()),
-                log.topics().iter().map(|t| Bytes::from(t.to_vec())).collect(),
+                log.topics()
+                    .iter()
+                    .map(|t| Bytes::from(t.to_vec()))
+                    .collect(),
                 Bytes::from(log.data().data.to_vec()),
                 log.log_index.unwrap_or_default() as u32,
             ));
@@ -208,7 +231,9 @@ async fn fetch_range_tx_inputs(
             .into_iter()
             .filter_map(|hash| {
                 let (from, to, index) = meta.get(&hash)?.clone();
-                let logs = logs_by_key.remove(&(block_num, hash)).unwrap_or_default();
+                let logs = logs_by_key
+                    .remove(&(block_num, hash))
+                    .unwrap_or_default();
                 Some(TxInput::new(
                     Bytes::from(hash.to_vec()),
                     Bytes::from(from),
@@ -231,11 +256,13 @@ async fn fetch_range_tx_inputs(
 /// Normalise a component_id from substreams output to lower-case hex without "0x".
 fn normalise_component_id(raw: &[u8]) -> String {
     let s = std::str::from_utf8(raw).unwrap_or_default();
-    s.trim_start_matches("0x").to_lowercase()
+    s.trim_start_matches("0x")
+        .to_lowercase()
 }
 
 fn normalise_str_id(s: &str) -> String {
-    s.trim_start_matches("0x").to_lowercase()
+    s.trim_start_matches("0x")
+        .to_lowercase()
 }
 
 #[derive(Debug)]
@@ -305,7 +332,9 @@ fn processor_to_comparable(changes: &TxWithChanges) -> ComparableTxChanges {
     let mut balances: HashMap<(String, String), Vec<u8>> = HashMap::new();
 
     for (comp_id, state_delta) in &changes.state_updates {
-        let entry = attributes.entry(comp_id.clone()).or_default();
+        let entry = attributes
+            .entry(comp_id.clone())
+            .or_default();
         for (attr_name, attr_val) in &state_delta.updated_attributes {
             entry.insert(attr_name.clone(), attr_val.to_vec());
         }
@@ -339,8 +368,9 @@ fn processor_to_comparable(changes: &TxWithChanges) -> ComparableTxChanges {
 ///   UV3_SPKG_PATH       — path to the built `ethereum-uniswap-v3.spkg`
 ///                         (build: cd protocols/substreams/ethereum-uniswap-v3-logs-only
 ///                                 cargo build --target wasm32-unknown-unknown --release
-///                                 substreams pack -o /tmp/uniswap-v3.spkg ethereum-uniswap-v3.yaml)
-///   UV3_STOP_BLOCK      — (optional) override stop block; defaults to 12_371_621
+///                                 substreams pack -o /tmp/uniswap-v3.spkg
+/// ethereum-uniswap-v3.yaml)   UV3_STOP_BLOCK      — (optional) override stop block; defaults to
+/// 12_371_621
 #[tokio::test]
 #[ignore = "requires ETH_RPC_URL, STREAMINGFAST_KEY, and UV3_SPKG_PATH"]
 async fn test_processor_matches_substreams_genesis_range() {
@@ -381,7 +411,11 @@ async fn test_processor_matches_substreams_genesis_range() {
                 if known_pool_ids.insert(pool_id.clone()) {
                     components.push(ProtocolComponent {
                         id: pool_id,
-                        tokens: comp.tokens.iter().map(|t| t.clone().into()).collect(),
+                        tokens: comp
+                            .tokens
+                            .iter()
+                            .map(|t| t.clone().into())
+                            .collect(),
                         ..Default::default()
                     });
                 }
@@ -409,8 +443,7 @@ async fn test_processor_matches_substreams_genesis_range() {
         .collect();
 
     // ── Step 4: fetch tx inputs for the full block range ─────────────────────
-    let mut per_block_inputs =
-        fetch_range_tx_inputs(&rpc_url, START_BLOCK, stop_block).await;
+    let mut per_block_inputs = fetch_range_tx_inputs(&rpc_url, START_BLOCK, stop_block).await;
 
     // ── Step 5: run the native processor block by block ──────────────────────
     let mut processor = UniswapV3Processor::from_snapshot(&components, &states);
@@ -424,7 +457,9 @@ async fn test_processor_matches_substreams_genesis_range() {
     let mut total_compared_balances: usize = 0;
 
     for (block_num, substreams_block) in &all_block_changes {
-        let tx_inputs = per_block_inputs.remove(block_num).unwrap_or_default();
+        let tx_inputs = per_block_inputs
+            .remove(block_num)
+            .unwrap_or_default();
         let processor_output = processor.process_block(&tx_inputs);
 
         let substreams_map: HashMap<String, ComparableTxChanges> = substreams_block
@@ -456,7 +491,11 @@ async fn test_processor_matches_substreams_genesis_range() {
             println!("\n  block={block_num} tx={short_hash}...");
 
             for (cid, expected_attrs) in &expected.attributes {
-                let actual_attrs = actual.attributes.get(cid).cloned().unwrap_or_default();
+                let actual_attrs = actual
+                    .attributes
+                    .get(cid)
+                    .cloned()
+                    .unwrap_or_default();
                 let short_cid = &cid[..8];
                 for (attr_name, expected_value) in expected_attrs {
                     total_compared_attrs += 1;
@@ -489,7 +528,10 @@ async fn test_processor_matches_substreams_genesis_range() {
                 let short_cid = &cid[..8];
                 let short_tok = &token[..8];
                 let eb = hex::encode(expected_balance);
-                match actual.balances.get(&(cid.clone(), token.clone())) {
+                match actual
+                    .balances
+                    .get(&(cid.clone(), token.clone()))
+                {
                     Some(v) if v == expected_balance => {
                         println!("    pool={short_cid}.. token={short_tok}..  balance: substreams={eb}  processor=✓");
                     }

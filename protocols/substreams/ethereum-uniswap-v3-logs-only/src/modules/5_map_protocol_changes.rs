@@ -147,11 +147,8 @@ pub fn map_protocol_changes(
                 .into();
             let core_event = CorePoolEvent::from(&proto_event);
             for update in uniswap_v3_core::output::event_to_attribute_updates(&core_event) {
-                let change_type = if update.is_creation {
-                    ChangeType::Creation
-                } else {
-                    ChangeType::Update
-                };
+                let change_type =
+                    if update.is_creation { ChangeType::Creation } else { ChangeType::Update };
                 let builder = transaction_changes
                     .entry(tx.index)
                     .or_insert_with(|| TransactionChangesBuilder::new(&tx));

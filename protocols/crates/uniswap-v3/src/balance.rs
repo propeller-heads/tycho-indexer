@@ -1,6 +1,6 @@
-use num_bigint::BigInt;
 use std::str::FromStr;
 
+use num_bigint::BigInt;
 use tycho_substreams::pb::tycho::evm::v1::BalanceDelta as ProtoBalanceDelta;
 
 use crate::events::{PoolEvent, PoolEventKind};

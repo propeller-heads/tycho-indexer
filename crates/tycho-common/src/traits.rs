@@ -5,8 +5,9 @@ use async_trait::async_trait;
 
 use crate::{
     models::{
-        blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint, TxInput,
-            TxWithChanges},
+        blockchain::{
+            Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint, TxInput, TxWithChanges,
+        },
         contract::AccountDelta,
         protocol::{ProtocolComponent, ProtocolComponentState},
         token::{Token, TokenQuality, TransferCost, TransferTax},
@@ -27,10 +28,7 @@ pub trait ProtocolProcessor: Sized {
     /// Components carry the static metadata (token addresses, pool address),
     /// states carry the dynamic baseline (tick liquidity, balances at snapshot
     /// height).
-    fn from_snapshot(
-        components: &[ProtocolComponent],
-        states: &[ProtocolComponentState],
-    ) -> Self;
+    fn from_snapshot(components: &[ProtocolComponent], states: &[ProtocolComponentState]) -> Self;
 
     /// Processes all transactions in one block and returns one [`TxWithChanges`]
     /// per transaction that produced protocol-relevant changes.
