@@ -243,6 +243,7 @@ impl UniswapV4State {
                 .fees
                 .calculate_swap_fees_pips(zero_for_one, lp_fee_override);
 
+            let sqrt_price_start = state.sqrt_price;
             let (sqrt_price, amount_in, amount_out, fee_amount) = swap_math::compute_swap_step(
                 state.sqrt_price,
                 UniswapV4State::get_sqrt_ratio_target(sqrt_price_next, price_limit, zero_for_one),
@@ -256,7 +257,7 @@ impl UniswapV4State {
             state.sqrt_price = sqrt_price;
 
             let step = StepComputation {
-                sqrt_price_start: state.sqrt_price,
+                sqrt_price_start,
                 tick_next: next_tick,
                 initialized,
                 sqrt_price_next,
@@ -1985,6 +1986,53 @@ mod tests {
             ticks,
         )
         .expect("Failed to create pool")
+    }
+
+    fn create_tick_boundary_v4_test_pool() -> UniswapV4State {
+        let sqrt_price = get_sqrt_ratio_at_tick(0).expect("Failed to calculate sqrt price");
+        let ticks = vec![TickInfo::new(-120, 0).unwrap(), TickInfo::new(120, 0).unwrap()];
+
+        UniswapV4State::new(
+            100_000_000_000_000_000_000u128,
+            sqrt_price,
+            UniswapV4Fees { zero_for_one: 0, one_for_zero: 0, lp_fee: 3000 },
+            0,
+            60,
+            ticks,
+        )
+        .expect("Failed to create pool")
+    }
+
+    #[test]
+    fn test_partial_step_updates_tick_when_price_moves_without_crossing_initialized_tick() {
+        let pool = create_tick_boundary_v4_test_pool();
+        let amount = -I256::from_raw(U256::from(100_000_000_000_000_000u64));
+
+        let result = pool
+            .swap(true, amount, None, None)
+            .expect("swap should stay within the current liquidity range");
+        let expected_tick =
+            get_tick_at_sqrt_ratio(result.sqrt_price).expect("new sqrt price should map to a tick");
+
+        assert_ne!(result.sqrt_price, pool.sqrt_price);
+        assert_ne!(result.sqrt_price, get_sqrt_ratio_at_tick(-120).unwrap());
+        assert_ne!(expected_tick, pool.tick);
+        assert_eq!(result.tick, expected_tick);
+    }
+
+    #[test]
+    fn test_swap_keeps_boundary_tick_when_price_does_not_move() {
+        let mut pool = create_tick_boundary_v4_test_pool();
+        pool.tick = -1;
+        let amount = -I256::from_raw(U256::from(1u64));
+
+        let result = pool
+            .swap(true, amount, None, None)
+            .expect("swap should consume the input as fee without moving price");
+
+        assert_eq!(result.sqrt_price, pool.sqrt_price);
+        assert_eq!(get_tick_at_sqrt_ratio(result.sqrt_price).unwrap(), 0);
+        assert_eq!(result.tick, pool.tick);
     }
 
     #[test]
