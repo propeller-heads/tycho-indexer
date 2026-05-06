@@ -110,12 +110,16 @@ impl TxDeltaIndexer for UniswapV3Processor {
                         delta
                             .deleted_attributes
                             .insert(attr.name.clone());
-                        delta.updated_attributes.remove(&attr.name);
+                        delta
+                            .updated_attributes
+                            .remove(&attr.name);
                     } else {
                         delta
                             .updated_attributes
                             .insert(attr.name.clone(), Bytes::from(attr.value));
-                        delta.deleted_attributes.remove(&attr.name);
+                        delta
+                            .deleted_attributes
+                            .remove(&attr.name);
                     }
                 }
             }
@@ -319,8 +323,10 @@ impl UniswapV3Processor {
         self.pools.remove(id);
         self.current_tick.remove(id);
         self.pool_liquidity.remove(id);
-        self.balances.retain(|(pool_id, _), _| pool_id != id);
-        self.tick_liquidity.retain(|(pool_id, _), _| pool_id != id);
+        self.balances
+            .retain(|(pool_id, _), _| pool_id != id);
+        self.tick_liquidity
+            .retain(|(pool_id, _), _| pool_id != id);
         self.baseline_tick_keys
             .retain(|(pool_id, _)| pool_id != id);
     }
@@ -382,7 +388,10 @@ impl UniswapV3Processor {
         let mut ordered: Vec<(u64, TransactionChangesBuilder)> =
             tx_builders.into_values().collect();
         ordered.sort_unstable_by_key(|(idx, _)| *idx);
-        ordered.into_iter().filter_map(|(_, b)| b.build()).collect()
+        ordered
+            .into_iter()
+            .filter_map(|(_, b)| b.build())
+            .collect()
     }
 
     /// Applies a batch of transactions and returns per-tx protocol state changes.
@@ -400,7 +409,8 @@ impl UniswapV3Processor {
         let pool_hex = hex::encode(&event.pool_address);
 
         if let Some(new_tick) = event_to_current_tick(&event) {
-            self.current_tick.insert(pool_hex.clone(), new_tick);
+            self.current_tick
+                .insert(pool_hex.clone(), new_tick);
         }
 
         for delta in event_to_balance_deltas(&event) {
@@ -423,7 +433,10 @@ impl UniswapV3Processor {
             let key = (pool_hex.clone(), tick_delta.tick_index);
             let existed_before =
                 self.tick_liquidity.contains_key(&key) || self.baseline_tick_keys.contains(&key);
-            let running = self.tick_liquidity.entry(key).or_default();
+            let running = self
+                .tick_liquidity
+                .entry(key)
+                .or_default();
             *running += &tick_delta.liquidity_net_delta;
             let new_val = running.clone();
 
@@ -445,9 +458,15 @@ impl UniswapV3Processor {
             });
         }
 
-        let cur_tick = *self.current_tick.get(&pool_hex).unwrap_or(&0);
+        let cur_tick = *self
+            .current_tick
+            .get(&pool_hex)
+            .unwrap_or(&0);
         if let Some(liq_delta) = event_to_liquidity_delta(cur_tick, &event) {
-            let running = self.pool_liquidity.entry(pool_hex.clone()).or_default();
+            let running = self
+                .pool_liquidity
+                .entry(pool_hex.clone())
+                .or_default();
             match liq_delta.kind {
                 LiquidityChangeKind::Delta => *running += &liq_delta.value,
                 LiquidityChangeKind::Absolute => *running = liq_delta.value.clone(),

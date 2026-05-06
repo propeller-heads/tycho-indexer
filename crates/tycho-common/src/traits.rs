@@ -6,9 +6,7 @@ use async_trait::async_trait;
 use crate::{
     dto,
     models::{
-        blockchain::{
-            Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint, TxInput,
-        },
+        blockchain::{Block, BlockTag, EntryPointWithTracingParams, TracedEntryPoint, TxInput},
         contract::AccountDelta,
         token::{Token, TokenQuality, TransferCost, TransferTax},
         Address, Balance, BlockHash, StoreKey,
@@ -27,17 +25,15 @@ use crate::{
 ///
 /// # Lifecycle
 ///
-/// 1. **Hydrate** — call [`apply_block`][TxDeltaIndexer::apply_block] for each
-///    finalised block received from the Tycho client. The first call serves as
-///    initialisation: `state_updates` and `component_balances` will contain the
-///    full snapshot at that height rather than a sparse delta. Subsequent calls
-///    apply incremental deltas.
+/// 1. **Hydrate** — call [`apply_block`][TxDeltaIndexer::apply_block] for each finalised block
+///    received from the Tycho client. The first call serves as initialisation: `state_updates` and
+///    `component_balances` will contain the full snapshot at that height rather than a sparse
+///    delta. Subsequent calls apply incremental deltas.
 ///
-/// 2. **Query** — call [`generate_deltas`][TxDeltaIndexer::generate_deltas]
-///    with a batch of in-flight transactions at any point. The indexer applies
-///    them against its current internal state and returns a [`dto::BlockChanges`]
-///    describing what would change. Internal state is **not** mutated by this
-///    call; it always operates on the state left by the most recent
+/// 2. **Query** — call [`generate_deltas`][TxDeltaIndexer::generate_deltas] with a batch of
+///    in-flight transactions at any point. The indexer applies them against its current internal
+///    state and returns a [`dto::BlockChanges`] describing what would change. Internal state is
+///    **not** mutated by this call; it always operates on the state left by the most recent
 ///    `apply_block`.
 pub trait TxDeltaIndexer {
     /// Advances internal protocol state by applying a finalised block.
@@ -49,10 +45,9 @@ pub trait TxDeltaIndexer {
     ///
     /// # Parameters
     ///
-    /// * `block` — a finalised [`dto::BlockChanges`] as received from the Tycho
-    ///   client. On the first call this carries the full component and state
-    ///   snapshot; on later calls it carries only the changed attributes and
-    ///   balances.
+    /// * `block` — a finalised [`dto::BlockChanges`] as received from the Tycho client. On the
+    ///   first call this carries the full component and state snapshot; on later calls it carries
+    ///   only the changed attributes and balances.
     fn apply_block(&mut self, block: &dto::BlockChanges);
 
     /// Applies a batch of in-flight transactions against the current state and
@@ -72,8 +67,8 @@ pub trait TxDeltaIndexer {
     ///
     /// # Parameters
     ///
-    /// * `txs` — ordered slice of in-flight transactions, typically a builder's
-    ///   candidate bundle or the full mempool selection for one block.
+    /// * `txs` — ordered slice of in-flight transactions, typically a builder's candidate bundle or
+    ///   the full mempool selection for one block.
     fn generate_deltas(&mut self, txs: &[TxInput]) -> dto::BlockChanges;
 }
 
