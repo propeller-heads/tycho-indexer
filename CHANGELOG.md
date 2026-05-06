@@ -1,3 +1,11 @@
+## [0.285.2](https://github.com/propeller-heads/tycho-indexer/compare/0.285.1...0.285.2) (2026-05-06)
+
+
+### Bug Fixes
+
+* ensure_chains seeds token prices for pre-existing chains ([6cbd656](https://github.com/propeller-heads/tycho-indexer/commit/6cbd6561ebfbadb92be1c53a49a3b3d0f2082a43))
+* ensure_chains seeds token prices for pre-existing chains ([#992](https://github.com/propeller-heads/tycho-indexer/issues/992)) ([f31287b](https://github.com/propeller-heads/tycho-indexer/commit/f31287b1c266e935f837f9eecbb58c4ef74e4895))
+
 ## [0.285.1](https://github.com/propeller-heads/tycho-indexer/compare/0.285.0...0.285.1) (2026-05-06)
 
 ## [0.285.0](https://github.com/propeller-heads/tycho-indexer/compare/0.284.0...0.285.0) (2026-05-06)
