@@ -258,7 +258,8 @@ impl PartialEq for Swap {
             self.token_out().address == other.token_out().address &&
             self.split() == other.split() &&
             self.user_data() == other.user_data() &&
-            self.estimated_amount_in() == other.estimated_amount_in()
+            self.estimated_amount_in() == other.estimated_amount_in() &&
+            self.estimated_gas() == other.estimated_gas()
     }
 }
 
@@ -423,7 +424,7 @@ pub(crate) enum Strategy {
 /// Only available in tests and when the `test-utils` feature is enabled.
 #[cfg(any(test, feature = "test-utils"))]
 pub fn default_token(address: Bytes) -> Token {
-    Token::new(&address, "", 0, 0, &[], Default::default(), 100)
+    Token::new(&address, "", 0, 0, &[Some(60_000u64)], Default::default(), 100)
 }
 
 mod tests {

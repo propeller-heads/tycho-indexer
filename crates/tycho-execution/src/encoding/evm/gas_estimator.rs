@@ -20,6 +20,7 @@ pub const PROTOCOLS_CALLBACK: &[&str] = &[
     "ekubo_v3",
     "aerodrome_slipstreams",
     "velodrome_slipstreams",
+    "vm:balancer_v3",
 ];
 
 /// ProtocolWillDebit: the router must `approve(protocol)` before swapping.
