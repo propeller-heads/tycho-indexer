@@ -1,6 +1,6 @@
 # Vault
 
-The TychoRouter V3 includes an integrated [vault](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/Vault.sol) built on the [ERC6909](https://eips.ethereum.org/EIPS/eip-6909) multi-token standard. This replaces the "direct transfer" pattern from V2, where tokens sent to the router risked being lost.
+The TychoRouter V3 includes an integrated <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/Vault.sol" target="_blank" rel="noopener noreferrer">vault</a> built on the <a href="https://eips.ethereum.org/EIPS/eip-6909" target="_blank" rel="noopener noreferrer">ERC6909</a> multi-token standard. This replaces the "direct transfer" pattern from V2, where tokens sent to the router risked being lost.
 
 ## How It Works
 

@@ -8,12 +8,12 @@ How to swap on-chain with Tycho. This quickstart will help you:
 * Simulate or execute the best trade using Tycho Execution.
 
 {% hint style="success" %}
-Want to chat with our docs? Download an LLM-friendly [text file of the full Tycho docs](https://docs.propellerheads.xyz/tycho/llms-full.txt).
+Want to chat with our docs? Download an LLM-friendly <a href="https://docs.propellerheads.xyz/tycho/llms-full.txt" target="_blank" rel="noopener noreferrer">text file of the full Tycho docs</a>.
 {% endhint %}
 
 ## Run the Quickstart
 
-Clone the [Tycho repository](https://github.com/propeller-heads/tycho-indexer); here's [the quickstart](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/examples/quickstart/main.rs) code.
+Clone the <a href="https://github.com/propeller-heads/tycho-indexer" target="_blank" rel="noopener noreferrer">Tycho repository</a>; here's <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/examples/quickstart/main.rs" target="_blank" rel="noopener noreferrer">the quickstart</a> code.
 
 Run the quickstart with execution using the following commands:
 
@@ -46,7 +46,7 @@ cargo run --release --example quickstart -- --chain unichain
 {% endtab %}
 {% endtabs %}
 
-If you don't have an RPC URL, here are some public ones for [Ethereum Mainnet](https://ethereumnodes.com/), [Unichain](https://chainlist.org/chain/130), and [Base](https://chainlist.org/chain/8453).
+If you don't have an RPC URL, here are some public ones for <a href="https://ethereumnodes.com/" target="_blank" rel="noopener noreferrer">Ethereum Mainnet</a>, <a href="https://chainlist.org/chain/130" target="_blank" rel="noopener noreferrer">Unichain</a>, and <a href="https://chainlist.org/chain/8453" target="_blank" rel="noopener noreferrer">Base</a>.
 
 The `PRIVATE_KEY` environment variable is unnecessary if you want to run the quickstart without simulation or execution.
 
