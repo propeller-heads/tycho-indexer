@@ -32,6 +32,7 @@ use crate::{
 mod access_control;
 mod api_docs;
 mod cache;
+mod debug;
 mod deltas_buffer;
 mod middleware;
 mod rpc;
@@ -262,6 +263,10 @@ where
                 )
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
+                )
+                .service(
+                    web::resource("/debug/pprof/heap")
+                        .route(web::get().to(debug::heap_profile)),
                 );
 
             if let Some(ws_data) = ws_data.clone() {

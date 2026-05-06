@@ -1,5 +1,9 @@
 #![doc = include_str!("../README.md")]
 
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 // TODO: We need to use `use pretty_assertions::{assert_eq, assert_ne}` per test module.
 #[cfg(test)]
 #[macro_use]
@@ -165,6 +169,33 @@ async fn metrics_handler(handle: PrometheusHandle) -> impl Responder {
         .body(metrics)
 }
 
+/// Spawns a background task that emits jemalloc allocator stats as Prometheus gauges every 60s.
+///
+/// Emits `jemalloc_allocated_bytes` (live allocations) and `jemalloc_resident_bytes` (RSS as seen
+/// by jemalloc).
+#[cfg(feature = "jemalloc")]
+fn spawn_jemalloc_stats_reporter() {
+    use metrics::gauge;
+    use tikv_jemalloc_ctl::{epoch, stats};
+
+    tokio::spawn(async {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            tick.tick().await;
+            // Advance the epoch to refresh stats.
+            if epoch::advance().is_err() {
+                continue;
+            }
+            if let Ok(allocated) = stats::allocated::read() {
+                gauge!("jemalloc_allocated_bytes").set(allocated as f64);
+            }
+            if let Ok(resident) = stats::resident::read() {
+                gauge!("jemalloc_resident_bytes").set(resident as f64);
+            }
+        }
+    });
+}
+
 /// Executes all extractors configured in the extractor configuration file and starts the server.
 ///
 /// Note: This function utilizes two distinct runtimes: one for extraction tasks and another
@@ -201,6 +232,8 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
         .block_on(async {
             create_tracing_subscriber();
             let _metrics_task = create_metrics_exporter();
+            #[cfg(feature = "jemalloc")]
+            spawn_jemalloc_stats_reporter();
 
             info!("Starting Tycho");
             debug!("{} CPUs detected", num_cpus::get());
@@ -268,6 +301,9 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 #[tokio::main]
 async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
+    let _metrics_task = create_metrics_exporter();
+    #[cfg(feature = "jemalloc")]
+    spawn_jemalloc_stats_reporter();
     info!("Starting Tycho");
 
     let dci_plugin = run_args
@@ -325,6 +361,9 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 #[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
+    let _metrics_task = create_metrics_exporter();
+    #[cfg(feature = "jemalloc")]
+    spawn_jemalloc_stats_reporter();
 
     let rpc_client = global_args.rpc.build_client()?;
 

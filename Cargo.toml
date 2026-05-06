@@ -117,5 +117,9 @@ strip = "debuginfo"
 lto = true
 codegen-units = 1
 
+[profile.profiling]
+inherits = "release"
+debug = 1  # line tables for jeprof — human-readable stacks without full debuginfo overhead
+
 [profile.dev]
 debug = 0
