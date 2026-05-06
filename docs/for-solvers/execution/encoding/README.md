@@ -22,7 +22,7 @@ The `Solution` struct defines your order and how it should be filled. This is th
 {% tab title="UserTransferType" %}
 Specifies how user funds (the input token) enter the router:
 
-<table><thead><tr><th width="210.01953125" align="center">Variant</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>TransferFrom</strong> <em>(default)</em></td><td>Use standard ERC-20 approve + transferFrom. You must approve the TychoRouter to spend your tokens.</td></tr><tr><td align="center"><strong>TransferFromPermit2</strong></td><td>Use Permit2 for token transfer. You must approve the Permit2 contract and sign the permit externally.</td></tr><tr><td align="center"><strong>UseVaultsFunds</strong></td><td>No transfer is performed. Uses tokens already deposited in the TychoRouter vault.</td></tr></tbody></table>
+<table><thead><tr><th width="210.01953125" align="center">Variant</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>TransferFromPermit2</strong></td><td>Use Permit2 for token transfer. You must approve the Permit2 contract and sign the permit externally.</td></tr><tr><td align="center"><strong>TransferFrom</strong> <em>(default)</em></td><td>Use standard ERC-20 approve + transferFrom. You must approve the TychoRouter to spend your tokens.</td></tr><tr><td align="center"><strong>UseVaultsFunds</strong></td><td>No transfer is performed. Uses tokens already deposited in the TychoRouter vault.</td></tr></tbody></table>
 {% endtab %}
 
 {% tab title="Swap" %}
@@ -168,13 +168,22 @@ Convert solutions into calldata:
 let encoded_solutions = encoder.encode_solutions(solutions);
 ```
 
+<<<<<<< HEAD
 This returns a `Vec<EncodedSolution>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
+=======
+This returns a `Vec<`[`EncodedSolution`](./#encoded-solution-struct)`>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
+>>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 creation and signing yourself using the public `Permit2` utility (see [Token transfers](../#permit2)).
 
 The full method call includes the following parameters, which act as **execution guardrails:**
 
+<<<<<<< HEAD
 * `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you. For native ETH, use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` — the router reverts on `address(0)`.
 * `minAmountOut` and `tokenOut` — the minimum amount you want to receive. Same ETH address rule applies. For maximum security, determine this from a **third-party source**.
+=======
+* `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you.
+* `minAmountOut` and `tokenOut` — the minimum amount you want to receive. For maximum security, determine this from a **third-party source**.
+>>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 * `receiver` — who receives the final output. Set this to the TychoRouter address to credit output tokens to the vault.
 * `nTokens` — _(split swaps only)_ the number of distinct tokens in the split routing graph.
 * `clientFeeParams` — controls fee-taking and client contribution (see [Client Fee Signature](#client-fee-signature)). Pass all-zero values if you don't need fees.
@@ -189,10 +198,13 @@ security.
 Refer to the [quickstart](../../../) for an example of converting an `EncodedSolution` into full calldata. Tailor the
 example to your use case. See the `TychoRouter` contract functions for reference.
 
+<<<<<<< HEAD
 #### Native Tokens <a href="#native-tokens" id="native-tokens"></a>
 
 The encoder automatically bridges ETH↔WETH gaps anywhere in the swap path — at the start, end, or between swaps — using a dedicated WETH executor. Set `token_in` and `token_out` to the tokens the user actually holds and expects to receive, and the encoder inserts wrap/unwrap steps as needed. This works with protocols like Uniswap V4 that accept native ETH directly, with no extra configuration required.
 
+=======
+>>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 #### Client Fee Signature
 
 If you don't want fees, pass all-zero
@@ -293,8 +305,12 @@ The returned 65-byte signature is passed as the `clientSignature` field in `Clie
 The encoding crate ships a `tycho-encode` CLI that lets you encode swaps without writing Rust. Install it with:
 
 ```bash
+<<<<<<< HEAD
 cargo install --path crates/tycho-execution
 tycho-encode --version  # verify the install succeeded
+=======
+cargo install --path .
+>>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 ```
 
 Pass a JSON-serialised `Solution` via stdin and specify the encoder as a subcommand:
