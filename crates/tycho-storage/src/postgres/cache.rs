@@ -1091,28 +1091,6 @@ impl ProtocolGateway for CachedGateway {
     }
 
     #[instrument(skip_all)]
-    async fn seed_native_token_prices(&self, chain: &Chain) -> Result<(), StorageError> {
-        let mut conn =
-            self.pool.get().await.map_err(|e| {
-                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
-            })?;
-
-        conn.transaction(|conn| {
-            async {
-                self.state_gateway
-                    .seed_native_token_prices(chain, conn)
-                    .await?;
-                Result::<(), PostgresError>::Ok(())
-            }
-            .scope_boxed()
-        })
-        .await
-        .map_err(|e| {
-            StorageError::Unexpected(format!("Failed to seed native token prices: {}", e.0))
-        })
-    }
-
-    #[instrument(skip_all)]
     async fn get_protocol_states_delta(
         &self,
         chain: &Chain,

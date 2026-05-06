@@ -554,17 +554,6 @@ impl ProtocolGateway for DirectGateway {
             .await
     }
 
-    #[instrument(skip_all)]
-    async fn seed_native_token_prices(&self, chain: &Chain) -> Result<(), StorageError> {
-        let mut conn =
-            self.pool.get().await.map_err(|e| {
-                StorageError::Unexpected(format!("Failed to retrieve connection: {e}"))
-            })?;
-        self.state_gateway
-            .seed_native_token_prices(chain, &mut conn)
-            .await
-    }
-
     /// TODO: add to transaction instead
     #[instrument(skip_all)]
     async fn upsert_component_tvl(

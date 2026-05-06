@@ -139,7 +139,7 @@ use diesel_async::{
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tracing::{debug, info};
 use tycho_common::{
-    models::{Chain, TxHash},
+    models::{token::Token, Chain, TxHash},
     storage::{BlockIdentifier, BlockOrTimestamp, StorageError, Version, VersionKind},
 };
 use unicode_segmentation::UnicodeSegmentation;
@@ -635,7 +635,6 @@ async fn connect(db_url: &str) -> Result<Pool<AsyncPgConnection>, StorageError> 
 async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
     let mut conn = pool.get().await.expect("connection ok");
 
-    // Ensure chains and their native tokens exist
     for chain in chains {
         let chain_id_res: Result<i64, _> = diesel::insert_into(schema::chain::table)
             .values(schema::chain::name.eq(chain.to_string()))
@@ -646,30 +645,8 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
 
         match chain_id_res {
             Ok(chain_id) => {
-                let token = chain.native_token();
-                let account_id: i64 = diesel::insert_into(schema::account::table)
-                    .values((
-                        schema::account::chain_id.eq(chain_id),
-                        schema::account::title.eq(format!("{}_{}", token.symbol, token.address)),
-                        schema::account::address.eq(token.address.as_ref()),
-                    ))
-                    .on_conflict_do_nothing()
-                    .returning(schema::account::id)
-                    .get_result(&mut conn)
-                    .await
-                    .expect("Could not ensure native token's account in database");
-                diesel::insert_into(schema::token::table)
-                    .values((
-                        schema::token::account_id.eq(account_id),
-                        schema::token::symbol.eq(token.symbol),
-                        schema::token::decimals.eq(token.decimals as i32),
-                        schema::token::gas.eq(Vec::<Option<i64>>::new()),
-                        schema::token::quality.eq(100),
-                    ))
-                    .on_conflict_do_nothing()
-                    .execute(&mut conn)
-                    .await
-                    .expect("Could not ensure native token in database");
+                ensure_token_with_price(chain_id, &chain.native_token(), &mut conn).await;
+                ensure_token_with_price(chain_id, &chain.wrapped_native_token(), &mut conn).await;
             }
             Err(diesel::result::Error::NotFound) => {
                 continue;
@@ -681,6 +658,61 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
     }
 
     debug!("Ensured chain enum and native token presence for: {:?}", chains);
+}
+
+pub(crate) async fn ensure_token_with_price(
+    chain_id: i64,
+    token: &Token,
+    conn: &mut AsyncPgConnection,
+) {
+    diesel::insert_into(schema::account::table)
+        .values((
+            schema::account::chain_id.eq(chain_id),
+            schema::account::title.eq(format!("{}_{}", token.symbol, token.address)),
+            schema::account::address.eq(token.address.as_ref()),
+        ))
+        .on_conflict_do_nothing()
+        .execute(conn)
+        .await
+        .expect("Could not ensure token account in database");
+
+    let account_id: i64 = schema::account::table
+        .select(schema::account::id)
+        .filter(schema::account::chain_id.eq(chain_id))
+        .filter(schema::account::address.eq(token.address.as_ref()))
+        .first(conn)
+        .await
+        .expect("Account must exist after insert");
+
+    diesel::insert_into(schema::token::table)
+        .values((
+            schema::token::account_id.eq(account_id),
+            schema::token::symbol.eq(&token.symbol),
+            schema::token::decimals.eq(token.decimals as i32),
+            schema::token::gas.eq(Vec::<Option<i64>>::new()),
+            schema::token::quality.eq(100),
+        ))
+        .on_conflict_do_nothing()
+        .execute(conn)
+        .await
+        .expect("Could not ensure token in database");
+
+    let token_id: i64 = schema::token::table
+        .select(schema::token::id)
+        .filter(schema::token::account_id.eq(account_id))
+        .first(conn)
+        .await
+        .expect("Token must exist after insert");
+
+    let price = 10.0_f64.powi(token.decimals as i32);
+    diesel::insert_into(schema::token_price::table)
+        .values((schema::token_price::token_id.eq(token_id), schema::token_price::price.eq(price)))
+        .on_conflict(schema::token_price::token_id)
+        .do_update()
+        .set(schema::token_price::price.eq(price))
+        .execute(conn)
+        .await
+        .expect("Could not ensure token price in database");
 }
 
 async fn ensure_protocol_systems(protocol_systems: &[String], pool: Pool<AsyncPgConnection>) {

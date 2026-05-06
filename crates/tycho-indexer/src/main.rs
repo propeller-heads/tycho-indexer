@@ -36,7 +36,7 @@ use tycho_common::{
         contract::AccountDelta,
         Address, Chain, ExtractionState, ImplementationType,
     },
-    storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway},
+    storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway},
     traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
@@ -457,12 +457,6 @@ async fn build_all_extractors(
     let chain = *chains
         .first()
         .expect("No chain provided");
-
-    info!("Seeding native token prices");
-    cached_gw
-        .seed_native_token_prices(&chain)
-        .await
-        .map_err(|e| ExtractionError::Setup(format!("Failed to seed native token prices: {e}")))?;
 
     info!("Building protocol cache");
     let protocol_cache = ProtocolMemoryCache::new(

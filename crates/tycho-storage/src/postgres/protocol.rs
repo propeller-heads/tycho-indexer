@@ -7,7 +7,7 @@ use diesel::{
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use itertools::Itertools;
-use tracing::{debug_span, error, info, instrument, trace, warn, Instrument, Level};
+use tracing::{debug_span, error, instrument, trace, warn, Instrument, Level};
 use tycho_common::{
     models::{
         protocol::{
@@ -1806,77 +1806,6 @@ impl PostgresGateway {
             .map_err(|err| storage_error_from_diesel(err, "TokenPrice", &chain.to_string(), None))?
             .into_iter()
             .collect::<HashMap<_, _>>())
-    }
-
-    pub async fn upsert_token_prices(
-        &self,
-        token_prices: &[(i64, f64)],
-        conn: &mut AsyncPgConnection,
-    ) -> Result<(), StorageError> {
-        use schema::token_price::dsl::*;
-
-        for &(tid, p) in token_prices {
-            diesel::insert_into(token_price)
-                .values((token_id.eq(tid), price.eq(p)))
-                .on_conflict(token_id)
-                .do_update()
-                .set((price.eq(p), modified_ts.eq(diesel::dsl::now)))
-                .execute(conn)
-                .await
-                .map_err(|err| storage_error_from_diesel(err, "TokenPrice", "upsert", None))?;
-        }
-        Ok(())
-    }
-
-    #[instrument(level = Level::INFO, skip(self, conn))]
-    pub async fn seed_native_token_prices(
-        &self,
-        chain: &Chain,
-        conn: &mut AsyncPgConnection,
-    ) -> Result<(), StorageError> {
-        let native = chain.native_token();
-        let wrapped = chain.wrapped_native_token();
-        let tokens = vec![native.clone(), wrapped.clone()];
-
-        self.add_tokens(&tokens, conn).await?;
-
-        let chain_id = self.get_chain_id(chain)?;
-        let addresses: Vec<Address> = tokens
-            .iter()
-            .map(|t| t.address.clone())
-            .collect();
-
-        let token_ids: Vec<(Vec<u8>, i64)> = schema::token::table
-            .inner_join(schema::account::table)
-            .filter(schema::account::chain_id.eq(chain_id))
-            .filter(schema::account::address.eq_any(&addresses))
-            .select((schema::account::address, schema::token::id))
-            .get_results::<(Vec<u8>, i64)>(conn)
-            .await
-            .map_err(|err| storage_error_from_diesel(err, "Token", "resolve_ids", None))?;
-
-        let price_entries: Vec<(i64, f64)> = token_ids
-            .iter()
-            .filter_map(|(addr, tid)| {
-                let token = tokens
-                    .iter()
-                    .find(|t| t.address.as_ref() == addr.as_slice())?;
-                let p = 10.0_f64.powi(token.decimals as i32);
-                Some((*tid, p))
-            })
-            .collect();
-
-        self.upsert_token_prices(&price_entries, conn)
-            .await?;
-
-        info!(
-            ?chain,
-            native_address = %native.address,
-            wrapped_address = %wrapped.address,
-            price = 10.0_f64.powi(native.decimals as i32),
-            "NativeTokenPricesSeeded"
-        );
-        Ok(())
     }
 
     pub async fn upsert_component_tvl(
@@ -4224,49 +4153,42 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_seed_native_token_prices() {
+    async fn test_ensure_token_with_price() {
         let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
-        let gw = EVMGateway::from_connection(&mut conn).await;
-
-        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
-            .await
-            .expect("seeding failed");
-
-        let prices = gw
-            .get_token_prices(&Chain::Ethereum, &mut conn)
-            .await
-            .expect("get prices failed");
+        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
 
         let native = Chain::Ethereum.native_token();
         let wrapped = Chain::Ethereum.wrapped_native_token();
-        let expected_price = 10.0_f64.powi(18);
+        crate::postgres::ensure_token_with_price(chain_id, &native, &mut conn).await;
+        crate::postgres::ensure_token_with_price(chain_id, &wrapped, &mut conn).await;
 
-        assert_eq!(prices.get(&native.address).copied(), Some(expected_price),);
-        assert_eq!(prices.get(&wrapped.address).copied(), Some(expected_price),);
-    }
-
-    #[tokio::test]
-    async fn test_seed_native_token_prices_idempotent() {
-        let mut conn = setup_db().await;
-        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
-
-        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
-            .await
-            .expect("first seed failed");
-
-        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
-            .await
-            .expect("second seed should not fail (idempotent)");
-
         let prices = gw
             .get_token_prices(&Chain::Ethereum, &mut conn)
             .await
             .expect("get prices failed");
 
-        let native = Chain::Ethereum.native_token();
         let expected_price = 10.0_f64.powi(18);
-        assert_eq!(prices.get(&native.address).copied(), Some(expected_price),);
+        assert_eq!(prices.get(&native.address).copied(), Some(expected_price));
+        assert_eq!(prices.get(&wrapped.address).copied(), Some(expected_price));
+    }
+
+    #[tokio::test]
+    async fn test_ensure_token_with_price_idempotent() {
+        let mut conn = setup_db().await;
+        let chain_id = db_fixtures::insert_chain(&mut conn, "ethereum").await;
+
+        let native = Chain::Ethereum.native_token();
+        crate::postgres::ensure_token_with_price(chain_id, &native, &mut conn).await;
+        crate::postgres::ensure_token_with_price(chain_id, &native, &mut conn).await;
+
+        let gw = EVMGateway::from_connection(&mut conn).await;
+        let prices = gw
+            .get_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("get prices failed");
+
+        let expected_price = 10.0_f64.powi(18);
+        assert_eq!(prices.get(&native.address).copied(), Some(expected_price));
     }
 }
