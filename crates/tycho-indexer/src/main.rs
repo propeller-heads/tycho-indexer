@@ -456,7 +456,7 @@ async fn build_all_extractors(
 
     let chain = *chains
         .first()
-        .expect("No chain provided"); //TODO: handle multichain?
+        .expect("No chain provided");
 
     info!("Seeding native token prices");
     cached_gw

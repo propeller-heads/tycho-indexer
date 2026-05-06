@@ -4226,7 +4226,7 @@ mod test {
     #[tokio::test]
     async fn test_seed_native_token_prices() {
         let mut conn = setup_db().await;
-        db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
@@ -4249,7 +4249,7 @@ mod test {
     #[tokio::test]
     async fn test_seed_native_token_prices_idempotent() {
         let mut conn = setup_db().await;
-        db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        setup_data(&mut conn).await;
         let gw = EVMGateway::from_connection(&mut conn).await;
 
         gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)

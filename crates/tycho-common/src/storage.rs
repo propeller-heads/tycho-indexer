@@ -467,6 +467,11 @@ pub trait ProtocolGateway {
 
     async fn get_token_prices(&self, chain: &Chain) -> Result<HashMap<Bytes, f64>, StorageError>;
 
+    /// Idempotently seeds native and wrapped-native token prices for the given chain.
+    ///
+    /// Ensures the native token (e.g., ETH) and its wrapped counterpart (e.g., WETH) exist
+    /// in the DB with price = `10^decimals`. These reference prices allow the external token
+    /// quoter to derive all other token prices.
     async fn seed_native_token_prices(&self, chain: &Chain) -> Result<(), StorageError>;
 
     async fn upsert_component_tvl(
