@@ -636,25 +636,22 @@ async fn ensure_chains(chains: &[Chain], pool: Pool<AsyncPgConnection>) {
     let mut conn = pool.get().await.expect("connection ok");
 
     for chain in chains {
-        let chain_id_res: Result<i64, _> = diesel::insert_into(schema::chain::table)
+        diesel::insert_into(schema::chain::table)
             .values(schema::chain::name.eq(chain.to_string()))
             .on_conflict_do_nothing()
-            .returning(schema::chain::id)
-            .get_result(&mut conn)
-            .await;
+            .execute(&mut conn)
+            .await
+            .expect("Could not ensure chain in database");
 
-        match chain_id_res {
-            Ok(chain_id) => {
-                ensure_token_with_price(chain_id, &chain.native_token(), &mut conn).await;
-                ensure_token_with_price(chain_id, &chain.wrapped_native_token(), &mut conn).await;
-            }
-            Err(diesel::result::Error::NotFound) => {
-                continue;
-            }
-            Err(err) => {
-                panic!("Could not ensure chain enum in database: {err}");
-            }
-        }
+        let chain_id: i64 = schema::chain::table
+            .select(schema::chain::id)
+            .filter(schema::chain::name.eq(chain.to_string()))
+            .first(&mut conn)
+            .await
+            .expect("Chain must exist after insert");
+
+        ensure_token_with_price(chain_id, &chain.native_token(), &mut conn).await;
+        ensure_token_with_price(chain_id, &chain.wrapped_native_token(), &mut conn).await;
     }
 
     debug!("Ensured chain enum and native token presence for: {:?}", chains);
