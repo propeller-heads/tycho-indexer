@@ -18,7 +18,7 @@ use tycho_common::{
         blockchain::{LogInput, TxInput, TxWithChanges},
         protocol::{ProtocolComponent, ProtocolComponentState},
     },
-    traits::ProtocolProcessor,
+    traits::TxDeltaIndexer,
     Bytes,
 };
 use tycho_indexer::{
@@ -460,7 +460,7 @@ async fn test_processor_matches_substreams_genesis_range() {
         let tx_inputs = per_block_inputs
             .remove(block_num)
             .unwrap_or_default();
-        let processor_output = processor.process_block(&tx_inputs);
+        let processor_output = processor.apply_transactions(&tx_inputs);
 
         let substreams_map: HashMap<String, ComparableTxChanges> = substreams_block
             .changes

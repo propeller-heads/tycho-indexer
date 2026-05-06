@@ -16,26 +16,30 @@ use crate::{
     Bytes,
 };
 
-/// Processes raw EVM transactions and produces protocol state changes expressed
-/// as [`TxWithChanges`].
+/// Indexes protocol state deltas from raw EVM transactions.
+///
+/// Serves as a native-code substitute for a Substreams package: given a batch
+/// of transactions it produces the same per-tx [`TxWithChanges`] messages that
+/// Substreams would emit, without requiring a WASM runtime or streaming
+/// infrastructure.
 ///
 /// Implementors maintain the running in-memory state required to compute
 /// deltas (e.g. running balances, tick liquidity maps) and are initialised
-/// from a Tycho snapshot via [`from_snapshot`][ProtocolProcessor::from_snapshot].
-pub trait ProtocolProcessor: Sized {
-    /// Builds the processor state from a Tycho component/state snapshot.
+/// from a Tycho snapshot via [`from_snapshot`][TxDeltaIndexer::from_snapshot].
+pub trait TxDeltaIndexer: Sized {
+    /// Builds the indexer state from a Tycho component/state snapshot.
     ///
     /// Components carry the static metadata (token addresses, pool address),
     /// states carry the dynamic baseline (tick liquidity, balances at snapshot
     /// height).
     fn from_snapshot(components: &[ProtocolComponent], states: &[ProtocolComponentState]) -> Self;
 
-    /// Processes all transactions in one block and returns one [`TxWithChanges`]
-    /// per transaction that produced protocol-relevant changes.
+    /// Applies a batch of transactions and returns one [`TxWithChanges`] per
+    /// transaction that produced protocol-relevant state changes.
     ///
     /// Transactions where `succeeded == false` are silently skipped.
-    /// The returned vec is ordered by transaction index within the block.
-    fn process_block(&mut self, txs: &[TxInput]) -> Vec<TxWithChanges>;
+    /// The returned vec is ordered by transaction index within the batch.
+    fn apply_transactions(&mut self, txs: &[TxInput]) -> Vec<TxWithChanges>;
 }
 
 /// A struct representing a request to get an account state.

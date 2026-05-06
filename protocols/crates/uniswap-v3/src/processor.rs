@@ -10,7 +10,7 @@ use tycho_common::{
             ProtocolComponentStateDelta,
         },
     },
-    traits::ProtocolProcessor,
+    traits::TxDeltaIndexer,
     Bytes,
 };
 use tycho_substreams::prelude::{
@@ -35,7 +35,7 @@ pub struct UniswapV3Processor {
     baseline_tick_keys: HashSet<(String, i32)>,
 }
 
-impl ProtocolProcessor for UniswapV3Processor {
+impl TxDeltaIndexer for UniswapV3Processor {
     fn from_snapshot(components: &[ProtocolComponent], states: &[ProtocolComponentState]) -> Self {
         let mut pools = HashMap::new();
         let mut balances = HashMap::new();
@@ -97,7 +97,7 @@ impl ProtocolProcessor for UniswapV3Processor {
         Self { pools, balances, tick_liquidity, current_tick, pool_liquidity, baseline_tick_keys }
     }
 
-    fn process_block(&mut self, txs: &[TxInput]) -> Vec<TxWithChanges> {
+    fn apply_transactions(&mut self, txs: &[TxInput]) -> Vec<TxWithChanges> {
         let mut tx_builders: HashMap<Vec<u8>, (u64, TransactionChangesBuilder)> = HashMap::new();
 
         for tx in txs {

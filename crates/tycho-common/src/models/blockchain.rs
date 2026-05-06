@@ -66,9 +66,9 @@ impl Transaction {
 
 /// Raw EVM log emitted by a contract during transaction execution.
 ///
-/// Used as the primary input to [`ProtocolProcessor`] implementations.
+/// Used as the primary input to [`TxDeltaIndexer`] implementations.
 ///
-/// [`ProtocolProcessor`]: crate::traits::ProtocolProcessor
+/// [`TxDeltaIndexer`]: crate::traits::TxDeltaIndexer
 #[derive(Debug, Clone)]
 pub struct LogInput {
     address: Bytes,
