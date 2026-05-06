@@ -239,10 +239,10 @@ let tx = encode_tycho_router_call(
 ```
 
 {% hint style="danger" %}
-:warning: These functions are only examples intended for use within the quickstart.\
+These functions are only examples intended for use within the quickstart.\
 **Do not use them in production.** You must write your own logic to:
 
-* Control parameters like `minAmountOut` and `receiver` .
+* Control parameters like `minAmountOut` and `receiver`.
 * Sign the permit2 object safely and correctly.
 
 This gives you full control over execution. And it protects you from MEV and slippage risks.
