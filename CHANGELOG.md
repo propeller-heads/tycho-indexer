@@ -1,3 +1,11 @@
+## [0.285.3](https://github.com/propeller-heads/tycho-indexer/compare/0.285.2...0.285.3) (2026-05-06)
+
+
+### Bug Fixes
+
+* Move input token gas logic from integration test to execution ([fa48863](https://github.com/propeller-heads/tycho-indexer/commit/fa48863bb0022b9096d9481aa3629c1b0ec4e9ff))
+* Move input token gas logic from integration test to execution ([#991](https://github.com/propeller-heads/tycho-indexer/issues/991)) ([e1bfc76](https://github.com/propeller-heads/tycho-indexer/commit/e1bfc7638a4999184a7a62874ceb5d3725bcf80f))
+
 ## [0.285.2](https://github.com/propeller-heads/tycho-indexer/compare/0.285.1...0.285.2) (2026-05-06)
 
 
