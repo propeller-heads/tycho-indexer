@@ -39,7 +39,7 @@ The `Swap` struct has the following attributes:
 | **user\_data**            |        `Option<Bytes>`         |                                        Optional user data to be passed to encoding                                        |
 | **protocol\_state**       | `Option<Arc<dyn ProtocolSim>>` |                                     Optional protocol state used to perform the swap                                      |
 | **estimated\_amount\_in** |       `Option<BigUint>`        | Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value is used to request the quote. |
-| **estimated\_gas**        |           `BigUint`            |                  Per-swap gas estimate from simulation. Use `BigUint::ZERO` if no estimate is available.                  |
+| **estimated\_gas**        |           `BigUint`            |                                          Per-swap gas estimate from simulation.                                           |
 
 #### Split Swaps
 
@@ -90,8 +90,8 @@ swap_d = Swap::new(pool_d, usdc_token, dai_token, gas_d);
 );
 </code></pre>
 
-The 4th argument to `Swap::new` is the per-swap `estimated_gas` (a `BigUint`); pass `BigUint::ZERO` if no
-simulation estimate is available. Splits are configured via `.with_split(...)` on the builder.
+The 4th argument to `Swap::new` is the per-swap `estimated_gas` (a `BigUint`). Splits are configured
+via `.with_split(...)` on the builder.
 
 </details>
 

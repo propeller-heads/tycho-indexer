@@ -128,13 +128,13 @@ symbol, and tax/gas metadata alongside the address. Wrap a raw address with the 
 let swap = Swap::new(component, token_in_bytes, token_out_bytes);
 
 // V3
-let swap = Swap::new(component, token_in_token, token_out_token, BigUint::ZERO);
+let swap = Swap::new(component, token_in_token, token_out_token, estimated_gas);
 ```
 
 **New required parameter on `Swap::new`:**
 
-The constructor now takes a per-swap simulation gas estimate as its 4th argument. Use `BigUint::ZERO` if no estimate is
-available. The new field is exposed via `.estimated_gas() -> &BigUint`.
+The constructor now takes a per-swap simulation gas estimate as its 4th argument. The new field is exposed
+via `.estimated_gas() -> &BigUint`.
 
 #### EncodedSolution Struct
 
