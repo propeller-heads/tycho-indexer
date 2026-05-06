@@ -11,13 +11,14 @@ use alloy::{
     rpc::types::{BlockTransactions, Filter, Log},
     transports::http::reqwest::Url,
 };
+use num_bigint::{BigInt, Sign};
+use num_traits::ToPrimitive as _;
 use prost::Message;
 use tokio_stream::StreamExt;
 use tycho_common::{
-    models::{
-        blockchain::{LogInput, TxInput, TxWithChanges},
-        protocol::{ProtocolComponent, ProtocolComponentState},
-    },
+    dto,
+    models::blockchain::{LogInput, TxInput},
+    traits::TxDeltaIndexer,
     Bytes,
 };
 use tycho_indexer::{
@@ -39,14 +40,14 @@ const DEFAULT_STOP_BLOCK: u64 = START_BLOCK + 2_000; // 12_371_621
 // ─── Substreams helpers ──────────────────────────────────────────────────────
 
 /// Streams every block in `[start, stop]` from the substreams endpoint and
-/// returns `(block_number, BlockChanges)` pairs in ascending order.
+/// returns `(block_number, block_hash, BlockChanges)` triples in ascending order.
 async fn stream_block_range(
     endpoint_url: &str,
     api_key: &str,
     spkg_path: &str,
     start: u64,
     stop: u64,
-) -> Vec<(u64, BlockChanges)> {
+) -> Vec<(u64, String, BlockChanges)> {
     let content = std::fs::read(spkg_path)
         .unwrap_or_else(|e| panic!("Failed to read spkg at {spkg_path}: {e}"));
     let package = Package::decode(content.as_slice())
@@ -74,10 +75,10 @@ async fn stream_block_range(
     loop {
         match stream.next().await {
             Some(Ok(BlockResponse::New(data))) => {
-                let block_num = data
+                let (block_num, block_hash) = data
                     .clock
                     .as_ref()
-                    .map_or(0, |c| c.number);
+                    .map_or((0, String::new()), |c| (c.number, c.id.clone()));
                 let map_output = data
                     .output
                     .as_ref()
@@ -85,7 +86,7 @@ async fn stream_block_range(
                     .expect("BlockScopedData has no map_output");
                 let changes = BlockChanges::decode(map_output.value.as_slice())
                     .expect("Failed to decode BlockChanges");
-                results.push((block_num, changes));
+                results.push((block_num, block_hash, changes));
             }
             Some(Ok(BlockResponse::Ended)) => break,
             Some(Ok(BlockResponse::Undo(_))) => {
@@ -97,7 +98,7 @@ async fn stream_block_range(
         }
     }
 
-    results.sort_unstable_by_key(|(n, _)| *n);
+    results.sort_unstable_by_key(|(n, _, _)| *n);
     results
 }
 
@@ -250,7 +251,7 @@ async fn fetch_range_tx_inputs(
     result
 }
 
-// ─── Comparison helpers ──────────────────────────────────────────────────────
+// ─── Conversion helpers ──────────────────────────────────────────────────────
 
 /// Normalise a component_id from substreams output to lower-case hex without "0x".
 fn normalise_component_id(raw: &[u8]) -> String {
@@ -264,89 +265,195 @@ fn normalise_str_id(s: &str) -> String {
         .to_lowercase()
 }
 
+/// Converts a substreams proto `BlockChanges` to a `dto::BlockChanges`, aggregating
+/// all per-transaction entity and balance changes across the block.
+fn substreams_proto_to_dto(
+    proto: &BlockChanges,
+    block_num: u64,
+    block_hash_hex: &str,
+) -> dto::BlockChanges {
+    use tycho_substreams::prelude::ChangeType as ProtoChangeType;
+
+    let hash_bytes = hex::decode(block_hash_hex.trim_start_matches("0x")).unwrap_or_default();
+    let block = dto::Block {
+        number: block_num,
+        hash: Bytes::from(hash_bytes),
+        parent_hash: Bytes::default(),
+        chain: dto::Chain::Ethereum,
+        ts: Default::default(),
+    };
+
+    let mut new_protocol_components: HashMap<String, dto::ProtocolComponent> = HashMap::new();
+    let mut state_updates: HashMap<String, dto::ProtocolStateDelta> = HashMap::new();
+    let mut component_balances: HashMap<String, dto::TokenBalances> = HashMap::new();
+
+    for tx_changes in &proto.changes {
+        for comp in &tx_changes.component_changes {
+            let id = normalise_str_id(&comp.id);
+            new_protocol_components
+                .entry(id.clone())
+                .or_insert_with(|| dto::ProtocolComponent {
+                    id: id.clone(),
+                    tokens: comp
+                        .tokens
+                        .iter()
+                        .map(|t| Bytes::from(t.clone()))
+                        .collect(),
+                    ..Default::default()
+                });
+        }
+
+        for ec in &tx_changes.entity_changes {
+            let cid = normalise_str_id(&ec.component_id);
+            let delta = state_updates
+                .entry(cid.clone())
+                .or_insert_with(|| dto::ProtocolStateDelta {
+                    component_id: cid.clone(),
+                    updated_attributes: HashMap::new(),
+                    deleted_attributes: HashSet::new(),
+                });
+            for attr in &ec.attributes {
+                if attr.change == i32::from(ProtoChangeType::Deletion) {
+                    delta
+                        .deleted_attributes
+                        .insert(attr.name.clone());
+                    delta
+                        .updated_attributes
+                        .remove(&attr.name);
+                } else {
+                    delta
+                        .updated_attributes
+                        .insert(attr.name.clone(), Bytes::from(attr.value.clone()));
+                    delta
+                        .deleted_attributes
+                        .remove(&attr.name);
+                }
+            }
+        }
+
+        for bc in &tx_changes.balance_changes {
+            let cid = normalise_component_id(&bc.component_id);
+            let token = Bytes::from(bc.token.clone());
+            let balance = Bytes::from(bc.balance.clone());
+            let balance_float = BigInt::from_bytes_be(Sign::Plus, balance.as_ref())
+                .to_f64()
+                .unwrap_or(f64::MAX);
+            component_balances
+                .entry(cid.clone())
+                .or_insert_with(|| dto::TokenBalances(HashMap::new()))
+                .0
+                .insert(
+                    token.clone(),
+                    dto::ComponentBalance {
+                        token,
+                        balance,
+                        balance_float,
+                        modify_tx: Bytes::default(),
+                        component_id: cid,
+                    },
+                );
+        }
+    }
+
+    dto::BlockChanges {
+        extractor: "uniswap-v3".to_string(),
+        chain: dto::Chain::Ethereum,
+        block,
+        finalized_block_height: block_num,
+        state_updates,
+        new_protocol_components,
+        component_balances,
+        ..Default::default()
+    }
+}
+
+// ─── Comparison helpers ──────────────────────────────────────────────────────
+
 #[derive(Debug)]
-struct ComparableTxChanges {
-    tx_hash: String,
+struct ComparableBlockChanges {
     /// component_id → { attr_name → value }
     attributes: HashMap<String, HashMap<String, Vec<u8>>>,
     /// (component_id, token_hex) → balance
     balances: HashMap<(String, String), Vec<u8>>,
 }
 
-fn substreams_to_comparable(
-    changes: &tycho_substreams::pb::tycho::evm::v1::TransactionChanges,
+/// Aggregates all per-transaction entity/balance changes from a substreams block into a
+/// block-level comparable view, filtered to pools already known to the processor.
+///
+/// Pools created in the current block are excluded because the processor learns about them
+/// only after `apply_block` is called, so `generate_deltas` for the same block cannot
+/// produce output for them. This matches production semantics.
+fn substreams_to_comparable_block(
+    proto: &BlockChanges,
     known_pools: &HashSet<String>,
-) -> Option<ComparableTxChanges> {
-    let tx = changes.tx.as_ref()?;
-    let tx_hash = hex::encode(&tx.hash);
-
+) -> ComparableBlockChanges {
     let mut attributes: HashMap<String, HashMap<String, Vec<u8>>> = HashMap::new();
     let mut balances: HashMap<(String, String), Vec<u8>> = HashMap::new();
 
-    for ec in &changes.entity_changes {
-        let cid = normalise_str_id(&ec.component_id);
-        if !known_pools.contains(&cid) {
-            continue;
-        }
-        for attr in &ec.attributes {
-            // map_pools_created emits zero-value init attrs (liquidity/tick/
-            // sqrt_price_x96 = 0x00) for newly deployed pools.  The processor
-            // produces no output for factory events, so skip these to avoid
-            // false "missing transaction" failures.  The substreams BigInt
-            // encodes zero as a single 0x00 byte (not as empty bytes).
-            if attr.value.iter().all(|&b| b == 0) {
+    for tx_changes in &proto.changes {
+        for ec in &tx_changes.entity_changes {
+            let cid = normalise_str_id(&ec.component_id);
+            if !known_pools.contains(&cid) {
                 continue;
             }
-            attributes
-                .entry(cid.clone())
-                .or_default()
-                .insert(attr.name.clone(), attr.value.clone());
+            for attr in &ec.attributes {
+                // map_pools_created emits zero-value init attrs for new pools; skip them.
+                if attr.value.iter().all(|&b| b == 0) {
+                    continue;
+                }
+                attributes
+                    .entry(cid.clone())
+                    .or_default()
+                    .insert(attr.name.clone(), attr.value.clone());
+            }
+        }
+
+        for bc in &tx_changes.balance_changes {
+            let cid = normalise_component_id(&bc.component_id);
+            if !known_pools.contains(&cid) {
+                continue;
+            }
+            if bc.balance.iter().all(|&b| b == 0) {
+                continue;
+            }
+            let token = hex::encode(&bc.token);
+            balances.insert((cid, token), bc.balance.clone());
         }
     }
 
-    for bc in &changes.balance_changes {
-        let cid = normalise_component_id(&bc.component_id);
-        if !known_pools.contains(&cid) {
-            continue;
-        }
-        // Same rationale: skip zero balances emitted on pool creation.
-        if bc.balance.iter().all(|&b| b == 0) {
-            continue;
-        }
-        let token = hex::encode(&bc.token);
-        balances.insert((cid, token), bc.balance.clone());
-    }
-
-    if attributes.is_empty() && balances.is_empty() {
-        return None;
-    }
-
-    Some(ComparableTxChanges { tx_hash, attributes, balances })
+    ComparableBlockChanges { attributes, balances }
 }
 
-fn processor_to_comparable(changes: &TxWithChanges) -> ComparableTxChanges {
-    let tx_hash = hex::encode(&changes.tx.hash);
-
+fn processor_to_comparable_block(
+    changes: &dto::BlockChanges,
+    known_pools: &HashSet<String>,
+) -> ComparableBlockChanges {
     let mut attributes: HashMap<String, HashMap<String, Vec<u8>>> = HashMap::new();
     let mut balances: HashMap<(String, String), Vec<u8>> = HashMap::new();
 
-    for (comp_id, state_delta) in &changes.state_updates {
+    for (comp_id, delta) in &changes.state_updates {
+        if !known_pools.contains(comp_id) {
+            continue;
+        }
         let entry = attributes
             .entry(comp_id.clone())
             .or_default();
-        for (attr_name, attr_val) in &state_delta.updated_attributes {
+        for (attr_name, attr_val) in &delta.updated_attributes {
             entry.insert(attr_name.clone(), attr_val.to_vec());
         }
     }
 
-    for (comp_id, token_balances) in &changes.balance_changes {
-        for (token, cb) in token_balances {
+    for (comp_id, token_balances) in &changes.component_balances {
+        if !known_pools.contains(comp_id) {
+            continue;
+        }
+        for (token, cb) in &token_balances.0 {
             let token_hex = hex::encode(token.as_ref());
             balances.insert((comp_id.clone(), token_hex), cb.balance.to_vec());
         }
     }
 
-    ComparableTxChanges { tx_hash, attributes, balances }
+    ComparableBlockChanges { attributes, balances }
 }
 
 // ─── Test ────────────────────────────────────────────────────────────────────
@@ -354,11 +461,16 @@ fn processor_to_comparable(changes: &TxWithChanges) -> ComparableTxChanges {
 /// Streams UniswapV3 substreams from the genesis block (12_369_621) through
 /// `UV3_STOP_BLOCK` (default +2000 blocks) and verifies that the native
 /// `UniswapV3Processor` produces byte-identical attribute and balance values
-/// for every transaction in every block.
+/// for every block in the range.
 ///
-/// Starting from genesis means the processor begins with empty state —
-/// no baseline seeding required.  Pool token addresses are read directly
-/// from the `component_changes` in the substreams output.
+/// For each block the test:
+///   1. Calls `generate_deltas` with the raw RPC transactions to get pending state changes.
+///   2. Compares those changes against the aggregated substreams output for the block, restricted
+///      to pools the processor already knows about.
+///   3. Calls `apply_block` with the substreams ground truth to advance processor state.
+///
+/// This matches production semantics: pools created in block N are visible to
+/// `generate_deltas` only from block N+1 onwards.
 ///
 /// Required env vars:
 ///   ETH_RPC_URL         — archive RPC endpoint (supports eth_getLogs over
@@ -395,182 +507,141 @@ async fn test_processor_matches_substreams_genesis_range() {
         "Substreams returned no blocks for range [{START_BLOCK}, {stop_block}]"
     );
 
-    // ── Step 2: collect pool registrations from component_changes ────────────
-    //
-    // component_changes carry the pool address (id) and its token list.
-    // This avoids any RPC calls for pool metadata — the substreams output
-    // is the authoritative source.
-    let mut components: Vec<ProtocolComponent> = Vec::new();
-    let mut known_pool_ids: HashSet<String> = HashSet::new();
-
-    for (_, block_changes) in &all_block_changes {
-        for tx in &block_changes.changes {
-            for comp in &tx.component_changes {
-                let pool_id = normalise_str_id(&comp.id);
-                if known_pool_ids.insert(pool_id.clone()) {
-                    components.push(ProtocolComponent {
-                        id: pool_id,
-                        tokens: comp
-                            .tokens
-                            .iter()
-                            .map(|t| t.clone().into())
-                            .collect(),
-                        ..Default::default()
-                    });
-                }
-            }
-            // Also collect pools that only appear via entity_changes (already
-            // registered in a prior range but active in this one).
-            for ec in &tx.entity_changes {
-                known_pool_ids.insert(normalise_str_id(&ec.component_id));
-            }
-            for bc in &tx.balance_changes {
-                known_pool_ids.insert(normalise_component_id(&bc.component_id));
-            }
-        }
-    }
-
-    assert!(
-        !known_pool_ids.is_empty(),
-        "No UV3 pool activity found in range [{START_BLOCK}, {stop_block}]"
-    );
-
-    // ── Step 3: build empty state snapshots (genesis start = zero state) ─────
-    let states: Vec<ProtocolComponentState> = components
-        .iter()
-        .map(|c| ProtocolComponentState::new(&c.id, HashMap::new(), HashMap::new()))
-        .collect();
-
-    // ── Step 4: fetch tx inputs for the full block range ─────────────────────
+    // ── Step 2: fetch tx inputs for the full block range ─────────────────────
     let mut per_block_inputs = fetch_range_tx_inputs(&rpc_url, START_BLOCK, stop_block).await;
 
-    // ── Step 5: run the native processor block by block ──────────────────────
-    let mut processor = UniswapV3Processor::from_snapshot(&components, &states);
+    // ── Step 3: run the native processor block by block ──────────────────────
+    //
+    // For each block:
+    //   a. generate_deltas(txs) — compare against substreams output (known pools only)
+    //   b. apply_block(dto)    — advance state; register new pools for subsequent blocks
+    let mut processor = UniswapV3Processor::new(dto::Chain::Ethereum, "uniswap-v3".to_string());
+    let mut known_pool_ids: HashSet<String> = HashSet::new();
 
     let mut attr_mismatches: Vec<String> = Vec::new();
     let mut balance_mismatches: Vec<String> = Vec::new();
-    let mut missing_txs: Vec<String> = Vec::new();
 
-    let mut total_compared_txs: usize = 0;
+    let mut total_compared_blocks: usize = 0;
     let mut total_compared_attrs: usize = 0;
     let mut total_compared_balances: usize = 0;
 
-    for (block_num, substreams_block) in &all_block_changes {
+    for (block_num, block_hash, substreams_block) in &all_block_changes {
         let tx_inputs = per_block_inputs
             .remove(block_num)
             .unwrap_or_default();
-        let processor_output = processor.apply_transactions(&tx_inputs);
 
-        let substreams_map: HashMap<String, ComparableTxChanges> = substreams_block
-            .changes
-            .iter()
-            .filter_map(|tc| substreams_to_comparable(tc, &known_pool_ids))
-            .map(|c| (c.tx_hash.clone(), c))
-            .collect();
+        // Generate pending deltas from raw transactions against the current state.
+        let pending = processor.generate_deltas(&tx_inputs);
 
-        let processor_map: HashMap<String, ComparableTxChanges> = processor_output
-            .iter()
-            .map(processor_to_comparable)
-            .map(|c| (c.tx_hash.clone(), c))
-            .collect();
+        // Compare block-level aggregates, limited to pools already registered.
+        let expected = substreams_to_comparable_block(substreams_block, &known_pool_ids);
+        let actual = processor_to_comparable_block(&pending, &known_pool_ids);
 
-        for hash in substreams_map.keys() {
-            if !processor_map.contains_key(hash) {
-                missing_txs.push(format!("block={block_num} tx={hash}"));
-            }
+        if !expected.attributes.is_empty() || !expected.balances.is_empty() {
+            total_compared_blocks += 1;
         }
 
-        for (hash, expected) in &substreams_map {
-            let Some(actual) = processor_map.get(hash) else { continue };
-
-            total_compared_txs += 1;
-
-            // Print every matched transaction with both sides side-by-side.
-            let short_hash = &hash[..12];
-            println!("\n  block={block_num} tx={short_hash}...");
-
-            for (cid, expected_attrs) in &expected.attributes {
-                let actual_attrs = actual
-                    .attributes
-                    .get(cid)
-                    .cloned()
-                    .unwrap_or_default();
-                let short_cid = &cid[..8];
-                for (attr_name, expected_value) in expected_attrs {
-                    total_compared_attrs += 1;
-                    let ev = hex::encode(expected_value);
-                    match actual_attrs.get(attr_name) {
-                        Some(v) if v == expected_value => {
-                            println!("    pool={short_cid}.. {attr_name:20}  substreams={ev}  processor=✓");
-                        }
-                        Some(v) => {
-                            let av = hex::encode(v);
-                            println!("    pool={short_cid}.. {attr_name:20}  substreams={ev}  processor={av}  MISMATCH");
-                            attr_mismatches.push(format!(
-                                "block={block_num} tx={hash} pool={cid} attr={attr_name}: \
-                                 expected={ev} got={av}",
-                            ));
-                        }
-                        None => {
-                            println!("    pool={short_cid}.. {attr_name:20}  substreams={ev}  processor=MISSING");
-                            attr_mismatches.push(format!(
-                                "block={block_num} tx={hash} pool={cid} attr={attr_name}: \
-                                 expected={ev} but missing",
-                            ));
-                        }
-                    }
-                }
-            }
-
-            for ((cid, token), expected_balance) in &expected.balances {
-                total_compared_balances += 1;
-                let short_cid = &cid[..8];
-                let short_tok = &token[..8];
-                let eb = hex::encode(expected_balance);
-                match actual
-                    .balances
-                    .get(&(cid.clone(), token.clone()))
-                {
-                    Some(v) if v == expected_balance => {
-                        println!("    pool={short_cid}.. token={short_tok}..  balance: substreams={eb}  processor=✓");
+        for (cid, expected_attrs) in &expected.attributes {
+            let actual_attrs = actual
+                .attributes
+                .get(cid)
+                .cloned()
+                .unwrap_or_default();
+            let short_cid = &cid[..8.min(cid.len())];
+            for (attr_name, expected_value) in expected_attrs {
+                total_compared_attrs += 1;
+                let ev = hex::encode(expected_value);
+                match actual_attrs.get(attr_name) {
+                    Some(v) if v == expected_value => {
+                        println!(
+                            "  block={block_num} pool={short_cid}.. {attr_name:20}  \
+                             substreams={ev}  processor=✓"
+                        );
                     }
                     Some(v) => {
-                        let ab = hex::encode(v);
-                        println!("    pool={short_cid}.. token={short_tok}..  balance: substreams={eb}  processor={ab}  MISMATCH");
-                        balance_mismatches.push(format!(
-                            "block={block_num} tx={hash} pool={cid} token={token}: \
-                             expected={eb} got={ab}",
+                        let av = hex::encode(v);
+                        println!(
+                            "  block={block_num} pool={short_cid}.. {attr_name:20}  \
+                             substreams={ev}  processor={av}  MISMATCH"
+                        );
+                        attr_mismatches.push(format!(
+                            "block={block_num} pool={cid} attr={attr_name}: \
+                             expected={ev} got={av}",
                         ));
                     }
                     None => {
-                        println!("    pool={short_cid}.. token={short_tok}..  balance: substreams={eb}  processor=MISSING");
-                        balance_mismatches.push(format!(
-                            "block={block_num} tx={hash} pool={cid} token={token}: \
-                             expected={eb} but missing",
+                        println!(
+                            "  block={block_num} pool={short_cid}.. {attr_name:20}  \
+                             substreams={ev}  processor=MISSING"
+                        );
+                        attr_mismatches.push(format!(
+                            "block={block_num} pool={cid} attr={attr_name}: \
+                             expected={ev} but missing",
                         ));
                     }
                 }
             }
+        }
+
+        for ((cid, token), expected_balance) in &expected.balances {
+            total_compared_balances += 1;
+            let short_cid = &cid[..8.min(cid.len())];
+            let short_tok = &token[..8.min(token.len())];
+            let eb = hex::encode(expected_balance);
+            match actual
+                .balances
+                .get(&(cid.clone(), token.clone()))
+            {
+                Some(v) if v == expected_balance => {
+                    println!(
+                        "  block={block_num} pool={short_cid}.. token={short_tok}..  \
+                         balance: substreams={eb}  processor=✓"
+                    );
+                }
+                Some(v) => {
+                    let ab = hex::encode(v);
+                    println!(
+                        "  block={block_num} pool={short_cid}.. token={short_tok}..  \
+                         balance: substreams={eb}  processor={ab}  MISMATCH"
+                    );
+                    balance_mismatches.push(format!(
+                        "block={block_num} pool={cid} token={token}: \
+                         expected={eb} got={ab}",
+                    ));
+                }
+                None => {
+                    println!(
+                        "  block={block_num} pool={short_cid}.. token={short_tok}..  \
+                         balance: substreams={eb}  processor=MISSING"
+                    );
+                    balance_mismatches.push(format!(
+                        "block={block_num} pool={cid} token={token}: \
+                         expected={eb} but missing",
+                    ));
+                }
+            }
+        }
+
+        // Advance processor state with substreams ground truth.
+        let dto_block = substreams_proto_to_dto(substreams_block, *block_num, block_hash);
+        processor.apply_block(&dto_block);
+
+        // Register newly seen pools so subsequent blocks can compare them.
+        for id in dto_block.new_protocol_components.keys() {
+            known_pool_ids.insert(id.clone());
         }
     }
 
     println!("\n─── Summary ────────────────────────────────────────────────────────────────");
     println!("  Blocks streamed:       {}", all_block_changes.len());
+    println!("  Blocks with activity:  {total_compared_blocks}");
     println!("  Pools registered:      {}", known_pool_ids.len());
-    println!("  Transactions compared: {total_compared_txs}");
     println!("  Attributes compared:   {total_compared_attrs}");
     println!("  Balances compared:     {total_compared_balances}");
     println!("  Attr mismatches:       {}", attr_mismatches.len());
     println!("  Balance mismatches:    {}", balance_mismatches.len());
-    println!("  Missing txs:           {}", missing_txs.len());
     println!("────────────────────────────────────────────────────────────────────────────");
 
-    assert!(
-        missing_txs.is_empty(),
-        "Transactions in substreams output but absent from processor ({} total):\n{}",
-        missing_txs.len(),
-        missing_txs.join("\n"),
-    );
     assert!(
         attr_mismatches.is_empty(),
         "Attribute value mismatches ({} total):\n{}",
