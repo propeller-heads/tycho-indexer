@@ -509,6 +509,21 @@ mock! {
             'life1: 'async_trait,
             Self: 'async_trait;
 
+        fn seed_native_token_prices<'life0, 'life1, 'async_trait>(
+            &'life0 self,
+            chain: &'life1 Chain,
+        ) -> ::core::pin::Pin<
+            Box<
+                dyn ::core::future::Future<
+                    Output = Result<(), StorageError>,
+                > + ::core::marker::Send + 'async_trait,
+            >,
+        >
+        where
+            'life0: 'async_trait,
+            'life1: 'async_trait,
+            Self: 'async_trait;
+
         fn get_protocol_states_delta<'life0, 'life1, 'life2, 'life3, 'async_trait>(
             &'life0 self,
             chain: &'life1 Chain,
