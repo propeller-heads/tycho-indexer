@@ -467,6 +467,8 @@ pub trait ProtocolGateway {
 
     async fn get_token_prices(&self, chain: &Chain) -> Result<HashMap<Bytes, f64>, StorageError>;
 
+    async fn seed_native_token_prices(&self, chain: &Chain) -> Result<(), StorageError>;
+
     async fn upsert_component_tvl(
         &self,
         chain: &Chain,
