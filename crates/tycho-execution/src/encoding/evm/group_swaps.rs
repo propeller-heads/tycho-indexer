@@ -1,3 +1,4 @@
+use num_bigint::BigUint;
 use tycho_common::Bytes;
 
 use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
@@ -11,6 +12,7 @@ use crate::encoding::{evm::constants::GROUPABLE_PROTOCOLS, models::Swap};
 /// * `protocol_system`: String, the protocol system of the swaps
 /// * `swaps`: Vec<Swap>, the sequence of swaps to be executed as a group
 /// * `split`: f64, the split percentage of the first swap in the group
+/// * `estimated_gas_usage`: BigUint, the estimated gas usage of the swap group
 #[derive(Clone, Debug)]
 pub struct SwapGroup {
     pub token_in: Bytes,
@@ -18,6 +20,7 @@ pub struct SwapGroup {
     pub protocol_system: String,
     pub swaps: Vec<Swap>,
     pub split: f64,
+    pub estimated_gas_usage: BigUint,
 }
 
 impl PartialEq for SwapGroup {
@@ -50,14 +53,14 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
 
         // Split 0 can also mean that the swap is the remaining part of a branch of splits,
         // so we need to check the last swap's out token as well
-        let no_split = swap.split() == 0.0 && *swap.token_in() == last_swap_out_token;
+        let no_split = swap.split() == 0.0 && swap.token_in().address == last_swap_out_token;
 
         // Merging this swap would make the group's token_out equal to its token_in, which
         // the router rejects as an unsupported single-hop cycle. Keep the swap in its
         // own group instead.
         let no_cycle = current_group
             .as_ref()
-            .is_none_or(|g| swap.token_out() != &g.token_in);
+            .is_none_or(|g| swap.token_out().address != g.token_in);
 
         if current_swap_protocol == last_swap_protocol && groupable_protocol && no_split && no_cycle
         {
@@ -66,7 +69,7 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
             if let Some(group) = current_group.as_mut() {
                 group.swaps.push(swap.clone());
                 // Update the output token of the current group.
-                group.token_out = swap.token_out().clone();
+                group.token_out = swap.token_out().address.clone();
             }
         } else {
             // Not second or later USV4 pool. Push the current group (if it exists) and then
@@ -75,15 +78,16 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
                 grouped_swaps.push(group.clone());
             }
             current_group = Some(SwapGroup {
-                token_in: swap.token_in().clone(),
-                token_out: swap.token_out().clone(),
+                token_in: swap.token_in().address.clone(),
+                token_out: swap.token_out().address.clone(),
                 protocol_system: current_swap_protocol.clone(),
                 swaps: vec![swap.clone()],
                 split: swap.split(),
+                estimated_gas_usage: BigUint::ZERO, // TODO: figure out what to do here
             });
         }
         last_swap_protocol = current_swap_protocol;
-        last_swap_out_token = swap.token_out().clone();
+        last_swap_out_token = swap.token_out().address.clone();
     }
     if let Some(group) = current_group.as_mut() {
         grouped_swaps.push(group.clone());
@@ -99,7 +103,7 @@ mod tests {
     use tycho_common::{models::protocol::ProtocolComponent, Bytes};
 
     use super::*;
-    use crate::encoding::models::Swap;
+    use crate::encoding::models::{default_token, Swap};
 
     fn weth() -> Bytes {
         Bytes::from(hex!("c02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").to_vec())
@@ -119,20 +123,23 @@ mod tests {
 
         let swap_weth_wbtc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            wbtc.clone(),
+            default_token(weth.clone()),
+            default_token(wbtc.clone()),
+            BigUint::ZERO,
         );
 
         let swap_wbtc_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            wbtc.clone(),
-            usdc.clone(),
+            default_token(wbtc.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
 
         let swap_usdc_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
-            usdc.clone(),
-            dai.clone(),
+            default_token(usdc.clone()),
+            default_token(dai.clone()),
+            BigUint::ZERO,
         );
         let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
         let grouped_swaps = group_swaps(&swaps);
@@ -146,6 +153,7 @@ mod tests {
                     token_out: usdc.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_usdc_dai],
@@ -153,6 +161,7 @@ mod tests {
                     token_out: dai,
                     protocol_system: "uniswap_v2".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 }
             ]
         );
@@ -175,27 +184,31 @@ mod tests {
 
         let swap_wbtc_weth = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            wbtc.clone(),
-            weth.clone(),
+            default_token(wbtc.clone()),
+            default_token(weth.clone()),
+            BigUint::ZERO,
         );
         let swap_weth_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            usdc.clone(),
+            default_token(weth.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         )
         .with_split(0.5f64);
         let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
+            BigUint::ZERO,
         );
         // Split 0 represents the remaining 50%, but to avoid any rounding errors we set this to
         // 0 to signify "the remainder of the WETH value". It should still be very close to 50%
 
         let swap_dai_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            dai.clone(),
-            usdc.clone(),
+            default_token(dai.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
         let swaps = vec![
             swap_wbtc_weth.clone(),
@@ -214,6 +227,7 @@ mod tests {
                     token_out: weth.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_usdc],
@@ -221,6 +235,7 @@ mod tests {
                     token_out: usdc.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0.5f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
@@ -228,6 +243,7 @@ mod tests {
                     token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 }
             ]
         );
@@ -252,8 +268,9 @@ mod tests {
                 protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
-            weth.clone(),
-            wbtc.clone(),
+            default_token(weth.clone()),
+            default_token(wbtc.clone()),
+            BigUint::ZERO,
         )
         .with_split(0.5f64);
 
@@ -262,18 +279,21 @@ mod tests {
                 protocol_system: "vm:balancer_v3".to_string(),
                 ..Default::default()
             },
-            wbtc.clone(),
-            usdc.clone(),
+            default_token(wbtc.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
         let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
+            BigUint::ZERO,
         );
         let swap_dai_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            dai.clone(),
-            usdc.clone(),
+            default_token(dai.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
 
         let swaps = vec![
@@ -293,6 +313,7 @@ mod tests {
                     token_out: usdc.clone(),
                     protocol_system: "vm:balancer_v3".to_string(),
                     split: 0.5f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_dai, swap_dai_usdc],
@@ -300,6 +321,7 @@ mod tests {
                     token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 }
             ]
         );
@@ -322,13 +344,15 @@ mod tests {
 
         let swap_usdc_weth = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            usdc.clone(),
-            weth.clone(),
+            default_token(usdc.clone()),
+            default_token(weth.clone()),
+            BigUint::ZERO,
         );
         let swap_weth_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            usdc.clone(),
+            default_token(weth.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
 
         let grouped_swaps = group_swaps(&[swap_usdc_weth.clone(), swap_weth_usdc.clone()]);
@@ -342,6 +366,7 @@ mod tests {
                     token_out: weth.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_weth_usdc],
@@ -349,6 +374,7 @@ mod tests {
                     token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
             ]
         );
@@ -371,18 +397,21 @@ mod tests {
 
         let swap_usdc_weth = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            usdc.clone(),
-            weth.clone(),
+            default_token(usdc.clone()),
+            default_token(weth.clone()),
+            BigUint::ZERO,
         );
         let swap_weth_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            dai.clone(),
+            default_token(weth.clone()),
+            default_token(dai.clone()),
+            BigUint::ZERO,
         );
         let swap_dai_usdc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            dai.clone(),
-            usdc.clone(),
+            default_token(dai.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
 
         let grouped_swaps =
@@ -397,6 +426,7 @@ mod tests {
                     token_out: dai.clone(),
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
                 SwapGroup {
                     swaps: vec![swap_dai_usdc],
@@ -404,6 +434,7 @@ mod tests {
                     token_out: usdc,
                     protocol_system: "uniswap_v4".to_string(),
                     split: 0f64,
+                    estimated_gas_usage: BigUint::ZERO,
                 },
             ]
         );
@@ -423,8 +454,9 @@ mod tests {
 
         let swap_weth_wbtc = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v4".to_string(), ..Default::default() },
-            weth.clone(),
-            wbtc.clone(),
+            default_token(weth.clone()),
+            default_token(wbtc.clone()),
+            BigUint::ZERO,
         );
 
         let swap_wbtc_usdc = Swap::new(
@@ -432,14 +464,16 @@ mod tests {
                 protocol_system: "uniswap_v4_hooks".to_string(),
                 ..Default::default()
             },
-            wbtc.clone(),
-            usdc.clone(),
+            default_token(wbtc.clone()),
+            default_token(usdc.clone()),
+            BigUint::ZERO,
         );
 
         let swap_usdc_dai = Swap::new(
             ProtocolComponent { protocol_system: "uniswap_v2".to_string(), ..Default::default() },
-            usdc.clone(),
-            dai.clone(),
+            default_token(usdc.clone()),
+            default_token(dai.clone()),
+            BigUint::ZERO,
         );
         let swaps = vec![swap_weth_wbtc.clone(), swap_wbtc_usdc.clone(), swap_usdc_dai.clone()];
         let grouped_swaps = group_swaps(&swaps);

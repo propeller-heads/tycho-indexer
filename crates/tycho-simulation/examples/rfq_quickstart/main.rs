@@ -439,6 +439,7 @@ async fn main() {
                                     amount_in.clone(),
                                     Bytes::from(signer.address().to_vec()),
                                     amount_out.clone(),
+                                    amount_out_result.gas,
                                 );
 
                                 let encoded_solution = encoder
@@ -610,6 +611,7 @@ async fn main() {
                                     amount_in.clone(),
                                     Bytes::from(signer.address().to_vec()),
                                     amount_out.clone(),
+                                    amount_out_result.gas,
                                 );
 
                                 // Encode the swaps of the solution
@@ -748,9 +750,10 @@ fn create_solution(
     sell_amount: BigUint,
     user_address: Bytes,
     expected_amount: BigUint,
+    gas_usage: BigUint,
 ) -> Solution {
     // Prepare data to encode. First we need to create a swap object
-    let simple_swap = Swap::new(component, sell_token.address.clone(), buy_token.address.clone())
+    let simple_swap = Swap::new(component, sell_token.clone(), buy_token.clone(), gas_usage)
         .with_protocol_state(state)
         .with_estimated_amount_in(sell_amount.clone());
 

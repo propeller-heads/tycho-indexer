@@ -33,12 +33,13 @@ The `Swap` struct has the following attributes:
 | Attribute                 |              Type              |                                                        Description                                                        |
 |---------------------------|:------------------------------:|:-------------------------------------------------------------------------------------------------------------------------:|
 | **component**             |      `ProtocolComponent`       |                                            Protocol component from Tycho core                                             |
-| **token\_in**             |            `Bytes`             |                                       Address of the token you provide to the pool                                        |
-| **token\_out**            |            `Bytes`             |                                       Address of the token you expect from the pool                                       |
+| **token\_in**             |            `Token`             |                                             The token you provide to the pool                                             |
+| **token\_out**            |            `Token`             |                                            The token you expect from the pool                                             |
 | **split**                 |             `f64`              |                 Percentage of the amount in to be swapped in this operation (for example, 0.5 means 50%)                  |
 | **user\_data**            |        `Option<Bytes>`         |                                        Optional user data to be passed to encoding                                        |
 | **protocol\_state**       | `Option<Arc<dyn ProtocolSim>>` |                                     Optional protocol state used to perform the swap                                      |
 | **estimated\_amount\_in** |       `Option<BigUint>`        | Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value is used to request the quote. |
+| **estimated\_gas**        |           `BigUint`            |                                          Per-swap gas estimate from simulation.                                           |
 
 #### Split Swaps
 
@@ -69,30 +70,14 @@ solution then splits between three (WETH, USDC) pools and finally swaps from USD
 
 The `Solution` object for the given scenario would look as follows:
 
-<pre class="language-rust"><code class="lang-rust">swap_a = Swap::new(
-    pool_a,
-    weth_address,
-    usdc_address,
-    0.3, // 30% of WETH amount
-);
-swap_b = Swap::new(
-    pool_b,
-    weth_address,
-    usdc_address,
-    0.3, // 30% of WETH amount
-);
-swap_c = Swap::new(
-    pool_c,
-    weth_address,
-    usdc_address,
-    0f64, // Rest of remaining WETH amount (40%)
-);
-swap_d = Swap::new(
-    pool_d,
-    usdc,
-    dai,
-    0f64, // All of USDC amount
-);
+<pre class="language-rust"><code class="lang-rust">swap_a = Swap::new(pool_a, weth_token.clone(), usdc_token.clone(), gas_a)
+    .with_split(0.3); // 30% of WETH amount
+swap_b = Swap::new(pool_b, weth_token.clone(), usdc_token.clone(), gas_b)
+    .with_split(0.3); // 30% of WETH amount
+swap_c = Swap::new(pool_c, weth_token.clone(), usdc_token.clone(), gas_c);
+    // split defaults to 0 — pool receives the remaining 40%
+swap_d = Swap::new(pool_d, usdc_token, dai_token, gas_d);
+    // split defaults to 0 — pool receives all USDC
 
 <strong>let solution = Solution::new(
 </strong>    user_address.clone(),
@@ -104,6 +89,9 @@ swap_d = Swap::new(
     vec![swap_a, swap_b, swap_c, swap_d],
 );
 </code></pre>
+
+The 4th argument to `Swap::new` is the per-swap `estimated_gas` (a `BigUint`). Splits are configured
+via `.with_split(...)` on the builder.
 
 </details>
 
@@ -140,7 +128,7 @@ Encoding produces an `EncodedSolution` with these attributes:
 | **interacting\_with** |  `Bytes`  | The address of the contract to be called (it can be the Tycho Router or an Executor) |
 | **selector**          | `String`  |                      The selector of the function to be called.                      |
 | **n\_tokens**         |  `usize`  |          The number of tokens in the trade (relevant for split swaps only).          |
-|                       |           |                                                                                      |
+| **estimated\_gas**    | `BigUint` |                    Estimated gas usage for the encoded solution.                     |
 
 {% endtab %}
 {% endtabs %}
