@@ -4218,4 +4218,60 @@ mod test {
         assert_eq!(tvls.entity.get("state1"), Some(&2.0));
         assert!(!tvls.entity.contains_key("state3"));
     }
+
+    #[tokio::test]
+    async fn test_seed_native_token_prices() {
+        let mut conn = setup_db().await;
+        db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("seeding failed");
+
+        let prices = gw
+            .get_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("get prices failed");
+
+        let native = Chain::Ethereum.native_token();
+        let wrapped = Chain::Ethereum.wrapped_native_token();
+        let expected_price = 10.0_f64.powi(18);
+
+        assert_eq!(
+            prices.get(&native.address).copied(),
+            Some(expected_price),
+        );
+        assert_eq!(
+            prices.get(&wrapped.address).copied(),
+            Some(expected_price),
+        );
+    }
+
+    #[tokio::test]
+    async fn test_seed_native_token_prices_idempotent() {
+        let mut conn = setup_db().await;
+        db_fixtures::insert_chain(&mut conn, "ethereum").await;
+        let gw = EVMGateway::from_connection(&mut conn).await;
+
+        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("first seed failed");
+
+        gw.seed_native_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("second seed should not fail (idempotent)");
+
+        let prices = gw
+            .get_token_prices(&Chain::Ethereum, &mut conn)
+            .await
+            .expect("get prices failed");
+
+        let native = Chain::Ethereum.native_token();
+        let expected_price = 10.0_f64.powi(18);
+        assert_eq!(
+            prices.get(&native.address).copied(),
+            Some(expected_price),
+        );
+    }
 }
