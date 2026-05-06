@@ -1,3 +1,11 @@
+## [0.283.1](https://github.com/propeller-heads/tycho-indexer/compare/0.283.0...0.283.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* update v3-style swap tick after partial price move ([f365636](https://github.com/propeller-heads/tycho-indexer/commit/f365636ab8027b98ab998da9fd6003b81f0459de))
+* update v3-style swap tick after partial price move ([#971](https://github.com/propeller-heads/tycho-indexer/issues/971)) ([8b902c1](https://github.com/propeller-heads/tycho-indexer/commit/8b902c124492d820e51cd833411bc1904970cc0f))
+
 ## [0.283.0](https://github.com/propeller-heads/tycho-indexer/compare/0.282.0...0.283.0) (2026-05-05)
 
 
