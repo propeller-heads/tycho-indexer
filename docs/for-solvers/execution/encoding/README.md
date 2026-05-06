@@ -289,7 +289,8 @@ The returned 65-byte signature is passed as the `clientSignature` field in `Clie
 The encoding crate ships a `tycho-encode` CLI that lets you encode swaps without writing Rust. Install it with:
 
 ```bash
-cargo install --path .
+cargo install --path crates/tycho-execution
+tycho-encode --version  # verify the install succeeded
 ```
 
 Pass a JSON-serialised `Solution` via stdin and specify the encoder as a subcommand:
