@@ -60,6 +60,7 @@ use tycho_indexer::{
     },
     services::{PlansConfig, ServicesBuilder},
 };
+use tycho_common::storage::ProtocolGateway;
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
 mod ot;
@@ -454,11 +455,19 @@ async fn build_all_extractors(
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
     let mut extractor_handles = Vec::new();
 
+    let chain = *chains
+        .first()
+        .expect("No chain provided"); //TODO: handle multichain?
+
+    info!("Seeding native token prices");
+    cached_gw
+        .seed_native_token_prices(&chain)
+        .await
+        .map_err(|e| ExtractionError::Setup(format!("Failed to seed native token prices: {e}")))?;
+
     info!("Building protocol cache");
     let protocol_cache = ProtocolMemoryCache::new(
-        *chains
-            .first()
-            .expect("No chain provided"), //TODO: handle multichain?
+        chain,
         chrono::Duration::seconds(900),
         Arc::new(cached_gw.clone()),
     );
@@ -471,7 +480,7 @@ async fn build_all_extractors(
                 .clone(),
             extractor_config.initialized_accounts_block,
             rpc_client,
-            *chains.first().unwrap(),
+            chain,
             cached_gw,
         )
         .await;
