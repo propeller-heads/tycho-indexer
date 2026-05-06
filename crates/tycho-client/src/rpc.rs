@@ -128,6 +128,14 @@ pub enum RPCError {
     #[error("Failed to parse response: {0}")]
     ParseResponse(String),
 
+    /// The requested block is outside the server's retention window.
+    #[error("Snapshot block is stale: {0}")]
+    StaleBlock(String),
+
+    /// The requested extractor does not exist on the server.
+    #[error("Unknown extractor: {0}")]
+    UnknownExtractor(String),
+
     /// Other fatal errors.
     #[error("Fatal error: {0}")]
     Fatal(String),
@@ -137,6 +145,27 @@ pub enum RPCError {
 
     #[error("Server unreachable: {0}")]
     ServerUnreachable(String),
+}
+
+impl RPCError {
+    /// Converts an HTTP response body parse failure into the correct `RPCError`.
+    ///
+    /// The tycho server returns plain-text error messages (not JSON) when a requested block falls
+    /// outside its retention window. Detecting these here gives callers a typed signal to retry
+    /// with a more recent block rather than treating it as an unrecoverable parse failure.
+    ///
+    /// NOTE: The string matching below is coupled to the server's error message text. If those
+    /// messages change server-side this silently regresses to `ParseResponse`. Replace with a
+    /// structured error code if the server ever returns typed error responses.
+    fn from_parse_error(err: serde_json::Error, body: &str) -> Self {
+        if body.contains("version is older than") || body.contains("Could not find Block") {
+            RPCError::StaleBlock(body.to_string())
+        } else if body.starts_with("Unknown extractor:") {
+            RPCError::UnknownExtractor(body.to_string())
+        } else {
+            RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
+        }
+    }
 }
 
 #[cfg_attr(test, automock)]
@@ -291,8 +320,7 @@ pub trait RPCClient: Send + Sync {
                 };
                 let first_response = self
                     .get_protocol_components(&initial_request)
-                    .await
-                    .map_err(|err| RPCError::Fatal(err.to_string()))?;
+                    .await?;
 
                 let total_items = first_response.pagination.total;
                 let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
@@ -870,6 +898,12 @@ impl HttpRPCClient {
                     .and_then(|h| h.to_str().ok())
                     .and_then(parse_retry_value);
 
+                let reason = response
+                    .text()
+                    .await
+                    .unwrap_or_default();
+                warn!(reason, retry_after = ?retry_after_raw, "Rate limited by server");
+
                 Err(RPCError::RateLimited(retry_after_raw))
             }
             StatusCode::BAD_GATEWAY |
@@ -1021,7 +1055,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let accounts = serde_json::from_str::<StateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?accounts, "Received contract_state response from Tycho server");
 
         Ok(accounts)
@@ -1052,7 +1086,7 @@ impl RPCClient for HttpRPCClient {
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?components, "Received protocol_components response from Tycho server");
 
         Ok(components)
@@ -1104,7 +1138,7 @@ impl RPCClient for HttpRPCClient {
         }
 
         let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
-            .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
+            .map_err(|err| RPCError::from_parse_error(err, &body))?;
         trace!(?states, "Received protocol_states response from Tycho server");
 
         Ok(states)

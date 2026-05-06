@@ -29,7 +29,7 @@ pub fn split_swap(
     n_tokens: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    _update_native_delta_accounting(params, vault, log, amount_in)?;
+    _update_native_delta_accounting(params, state, vault, log, amount_in)?;
     _tstore_transfer_from_info(state, token_in, amount_in, false, false);
 
     _split_swap_checked(
@@ -119,7 +119,7 @@ pub fn sequential_swap(
     min_amount_out: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    _update_native_delta_accounting(params, vault, log, amount_in)?;
+    _update_native_delta_accounting(params, state, vault, log, amount_in)?;
     _tstore_transfer_from_info(state, token_in, amount_in, false, false);
 
     _sequential_swap_checked(
@@ -204,7 +204,7 @@ pub fn single_swap(
     min_amount_out: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    _update_native_delta_accounting(params, vault, log, amount_in)?;
+    _update_native_delta_accounting(params, state, vault, log, amount_in)?;
     _tstore_transfer_from_info(state, token_in, amount_in, false, false);
 
     if crate::config::INTRODUCE_FAULT {
@@ -686,6 +686,7 @@ fn _take_fees(
 /// <https://github.com/propeller-heads/tycho-execution/blob/0454514f4f6ccff55dcaa8e3abbb4ac494d89eba/foundry/src/TychoRouter.sol#L1063>
 fn _update_native_delta_accounting(
     params: &Params,
+    state: &mut State,
     vault: &mut Vault,
     log: &mut impl Log,
     amount_in: i64,
@@ -696,6 +697,7 @@ fn _update_native_delta_accounting(
         if msg_value != amount_in {
             return Err(Error::revert("update_native_delta_accounting: msg_value != amount_in"));
         }
+        state.eth_send_value(Address::Sender, Address::Router, msg_value)?;
         vault._update_delta_accounting(Address::Zero, msg_value);
         log.append(Event::UpdateDeltaAccounting {
             token: Address::Zero,

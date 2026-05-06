@@ -1200,7 +1200,9 @@ async fn process_state(
             }
         };
         let duration_seconds = start_time.elapsed().as_secs_f64();
-        let estimated_gas = amount_out_result.gas;
+        let transfer_overhead =
+            estimate_transfer_overhead(&component.protocol_system, token_in, token_out);
+        let estimated_gas = amount_out_result.gas + transfer_overhead;
         let expected_amount_out = amount_out_result.amount;
         debug!(
             event_type = "get_amount_out_duration",
@@ -1486,6 +1488,89 @@ fn categorize_error(error_message: &str) -> &'static str {
         e if e.contains("Insufficient balance for amount + tax") => "Fee token",
         _ => "other",
     }
+}
+
+/// Default gas cost for an ERC-20 `transferFrom` or `transfer`. Used as fallback when the token
+/// has no measured gas cost.
+const DEFAULT_TOKEN_TRANSFER_GAS: u64 = 60_000;
+
+/// Gas cost for an ERC-20 `approve`.
+const TOKEN_APPROVAL_GAS: u64 = 45_000;
+
+/// Callback-based protocols: the input `transferFrom` happens inside the callback, which is
+/// inside `swap()`. The gas is thus already included in `get_amount_out`.
+const PROTOCOLS_CALLBACK: &[&str] = &[
+    "uniswap_v3",
+    "pancakeswap_v3",
+    "uniswap_v4",
+    "uniswap_v4_hooks",
+    "ekubo_v2",
+    "ekubo_v3",
+    "aerodrome_slipstreams",
+    "velodrome_slipstreams",
+];
+
+/// ProtocolWillDebit: the router must `approve(protocol)` before swapping.
+/// The protocol's `transferFrom` is inside `swap()` and already in the gas computation of
+/// `get_amount_out`, but the approval is not.
+const PROTOCOLS_NEEDING_APPROVAL: &[&str] =
+    &["vm:balancer_v2", "vm:curve", "rfq:bebop", "rfq:hashflow", "rfq:liquorice", "erc4626"];
+
+/// `outputToRouter = true`: the pool sends output to the router, which then does an extra
+/// `_transferOut` to the receiver.
+const PROTOCOLS_OUTPUT_TO_ROUTER: &[&str] = &["vm:curve", "rocketpool", "fluid_v1"];
+
+fn transfer_gas(token: &tycho_common::models::token::Token) -> BigUint {
+    let measured = token.gas_usage();
+    if measured == BigUint::ZERO {
+        BigUint::from(DEFAULT_TOKEN_TRANSFER_GAS)
+    } else {
+        measured
+    }
+}
+
+/// Gas overhead for token transfers NOT captured by `get_amount_out`.
+///
+/// `get_amount_out` includes pool computation gas plus any transfers the pool performs during
+/// `swap()`. The convention is:
+///
+/// - Input transfer is in `get_amount_out` when the pool handles it inside `swap()`: callback
+///   protocols (user pays pool directly in the callback) and ProtocolWillDebit (vault pulls from
+///   router via `transferFrom`). For other protocols (e.g. UniV2) the Dispatcher transfers tokens
+///   to the pool before calling `executor.swap()`, so it's NOT included in `get_amount_out`.
+/// - Output transfer (pool -> receiver/router) is always included in `get_amount_out`.
+///
+/// This function adds what's missing:
+///
+/// - **Input**: for non-callback protocols, the `transferFrom` that happens before
+///   `executor.swap()`.
+/// - **Approval**: the router's `approve(vault)` for ProtocolWillDebit protocols (Balancer V2,
+///   Curve, etc.).
+/// - **Output**: the extra `_transferOut(router, receiver)` for protocols with `outputToRouter =
+///   true`.
+fn estimate_transfer_overhead(
+    protocol_system: &str,
+    token_in: &tycho_common::models::token::Token,
+    token_out: &tycho_common::models::token::Token,
+) -> BigUint {
+    let mut overhead = BigUint::ZERO;
+
+    // Input transfer: only needed when it happens outside swap().
+    // Callback protocols handle it inside the callback (part of swap gas).
+    if !PROTOCOLS_CALLBACK.contains(&protocol_system) {
+        overhead += transfer_gas(token_in);
+    }
+
+    if PROTOCOLS_NEEDING_APPROVAL.contains(&protocol_system) {
+        overhead += BigUint::from(TOKEN_APPROVAL_GAS);
+    }
+
+    // Output transfer: router -> receiver (only when outputToRouter).
+    if PROTOCOLS_OUTPUT_TO_ROUTER.contains(&protocol_system) {
+        overhead += transfer_gas(token_out);
+    }
+
+    overhead
 }
 
 /// Generate a unique simulation ID based on protocol system and state ID

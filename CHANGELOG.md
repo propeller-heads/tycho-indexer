@@ -1,3 +1,75 @@
+## [0.283.1](https://github.com/propeller-heads/tycho-indexer/compare/0.283.0...0.283.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* update v3-style swap tick after partial price move ([f365636](https://github.com/propeller-heads/tycho-indexer/commit/f365636ab8027b98ab998da9fd6003b81f0459de))
+* update v3-style swap tick after partial price move ([#971](https://github.com/propeller-heads/tycho-indexer/issues/971)) ([8b902c1](https://github.com/propeller-heads/tycho-indexer/commit/8b902c124492d820e51cd833411bc1904970cc0f))
+
+## [0.283.0](https://github.com/propeller-heads/tycho-indexer/compare/0.282.0...0.283.0) (2026-05-05)
+
+
+### Features
+
+* **router v3 model:** Consider wasted router funds ([725c59f](https://github.com/propeller-heads/tycho-indexer/commit/725c59f6037a9498a80679ac80fbc9dab9807e41))
+* **router v3 model:** Consider wasted router funds ([#970](https://github.com/propeller-heads/tycho-indexer/issues/970)) ([643e7f8](https://github.com/propeller-heads/tycho-indexer/commit/643e7f8903beaf77c49d39e27a7ae89692a326ad))
+
+## [0.282.0](https://github.com/propeller-heads/tycho-indexer/compare/0.281.1...0.282.0) (2026-05-05)
+
+
+### Features
+
+* **integration test:** Consider input token gas ([42c2ef9](https://github.com/propeller-heads/tycho-indexer/commit/42c2ef991b9e61f6c65fd12d7d7a060179343494))
+* **integration test:** Consider input token gas ([#975](https://github.com/propeller-heads/tycho-indexer/issues/975)) ([849ec05](https://github.com/propeller-heads/tycho-indexer/commit/849ec0525ea847d494941c0af135f8b1bb68bac0))
+
+## [0.281.1](https://github.com/propeller-heads/tycho-indexer/compare/0.281.0...0.281.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* liquidity party protocol name ([cd0680b](https://github.com/propeller-heads/tycho-indexer/commit/cd0680b29935ae36df087384a501fb4551d0ea69))
+* liquidity party protocol name ([#980](https://github.com/propeller-heads/tycho-indexer/issues/980)) ([163b772](https://github.com/propeller-heads/tycho-indexer/commit/163b772120b9e82ddb80d1880d122a19ccb2866e))
+
+## [0.281.0](https://github.com/propeller-heads/tycho-indexer/compare/0.280.1...0.281.0) (2026-05-05)
+
+
+### Features
+
+* **config:** add liquidityparty address to executor_addresses.json ([230a6fa](https://github.com/propeller-heads/tycho-indexer/commit/230a6faa8e5e1c2c7f63f5d8c052bee4ad7b846f))
+* **config:** add liquidityparty address to executor_addresses.json ([#979](https://github.com/propeller-heads/tycho-indexer/issues/979)) ([33dae2c](https://github.com/propeller-heads/tycho-indexer/commit/33dae2c2f4ad36d39b7c50449639381846e17a95))
+
+## [0.280.1](https://github.com/propeller-heads/tycho-indexer/compare/0.280.0...0.280.1) (2026-05-05)
+
+
+### Bug Fixes
+
+* **client:** address review feedback on ws-connections fixes ([c7677b9](https://github.com/propeller-heads/tycho-indexer/commit/c7677b9943ec7f37413e3cf3cbaf2e0dae3319a7))
+* **client:** handle stale snapshot blocks during initialization ([31d0d0e](https://github.com/propeller-heads/tycho-indexer/commit/31d0d0e52a870f1490262d4b02741a223cb571ec))
+* **client:** improve rate limit and WS close logging ([f75b366](https://github.com/propeller-heads/tycho-indexer/commit/f75b3666e54e0dcc7f0073f42c2eee83325d92bc))
+* **client:** keep main loop alive when all synchronizers are temporarily stale ([9dfd288](https://github.com/propeller-heads/tycho-indexer/commit/9dfd288f282913ed7fa9f662dd9cd35e19625653))
+* **client:** skip unrecognised extractors instead of crashing on init ([a7beec6](https://github.com/propeller-heads/tycho-indexer/commit/a7beec676a33e1dcc2201a2230fe8bea2d7bf420))
+* **deltas:** add timeouts to subscribe/unsubscribe confirmation waits ([0291430](https://github.com/propeller-heads/tycho-indexer/commit/0291430ef17b4d8e83b00f1a896134c0d7f52d08))
+* **deltas:** close TOCTOU race in ensure_connection using Notify::enable ([8d58128](https://github.com/propeller-heads/tycho-indexer/commit/8d58128aedeeefe7772f86d4f032011026180174))
+* **deltas:** detect stalled TCP connections with a 60s WS idle timeout ([f898479](https://github.com/propeller-heads/tycho-indexer/commit/f89847922a06bbb1553b9a3256d17db6549e2aca))
+* reduce client timeout time ([034d103](https://github.com/propeller-heads/tycho-indexer/commit/034d10372617d08f226ec72065ed8732009ae2fe))
+* **synchronizer:** reset retry count after a successful synchronization run ([b78f4b0](https://github.com/propeller-heads/tycho-indexer/commit/b78f4b0ff99feaaf9be6733311f1998eff680bf7))
+* **tycho-client:** improve WS connection handling ([#967](https://github.com/propeller-heads/tycho-indexer/issues/967)) ([56757e8](https://github.com/propeller-heads/tycho-indexer/commit/56757e826dc55511aae6eb866e64396d9c705e28))
+
+## [0.280.0](https://github.com/propeller-heads/tycho-indexer/compare/0.279.0...0.280.0) (2026-05-01)
+
+
+### Features
+
+* add build-time environment diagnostics ([8dd7604](https://github.com/propeller-heads/tycho-indexer/commit/8dd7604f93aa7752d2edd6535d144c9520d73dca))
+* **router v3 model:** Add missing executors ([1c4dfa4](https://github.com/propeller-heads/tycho-indexer/commit/1c4dfa42176fe552850af5bcdae50284c62dd6a3))
+* **router v3 model:** Add missing executors ([#969](https://github.com/propeller-heads/tycho-indexer/issues/969)) ([0894632](https://github.com/propeller-heads/tycho-indexer/commit/08946320a41f5aedb31ffe95b575792488edaacd))
+
+
+### Reverts
+
+* remove build-time feature detection script ([892425f](https://github.com/propeller-heads/tycho-indexer/commit/892425f3f6b3c1ead3f940206f2e68f21c159f8f))
+* remove build-time protocol feature flags ([f897dd3](https://github.com/propeller-heads/tycho-indexer/commit/f897dd304cb1aa1ccab52047c101dea71e2d4ddc))
+
 ## [0.279.0](https://github.com/propeller-heads/tycho-indexer/compare/0.278.5...0.279.0) (2026-04-30)
 
 

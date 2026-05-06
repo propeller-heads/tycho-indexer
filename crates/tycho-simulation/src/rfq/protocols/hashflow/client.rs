@@ -98,7 +98,7 @@ impl HashflowClient {
         // Try to find the price of the quote token in one of the approved quote tokens
         // for normalization.
         for approved_quote_token in &self.quote_tokens {
-            for (_mm, mm_levels_inner) in levels_by_mm.iter() {
+            for mm_levels_inner in levels_by_mm.values() {
                 for quote_mm_level in mm_levels_inner {
                     // Check for direct pair: quote_token/approved_quote_token
                     if quote_mm_level.pair.base_token == quote_token &&
