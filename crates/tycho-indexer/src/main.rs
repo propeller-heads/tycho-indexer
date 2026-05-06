@@ -36,7 +36,7 @@ use tycho_common::{
         contract::AccountDelta,
         Address, Chain, ExtractionState, ImplementationType,
     },
-    storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway},
+    storage::{ChainGateway, ContractStateGateway, ExtractionStateGateway, ProtocolGateway},
     traits::{AccountExtractor, StorageSnapshotRequest},
     Bytes,
 };
@@ -60,7 +60,6 @@ use tycho_indexer::{
     },
     services::{PlansConfig, ServicesBuilder},
 };
-use tycho_common::storage::ProtocolGateway;
 use tycho_storage::postgres::{builder::GatewayBuilder, cache::CachedGateway};
 
 mod ot;

@@ -1823,9 +1823,7 @@ impl PostgresGateway {
                 .set((price.eq(p), modified_ts.eq(diesel::dsl::now)))
                 .execute(conn)
                 .await
-                .map_err(|err| {
-                    storage_error_from_diesel(err, "TokenPrice", "upsert", None)
-                })?;
+                .map_err(|err| storage_error_from_diesel(err, "TokenPrice", "upsert", None))?;
         }
         Ok(())
     }
@@ -1843,7 +1841,10 @@ impl PostgresGateway {
         self.add_tokens(&tokens, conn).await?;
 
         let chain_id = self.get_chain_id(chain)?;
-        let addresses: Vec<Address> = tokens.iter().map(|t| t.address.clone()).collect();
+        let addresses: Vec<Address> = tokens
+            .iter()
+            .map(|t| t.address.clone())
+            .collect();
 
         let token_ids: Vec<(Vec<u8>, i64)> = schema::token::table
             .inner_join(schema::account::table)
@@ -1857,13 +1858,16 @@ impl PostgresGateway {
         let price_entries: Vec<(i64, f64)> = token_ids
             .iter()
             .filter_map(|(addr, tid)| {
-                let token = tokens.iter().find(|t| t.address.as_ref() == addr.as_slice())?;
+                let token = tokens
+                    .iter()
+                    .find(|t| t.address.as_ref() == addr.as_slice())?;
                 let p = 10.0_f64.powi(token.decimals as i32);
                 Some((*tid, p))
             })
             .collect();
 
-        self.upsert_token_prices(&price_entries, conn).await?;
+        self.upsert_token_prices(&price_entries, conn)
+            .await?;
 
         info!(
             ?chain,
@@ -4238,14 +4242,8 @@ mod test {
         let wrapped = Chain::Ethereum.wrapped_native_token();
         let expected_price = 10.0_f64.powi(18);
 
-        assert_eq!(
-            prices.get(&native.address).copied(),
-            Some(expected_price),
-        );
-        assert_eq!(
-            prices.get(&wrapped.address).copied(),
-            Some(expected_price),
-        );
+        assert_eq!(prices.get(&native.address).copied(), Some(expected_price),);
+        assert_eq!(prices.get(&wrapped.address).copied(), Some(expected_price),);
     }
 
     #[tokio::test]
@@ -4269,9 +4267,6 @@ mod test {
 
         let native = Chain::Ethereum.native_token();
         let expected_price = 10.0_f64.powi(18);
-        assert_eq!(
-            prices.get(&native.address).copied(),
-            Some(expected_price),
-        );
+        assert_eq!(prices.get(&native.address).copied(), Some(expected_price),);
     }
 }
