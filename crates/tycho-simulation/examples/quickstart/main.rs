@@ -27,7 +27,7 @@ use futures::StreamExt;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use tracing_subscriber::EnvFilter;
-use tycho_common::{models::token::Token, Bytes};
+use tycho_common::{models::token::Token, simulation::protocol_sim::GetAmountOutResult, Bytes};
 use tycho_execution::encoding::{
     errors::EncodingError,
     evm::{
@@ -177,7 +177,7 @@ async fn main() {
         buy_symbol = buy_token.symbol
     );
     let mut pairs: HashMap<String, ProtocolComponent> = HashMap::new();
-    let mut amounts_out: HashMap<String, (BigUint, BigUint)> = HashMap::new();
+    let mut amounts_out: HashMap<String, GetAmountOutResult> = HashMap::new();
 
     let mut protocol_stream = ProtocolStreamBuilder::new(&tycho_url, chain);
 
@@ -266,12 +266,14 @@ async fn main() {
             &mut amounts_out,
         );
 
-        if let Some((best_pool, expected_amount, gas_usage)) = best_swap {
+        if let Some((best_pool, amount_out_result)) = best_swap {
             let component = pairs
                 .get(&best_pool)
                 .expect("Best pool not found")
                 .clone();
 
+            let expected_amount = amount_out_result.amount.clone();
+            let gas_usage = amount_out_result.gas.clone();
             // Clone expected_amount to avoid ownership issues
             let expected_amount_copy = expected_amount.clone();
 
@@ -544,8 +546,8 @@ fn get_best_swap(
     amount_in: BigUint,
     sell_token: Token,
     buy_token: Token,
-    amounts_out: &mut HashMap<String, (BigUint, BigUint)>,
-) -> Option<(String, BigUint, BigUint)> {
+    amounts_out: &mut HashMap<String, GetAmountOutResult>,
+) -> Option<(String, GetAmountOutResult)> {
     println!(
         "\n==================== Received block {block:?} ====================",
         block = message.block_number_or_timestamp
@@ -571,7 +573,7 @@ fn get_best_swap(
                     .ok();
 
                 if let Some(amount_out) = amount_out_result {
-                    amounts_out.insert(id.clone(), (amount_out.amount, amount_out.gas));
+                    amounts_out.insert(id.clone(), amount_out);
                 }
 
                 // If you would like to know how much of each token you are able to swap on the
@@ -587,9 +589,9 @@ fn get_best_swap(
             }
         }
     }
-    if let Some((key, (amount_out, gas))) = amounts_out
+    if let Some((key, result)) = amounts_out
         .iter()
-        .max_by_key(|(_, (amount, _))| amount.to_owned())
+        .max_by_key(|(_, result)| result.amount.clone())
     {
         println!(
             "\nThe best swap (out of {amounts} possible pools) is:",
@@ -604,9 +606,9 @@ fn get_best_swap(
         );
         println!("Pool address: {key:?}");
         let formatted_in = format_token_amount(&amount_in, &sell_token);
-        let formatted_out = format_token_amount(amount_out, &buy_token);
+        let formatted_out = format_token_amount(&result.amount, &buy_token);
         let (forward_price, reverse_price) =
-            format_price_ratios(&amount_in, amount_out, &sell_token, &buy_token);
+            format_price_ratios(&amount_in, &result.amount, &sell_token, &buy_token);
 
         println!(
             "Swap: {formatted_in} {sell_symbol} -> {formatted_out} {buy_symbol} \n
@@ -615,7 +617,7 @@ fn get_best_swap(
             sell_symbol = sell_token.symbol,
             buy_symbol = buy_token.symbol,
         );
-        Some((key.to_string(), amount_out.clone(), gas.clone()))
+        Some((key.to_string(), result.clone()))
     } else {
         println!("\nThere aren't pools with the tokens we are looking for");
         None
