@@ -454,11 +454,13 @@ async fn build_all_extractors(
 ) -> Result<Vec<(ExtractorRunner, ExtractorHandle)>, ExtractionError> {
     let mut extractor_handles = Vec::new();
 
+    let chain = *chains
+        .first()
+        .expect("No chain provided");
+
     info!("Building protocol cache");
     let protocol_cache = ProtocolMemoryCache::new(
-        *chains
-            .first()
-            .expect("No chain provided"), //TODO: handle multichain?
+        chain,
         chrono::Duration::seconds(900),
         Arc::new(cached_gw.clone()),
     );
@@ -471,7 +473,7 @@ async fn build_all_extractors(
                 .clone(),
             extractor_config.initialized_accounts_block,
             rpc_client,
-            *chains.first().unwrap(),
+            chain,
             cached_gw,
         )
         .await;
