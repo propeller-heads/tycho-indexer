@@ -18,7 +18,6 @@ use tycho_common::{
         blockchain::{LogInput, TxInput, TxWithChanges},
         protocol::{ProtocolComponent, ProtocolComponentState},
     },
-    traits::TxDeltaIndexer,
     Bytes,
 };
 use tycho_indexer::{

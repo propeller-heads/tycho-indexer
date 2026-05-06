@@ -4,6 +4,7 @@ use crate::abi::pool::events::{
     Burn, Collect, CollectProtocol, Flash, Initialize, Mint, SetFeeProtocol, Swap,
 };
 
+#[derive(Clone)]
 pub struct Pool {
     pub address: Vec<u8>,
     pub token0: Vec<u8>,
