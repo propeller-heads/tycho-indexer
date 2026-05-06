@@ -134,7 +134,7 @@ let swap = Swap::new(component, token_in_token, token_out_token, BigUint::ZERO);
 **New required parameter on `Swap::new`:**
 
 The constructor now takes a per-swap simulation gas estimate as its 4th argument. Use `BigUint::ZERO` if no estimate is
-available. The new field is exposed via `.estimated_gas_usage() -> &BigUint`.
+available. The new field is exposed via `.estimated_gas() -> &BigUint`.
 
 #### EncodedSolution Struct
 
@@ -160,11 +160,11 @@ returns Permit2 data. If you use `TransferFromPermit2`, you must handle permit c
 
 The `Permit2` utility struct has been made public, so you can use it directly.
 
-**New `gas_usage` field:**
+**New `estimated_gas` field:**
 
-`EncodedSolution` now exposes a `gas_usage: BigUint` (via `.gas_usage()`), summed from each
-swap's `estimated_gas_usage`. Solvers can use this as a single gas estimate per encoded solution without re-summing the
-swaps. Zero if no per-swap estimates were provided.
+`EncodedSolution` now exposes a `estimated_gas: BigUint` (via `.estimated_gas()`), derived from each
+swap's `estimated_gas` and some overheads (from the router and token transfers). Users can use this as minimum estimated
+gas for this solution.
 
 #### Wrapping and Unwrapping
 

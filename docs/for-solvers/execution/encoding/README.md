@@ -39,7 +39,7 @@ The `Swap` struct has the following attributes:
 | **user\_data**            |        `Option<Bytes>`         |                                        Optional user data to be passed to encoding                                        |
 | **protocol\_state**       | `Option<Arc<dyn ProtocolSim>>` |                                     Optional protocol state used to perform the swap                                      |
 | **estimated\_amount\_in** |       `Option<BigUint>`        | Optional estimated amount in for this Swap. This is necessary for RFQ protocols. This value is used to request the quote. |
-| **estimated\_gas\_usage** |           `BigUint`            |                  Per-swap gas estimate from simulation. Use `BigUint::ZERO` if no estimate is available.                  |
+| **estimated\_gas**        |           `BigUint`            |                  Per-swap gas estimate from simulation. Use `BigUint::ZERO` if no estimate is available.                  |
 
 #### Split Swaps
 
@@ -70,13 +70,13 @@ solution then splits between three (WETH, USDC) pools and finally swaps from USD
 
 The `Solution` object for the given scenario would look as follows:
 
-<pre class="language-rust"><code class="lang-rust">swap_a = Swap::new(pool_a, weth_token.clone(), usdc_token.clone(), gas_usage_a)
+<pre class="language-rust"><code class="lang-rust">swap_a = Swap::new(pool_a, weth_token.clone(), usdc_token.clone(), gas_a)
     .with_split(0.3); // 30% of WETH amount
-swap_b = Swap::new(pool_b, weth_token.clone(), usdc_token.clone(), gas_usage_b)
+swap_b = Swap::new(pool_b, weth_token.clone(), usdc_token.clone(), gas_b)
     .with_split(0.3); // 30% of WETH amount
-swap_c = Swap::new(pool_c, weth_token.clone(), usdc_token.clone(), gas_usage_c);
+swap_c = Swap::new(pool_c, weth_token.clone(), usdc_token.clone(), gas_c);
     // split defaults to 0 — pool receives the remaining 40%
-swap_d = Swap::new(pool_d, usdc_token, dai_token, gas_usage_d);
+swap_d = Swap::new(pool_d, usdc_token, dai_token, gas_d);
     // split defaults to 0 — pool receives all USDC
 
 <strong>let solution = Solution::new(
@@ -90,7 +90,7 @@ swap_d = Swap::new(pool_d, usdc_token, dai_token, gas_usage_d);
 );
 </code></pre>
 
-The 4th argument to `Swap::new` is the per-swap `estimated_gas_usage` (a `BigUint`); pass `BigUint::ZERO` if no
+The 4th argument to `Swap::new` is the per-swap `estimated_gas` (a `BigUint`); pass `BigUint::ZERO` if no
 simulation estimate is available. Splits are configured via `.with_split(...)` on the builder.
 
 </details>
@@ -128,7 +128,7 @@ Encoding produces an `EncodedSolution` with these attributes:
 | **interacting\_with** |  `Bytes`  | The address of the contract to be called (it can be the Tycho Router or an Executor) |
 | **selector**          | `String`  |                      The selector of the function to be called.                      |
 | **n\_tokens**         |  `usize`  |          The number of tokens in the trade (relevant for split swaps only).          |
-| **gas\_usage**        | `BigUint` |         Estimated gas usage for the encoded solution. Zero if not estimated.         |
+| **estimated\_gas**    | `BigUint` |                    Estimated gas usage for the encoded solution.                     |
 
 {% endtab %}
 {% endtabs %}
