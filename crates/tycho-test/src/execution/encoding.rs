@@ -159,6 +159,7 @@ fn encoded_transaction(
             .clone(),
         value,
         contract_interaction,
+        encoded_solution.estimated_gas().clone(),
     ))
 }
 
