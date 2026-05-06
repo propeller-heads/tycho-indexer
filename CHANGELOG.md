@@ -1,3 +1,29 @@
+## [0.285.0](https://github.com/propeller-heads/tycho-indexer/compare/0.284.0...0.285.0) (2026-05-06)
+
+
+### Features
+
+* add seed_native_token_prices to MockGateway ([43e5d0c](https://github.com/propeller-heads/tycho-indexer/commit/43e5d0c00b5961262deea7ec6eddae101b206cbf))
+* add seed_native_token_prices to ProtocolGateway trait ([a8635f2](https://github.com/propeller-heads/tycho-indexer/commit/a8635f25250e8c65b4153232ee6f23117e337616))
+* call seed_native_token_prices at indexer startup ([77c5f28](https://github.com/propeller-heads/tycho-indexer/commit/77c5f28908edfb02b96d00367eb640f79f16ceb2))
+* **encoding:** Add gas usage attributes ([2198bfc](https://github.com/propeller-heads/tycho-indexer/commit/2198bfc7f31dd1242f3f5fc649dbd3ee331d6ceb))
+* **encoding:** Add gas usage attributes  ([#983](https://github.com/propeller-heads/tycho-indexer/issues/983)) ([74683e7](https://github.com/propeller-heads/tycho-indexer/commit/74683e739770b6f7980b654659cd76ff71d04187))
+* implement seed_native_token_prices on CachedGateway and DirectGateway ([9be3ee1](https://github.com/propeller-heads/tycho-indexer/commit/9be3ee1b0174c5fd53805a88cb518da1acb43ec6))
+* implement seed_native_token_prices on PostgresGateway ([176685f](https://github.com/propeller-heads/tycho-indexer/commit/176685f63c3c631e000e5179c87f40dbde930a2d))
+* seed native token prices at indexer startup ([#990](https://github.com/propeller-heads/tycho-indexer/issues/990)) ([f527417](https://github.com/propeller-heads/tycho-indexer/commit/f527417b4d1927586c2036387f51ec3552af89a3))
+
+
+### Bug Fixes
+
+* address PR feedback and fix DB test setup ([ad6614a](https://github.com/propeller-heads/tycho-indexer/commit/ad6614a2ed3c39c182cd60c5d91b4b08a8e49c29))
+* **encoding:** Rename (estimated_)gas_usage -> estimated_gas ([7660e1b](https://github.com/propeller-heads/tycho-indexer/commit/7660e1bbec2283446a1493d947d4867e5a00b3ee))
+* **quickstart:** Use GetAmountOutResult in get_best_swap ([c2986ce](https://github.com/propeller-heads/tycho-indexer/commit/c2986ce7dc861a06797a671f41dbffbe64183c01))
+
+
+### Reverts
+
+* Revert "feat: Change Swap token_in/token_out from Token to Bytes (#89)" ([04d30c7](https://github.com/propeller-heads/tycho-indexer/commit/04d30c7648b173ae3b305643f42537e63035bd7d)), closes [#89](https://github.com/propeller-heads/tycho-indexer/issues/89) [#89](https://github.com/propeller-heads/tycho-indexer/issues/89) [post-#89](https://github.com/propeller-heads/post-/issues/89)
+
 ## [0.284.0](https://github.com/propeller-heads/tycho-indexer/compare/0.283.1...0.284.0) (2026-05-06)
 
 
