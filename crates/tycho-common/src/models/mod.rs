@@ -4,6 +4,8 @@ pub mod error;
 pub mod protocol;
 pub mod token;
 
+pub use blockchain::{BlockChanges, TxWithContractChanges};
+
 use std::{collections::HashMap, fmt::Display, str::FromStr};
 
 use deepsize::DeepSizeOf;

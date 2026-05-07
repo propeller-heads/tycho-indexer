@@ -75,6 +75,15 @@ pub enum ExtractionError {
     DCICacheError(#[from] DCICacheError),
 }
 
+impl From<tycho_protobuf::error::DecodeError> for ExtractionError {
+    fn from(e: tycho_protobuf::error::DecodeError) -> Self {
+        match e {
+            tycho_protobuf::error::DecodeError::Empty => Self::Empty,
+            tycho_protobuf::error::DecodeError::Decode(msg) => Self::DecodeError(msg),
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum RPCError {
     #[error("RPC setup error: {0}")]
