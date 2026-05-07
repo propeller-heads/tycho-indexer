@@ -101,7 +101,8 @@ pub fn group_swaps(swaps: &[Swap]) -> Vec<SwapGroup> {
 /// Aggregate per-swap gas estimates for a group, discounting transfers skipped by batching.
 ///
 /// Each swap's `estimated_gas` is assumed to include its input and output token transfer
-/// costs. When swaps are batched (e.g. USV4's PoolManager flash accounting), intermediate
+/// costs (this is acceptable because all protocols that can group do so with a callback mechanism).
+/// When swaps are batched (e.g. USV4's PoolManager flash accounting), intermediate
 /// transfers are saved: the first swap's output transfer, every middle swap's input and
 /// output transfers, and the last swap's input transfer. The group's external input and
 /// output transfers remain.
