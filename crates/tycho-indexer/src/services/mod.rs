@@ -266,6 +266,7 @@ where
                 )
                 .service(
                     web::resource("/debug/pprof/heap")
+                        .wrap(access_control::AccessControl::new(&self.api_key))
                         .route(web::get().to(debug::heap_profile)),
                 );
 
