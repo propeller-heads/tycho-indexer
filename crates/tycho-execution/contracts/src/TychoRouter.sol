@@ -89,8 +89,15 @@ struct ClientFeeParams {
     bytes clientSignature; // 65-byte EIP-712 ECDSA sig by clientFeeReceiver
 }
 
+error TychoRouter__TimelockNotExpired(
+    uint256 activationTimestamp, uint256 blockTimestamp
+);
+error TychoRouter__NoPendingFeeCalculator();
+
 contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     address private _feeCalculator; // Fee calculator contract
+    address private _pendingFeeCalculator;
+    uint48 private _feeCalculatorActivationTimestamp;
 
     using SafeERC20 for IERC20;
     using LibPrefixLengthEncodedByteArray for bytes;
@@ -106,6 +113,8 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     bytes32 public constant ROUTER_FEE_SETTER_ROLE =
         0x9939157be7760e9462f1d5a0dcad88b616ddc64138e317108b40b1cf55601348;
 
+    uint256 public constant DELAY_FEE_CALCULATOR_ACTIVATION = 3 days;
+
     bytes32 public constant CLIENT_FEE_TYPEHASH = keccak256(
         "ClientFee(uint16 clientFeeBps,address clientFeeReceiver,"
         "uint256 maxClientContribution,uint256 deadline,"
@@ -116,7 +125,10 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     event Withdrawal(
         address indexed token, uint256 amount, address indexed receiver
     );
-    event FeeCalculatorUpdated(
+    event FeeCalculatorSet(
+        address indexed feeCalculator, uint256 timelockExpiresAt
+    );
+    event FeeCalculatorActivated(
         address indexed oldCalculator, address indexed newCalculator
     );
     event FeesTaken(address indexed token, FeeRecipient[] fees);
@@ -1078,7 +1090,7 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
     }
 
     /**
-     * @notice Sets the fee calculator contract address
+     * @notice Queues a new fee calculator with a timelock delay.
      * @param feeCalculator The address of the fee calculator contract
      */
     function setFeeCalculator(address feeCalculator)
@@ -1089,9 +1101,12 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         if (feeCalculator.code.length == 0) {
             revert TychoRouter__NotAContract(feeCalculator);
         }
-        address oldCalculator = _feeCalculator;
-        _feeCalculator = feeCalculator;
-        emit FeeCalculatorUpdated(oldCalculator, feeCalculator);
+
+        uint256 expiry = block.timestamp + DELAY_FEE_CALCULATOR_ACTIVATION;
+
+        _pendingFeeCalculator = feeCalculator;
+        _feeCalculatorActivationTimestamp = uint48(expiry);
+        emit FeeCalculatorSet(feeCalculator, expiry);
     }
 
     /**
@@ -1099,6 +1114,40 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
      */
     function getFeeCalculator() external view returns (address) {
         return _feeCalculator;
+    }
+
+    /**
+     * @dev Returns the pending fee calculator and activation timestamp
+     */
+    function getPendingFeeCalculator()
+        external
+        view
+        returns (address, uint256)
+    {
+        return (_pendingFeeCalculator, _feeCalculatorActivationTimestamp);
+    }
+
+    /**
+     * @notice Activates the pending fee calculator once the timelock has expired.
+     */
+    function activateFeeCalculator() external onlyRole(ROUTER_FEE_SETTER_ROLE) {
+        uint48 activationTs = _feeCalculatorActivationTimestamp;
+        // slither-disable-next-line incorrect-equality
+        if (activationTs == 0) {
+            revert TychoRouter__NoPendingFeeCalculator();
+        }
+        // slither-disable-next-line timestamp
+        if (block.timestamp < activationTs) {
+            revert TychoRouter__TimelockNotExpired(
+                activationTs, block.timestamp
+            );
+        }
+        address oldCalc = _feeCalculator;
+        address pending = _pendingFeeCalculator;
+        _feeCalculator = pending;
+        _pendingFeeCalculator = address(0);
+        _feeCalculatorActivationTimestamp = 0;
+        emit FeeCalculatorActivated(oldCalc, pending);
     }
 
     /**
