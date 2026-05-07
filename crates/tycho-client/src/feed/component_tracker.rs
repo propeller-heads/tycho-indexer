@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, instrument, warn};
-use tycho_common::{
-    dto::{BlockChanges, Chain, DCIUpdate, ProtocolComponent, ProtocolComponentsRequestBody},
-    models::{Address, ComponentId, ProtocolSystem},
+use tycho_common::models::{
+    blockchain::{BlockAggregatedChanges, DCIUpdate},
+    protocol::ProtocolComponent,
+    Address, Chain, ComponentId, ProtocolSystem,
 };
 
 use crate::{
@@ -172,27 +173,25 @@ where
     /// Retrieves all components that belong to the system we are streaming that have sufficient
     /// tvl. Also detects which contracts are relevant for simulating on those components.
     pub async fn initialise_components(&mut self) -> Result<(), RPCError> {
-        let body = match &self.filter.variant {
-            ComponentFilterVariant::Ids(ids) => ProtocolComponentsRequestBody::id_filtered(
-                &self.protocol_system,
-                ids.clone(),
-                self.chain,
-            ),
+        let (component_ids, tvl_gt) = match &self.filter.variant {
+            ComponentFilterVariant::Ids(ids) => (Some(ids.clone()), None),
             ComponentFilterVariant::MinimumTVLRange { range: (_, upper_tvl_threshold), .. } => {
-                ProtocolComponentsRequestBody::system_filtered(
-                    &self.protocol_system,
-                    Some(*upper_tvl_threshold),
-                    self.chain,
-                )
+                (None, Some(*upper_tvl_threshold))
             }
         };
         self.components = self
             .rpc_client
-            .get_protocol_components_paginated(&body, None, RPC_CLIENT_CONCURRENCY)
+            .get_protocol_components_paginated(
+                self.chain,
+                self.protocol_system.clone(),
+                component_ids,
+                tvl_gt,
+                None,
+                RPC_CLIENT_CONCURRENCY,
+            )
             .await?
-            .protocol_components
             .into_iter()
-            .map(|pc| (pc.id.clone(), pc))
+            .map(|comp| (comp.id.clone(), comp))
             .filter(|(id, _)| !self.filter.is_blocklisted(id))
             .collect::<HashMap<_, _>>();
 
@@ -207,7 +206,7 @@ where
         self.contracts = self
             .components
             .values()
-            .flat_map(|comp| comp.contract_ids.iter().cloned())
+            .flat_map(|comp| comp.contract_addresses.iter().cloned())
             .collect();
 
         // Add contracts from entrypoints that are linked to tracked components
@@ -235,8 +234,12 @@ where
         // Add contracts from the components
         for comp in components {
             if let Some(component) = self.components.get(&comp) {
-                self.contracts
-                    .extend(component.contract_ids.iter().cloned());
+                self.contracts.extend(
+                    component
+                        .contract_addresses
+                        .iter()
+                        .cloned(),
+                );
                 tracked_component_ids.insert(comp);
             }
         }
@@ -270,21 +273,22 @@ where
         }
 
         // Fetch the components
-        let request = ProtocolComponentsRequestBody::id_filtered(
-            &self.protocol_system,
-            new_components
-                .iter()
-                .map(|&id| id.to_string())
-                .collect(),
-            self.chain,
-        );
+        let ids_as_component_ids: Vec<ComponentId> = new_components
+            .iter()
+            .map(|&id| id.to_string())
+            .collect();
         let components = self
             .rpc_client
-            .get_protocol_components(&request)
+            .get_protocol_components(
+                crate::rpc::ProtocolComponentsParams::new(
+                    self.chain,
+                    self.protocol_system.as_str(),
+                )
+                .with_component_ids(ids_as_component_ids),
+            )
             .await?
-            .protocol_components
             .into_iter()
-            .map(|pc| (pc.id.clone(), pc))
+            .map(|comp| (comp.id.clone(), comp))
             .collect::<HashMap<_, _>>();
 
         // Update components and contracts
@@ -378,7 +382,7 @@ where
                         .flat_map(|ep| ep.contracts.iter().cloned())
                         .collect();
                     Some(
-                        comp.contract_ids
+                        comp.contract_addresses
                             .clone()
                             .into_iter()
                             .chain(dci_contracts)
@@ -406,7 +410,7 @@ where
     /// components that need to be added or removed.
     pub fn filter_updated_components(
         &self,
-        deltas: &BlockChanges,
+        deltas: &BlockAggregatedChanges,
     ) -> (Vec<ComponentId>, Vec<ComponentId>) {
         match &self.filter.variant {
             ComponentFilterVariant::Ids(_) => (Default::default(), Default::default()),
@@ -436,10 +440,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use tycho_common::{
-        dto::{PaginationResponse, ProtocolComponentRequestResponse},
-        Bytes,
-    };
+    use tycho_common::Bytes;
 
     use super::*;
     use crate::rpc::MockRPCClient;
@@ -455,29 +456,25 @@ mod test {
     }
 
     fn components_response() -> (Vec<Address>, ProtocolComponent) {
-        let contract_ids = vec![Bytes::from("0x1234"), Bytes::from("0xbabe")];
+        let contract_addresses = vec![Bytes::from("0x1234"), Bytes::from("0xbabe")];
         let component = ProtocolComponent {
             id: "Component1".to_string(),
-            contract_ids: contract_ids.clone(),
+            contract_addresses: contract_addresses.clone(),
             ..Default::default()
         };
-        (contract_ids, component)
+        (contract_addresses, component)
     }
 
     #[tokio::test]
     async fn test_initialise_components() {
         let mut tracker = with_mocked_rpc();
-        let (contract_ids, component) = components_response();
-        let exp_component = component.clone();
+        let (contract_ids, model_component) = components_response();
+        let exp_component = model_component.clone();
+        let model_for_mock = model_component.clone();
         tracker
             .rpc_client
             .expect_get_protocol_components_paginated()
-            .returning(move |_, _, _| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![component.clone()],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
-            });
+            .returning(move |_, _, _, _, _, _| Ok(vec![model_for_mock.clone()]));
 
         tracker
             .initialise_components()
@@ -497,19 +494,15 @@ mod test {
     #[tokio::test]
     async fn test_start_tracking() {
         let mut tracker = with_mocked_rpc();
-        let (contract_ids, component) = components_response();
+        let (contract_ids, model_component) = components_response();
         let exp_contracts = contract_ids.into_iter().collect();
-        let component_id = component.id.clone();
+        let component_id = model_component.id.clone();
         let components_arg = [&component_id];
+        let model_for_mock = model_component.clone();
         tracker
             .rpc_client
             .expect_get_protocol_components()
-            .returning(move |_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![component.clone()],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
-            });
+            .returning(move |_| Ok(vec![model_for_mock.clone()]));
 
         tracker
             .start_tracking(&components_arg)
@@ -525,13 +518,13 @@ mod test {
     #[test]
     fn test_stop_tracking() {
         let mut tracker = with_mocked_rpc();
-        let (contract_ids, component) = components_response();
+        let (contract_ids, model_component) = components_response();
         tracker
             .components
-            .insert("Component1".to_string(), component.clone());
+            .insert("Component1".to_string(), model_component.clone());
         tracker.contracts.extend(contract_ids);
         let components_arg = ["Component1".to_string(), "Component2".to_string()];
-        let exp = [("Component1".to_string(), component)]
+        let exp = [("Component1".to_string(), model_component)]
             .into_iter()
             .collect();
 
@@ -544,10 +537,10 @@ mod test {
     #[test]
     fn test_get_contracts_by_component() {
         let mut tracker = with_mocked_rpc();
-        let (exp_contracts, component) = components_response();
+        let (exp_contracts, model_component) = components_response();
         tracker
             .components
-            .insert("Component1".to_string(), component);
+            .insert("Component1".to_string(), model_component);
         let components_arg = ["Component1".to_string()];
 
         let res = tracker.get_contracts_by_component(&components_arg);
@@ -558,10 +551,10 @@ mod test {
     #[test]
     fn test_get_tracked_component_ids() {
         let mut tracker = with_mocked_rpc();
-        let (_, component) = components_response();
+        let (_, model_component) = components_response();
         tracker
             .components
-            .insert("Component1".to_string(), component);
+            .insert("Component1".to_string(), model_component);
         let exp = vec!["Component1".to_string()];
 
         let res = tracker.get_tracked_component_ids();
@@ -582,16 +575,11 @@ mod test {
     #[tokio::test]
     async fn test_initialise_skips_blocklisted_components() {
         let mut tracker = with_mocked_rpc_and_blocklist(vec!["component1"]);
-        let (_, component) = components_response();
+        let (_, model_component) = components_response();
         tracker
             .rpc_client
             .expect_get_protocol_components_paginated()
-            .returning(move |_, _, _| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![component.clone()],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
-            });
+            .returning(move |_, _, _, _, _, _| Ok(vec![model_component.clone()]));
 
         tracker
             .initialise_components()
@@ -621,7 +609,7 @@ mod test {
         tracker.filter = ComponentFilter::with_tvl_range(5.0, 10.0)
             .blocklist(vec!["blocklisted_pool".to_string()]);
 
-        let deltas = BlockChanges {
+        let deltas = BlockAggregatedChanges {
             component_tvl: HashMap::from([
                 ("blocklisted_pool".to_string(), 100.0),
                 ("allowed_pool".to_string(), 100.0),

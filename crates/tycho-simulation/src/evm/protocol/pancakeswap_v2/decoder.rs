@@ -55,7 +55,8 @@ mod tests {
                     ("reserve1".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: Default::default(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -83,7 +84,8 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: Default::default(),
             component_tvl: None,
             entrypoints: Vec::new(),

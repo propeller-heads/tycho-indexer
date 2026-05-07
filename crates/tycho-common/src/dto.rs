@@ -2037,57 +2037,6 @@ pub struct TracedEntryPointRequestResponse {
         HashMap<ComponentId, Vec<(EntryPointWithTracingParams, TracingResult)>>,
     pub pagination: PaginationResponse,
 }
-impl From<TracedEntryPointRequestResponse> for DCIUpdate {
-    fn from(response: TracedEntryPointRequestResponse) -> Self {
-        let mut new_entrypoints = HashMap::new();
-        let mut new_entrypoint_params = HashMap::new();
-        let mut trace_results = HashMap::new();
-
-        for (component, traces) in response.traced_entry_points {
-            let mut entrypoints = HashSet::new();
-
-            for (entrypoint, trace) in traces {
-                let entrypoint_id = entrypoint
-                    .entry_point
-                    .external_id
-                    .clone();
-
-                // Collect entrypoints
-                entrypoints.insert(entrypoint.entry_point.clone());
-
-                // Collect entrypoint params
-                new_entrypoint_params
-                    .entry(entrypoint_id.clone())
-                    .or_insert_with(HashSet::new)
-                    .insert((entrypoint.params, component.clone()));
-
-                // Collect trace results
-                trace_results
-                    .entry(entrypoint_id)
-                    .and_modify(|existing_trace: &mut TracingResult| {
-                        // Merge traces for the same entrypoint
-                        existing_trace
-                            .retriggers
-                            .extend(trace.retriggers.clone());
-                        for (address, slots) in trace.accessed_slots.clone() {
-                            existing_trace
-                                .accessed_slots
-                                .entry(address)
-                                .or_default()
-                                .extend(slots);
-                        }
-                    })
-                    .or_insert(trace);
-            }
-
-            if !entrypoints.is_empty() {
-                new_entrypoints.insert(component, entrypoints);
-            }
-        }
-
-        DCIUpdate { new_entrypoints, new_entrypoint_params, trace_results }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Default, PartialEq, ToSchema, Eq, Clone)]
 pub struct AddEntryPointRequestBody {

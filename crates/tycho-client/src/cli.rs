@@ -1,9 +1,9 @@
 use std::{path::Path, str::FromStr};
 
 use clap::Parser;
-use tracing::{error, info};
+use tracing::info;
 use tracing_appender::rolling;
-use tycho_common::dto::{Chain, TvlThresholdTier};
+use tycho_common::{dto::TvlThresholdTier, models::Chain};
 
 use crate::{feed::component_tracker::ComponentFilter, stream::TychoStreamBuilder};
 
@@ -282,12 +282,10 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             let msg =
                 result.map_err(|e| format!("Message printer received synchronizer error: {e}"))?;
 
-            if let Ok(msg_json) = serde_json::to_string(&msg) {
-                println!("{msg_json}");
-            } else {
-                // Log the error but continue processing further messages.
-                error!("Failed to serialize FeedMessage");
-            };
+            // TODO: cli.rs needs to convert model types to dto types for serialization
+            // FeedMessage no longer implements Serialize because StateSyncMessage uses model types.
+            // Using Debug output as a temporary fallback until proper serialization is implemented.
+            println!("{msg:?}");
         }
 
         Ok::<(), String>(())

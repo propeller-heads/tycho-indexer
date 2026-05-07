@@ -19,7 +19,7 @@ use tokio::{
 use tracing::{debug, error, info, trace, warn};
 use tycho_common::{
     display::opt,
-    dto::{BlockChanges, ExtractorIdentity},
+    models::{blockchain::BlockAggregatedChanges, ExtractorIdentity},
     Bytes,
 };
 
@@ -75,8 +75,8 @@ impl Display for BlockHeader {
     }
 }
 
-impl From<&BlockChanges> for BlockHeader {
-    fn from(block_changes: &BlockChanges) -> Self {
+impl From<&BlockAggregatedChanges> for BlockHeader {
+    fn from(block_changes: &BlockAggregatedChanges) -> Self {
         let block = &block_changes.block;
         Self {
             hash: block.hash.clone(),
@@ -557,7 +557,7 @@ impl SynchronizerStream {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct FeedMessage<H = BlockHeader>
 where
     H: HeaderLike,
@@ -1057,7 +1057,7 @@ mod tests {
     use async_trait::async_trait;
     use test_log::test;
     use tokio::sync::{oneshot, Mutex};
-    use tycho_common::dto::Chain;
+    use tycho_common::models::Chain;
 
     use super::*;
     use crate::feed::synchronizer::{SyncResult, SynchronizerTaskHandle};

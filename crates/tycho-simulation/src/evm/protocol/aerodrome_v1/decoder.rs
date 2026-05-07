@@ -113,12 +113,18 @@ mod tests {
                     ("reserve1".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::new(),
-            },
-            component: tycho_common::dto::ProtocolComponent {
-                tokens: vec![token0, token1],
-                static_attributes: HashMap::from([("is_stable".to_string(), Bytes::from(vec![0]))]),
-                ..Default::default()
-            },
+            }
+            .into(),
+            component: tycho_common::models::protocol::ProtocolComponent::from(
+                tycho_common::dto::ProtocolComponent {
+                    tokens: vec![token0, token1],
+                    static_attributes: HashMap::from([(
+                        "is_stable".to_string(),
+                        Bytes::from(vec![0]),
+                    )]),
+                    ..Default::default()
+                },
+            ),
             component_tvl: None,
             entrypoints: Vec::new(),
         };
@@ -167,12 +173,15 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            },
-            component: tycho_common::dto::ProtocolComponent {
-                tokens: vec![token0, token1],
-                static_attributes,
-                ..Default::default()
-            },
+            }
+            .into(),
+            component: tycho_common::models::protocol::ProtocolComponent::from(
+                tycho_common::dto::ProtocolComponent {
+                    tokens: vec![token0, token1],
+                    static_attributes,
+                    ..Default::default()
+                },
+            ),
             component_tvl: None,
             entrypoints: Vec::new(),
         };
@@ -205,12 +214,18 @@ mod tests {
                     ("fee".to_string(), Bytes::from(10_001_u32.to_be_bytes().to_vec())),
                 ]),
                 balances: HashMap::new(),
-            },
-            component: tycho_common::dto::ProtocolComponent {
-                tokens: vec![token0, token1],
-                static_attributes: HashMap::from([("is_stable".to_string(), Bytes::from(vec![0]))]),
-                ..Default::default()
-            },
+            }
+            .into(),
+            component: tycho_common::models::protocol::ProtocolComponent::from(
+                tycho_common::dto::ProtocolComponent {
+                    tokens: vec![token0, token1],
+                    static_attributes: HashMap::from([(
+                        "is_stable".to_string(),
+                        Bytes::from(vec![0]),
+                    )]),
+                    ..Default::default()
+                },
+            ),
             component_tvl: None,
             entrypoints: Vec::new(),
         };
@@ -238,12 +253,18 @@ mod tests {
                     ("fee".to_string(), Bytes::from(420_u32.to_be_bytes().to_vec())),
                 ]),
                 balances: HashMap::new(),
-            },
-            component: tycho_common::dto::ProtocolComponent {
-                tokens: vec![token0, token1],
-                static_attributes: HashMap::from([("is_stable".to_string(), Bytes::from(vec![1]))]),
-                ..Default::default()
-            },
+            }
+            .into(),
+            component: tycho_common::models::protocol::ProtocolComponent::from(
+                tycho_common::dto::ProtocolComponent {
+                    tokens: vec![token0, token1],
+                    static_attributes: HashMap::from([(
+                        "is_stable".to_string(),
+                        Bytes::from(vec![1]),
+                    )]),
+                    ..Default::default()
+                },
+            ),
             component_tvl: None,
             entrypoints: Vec::new(),
         };

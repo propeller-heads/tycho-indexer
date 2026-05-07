@@ -88,7 +88,7 @@ pub async fn load_all_tokens(
     #[allow(clippy::mutable_key_type)]
     let tokens = rpc_client
         .get_all_tokens(
-            chain.into(),
+            chain,
             min_quality.or(Some(100)),
             max_days_since_last_trade.or(default_min_days
                 .get(&chain)
@@ -103,17 +103,8 @@ pub async fn load_all_tokens(
     tokens
         .into_iter()
         .map(|token| {
-            let token_clone = token.clone();
-            Token::try_from(token)
-                .map(|converted| (converted.address.clone(), converted))
-                .map_err(|_| {
-                    SimulationError::FatalError(format!(
-                        "Unable to convert token `{symbol}` at {address} on chain {chain} into ERC20 token",
-                        symbol = token_clone.symbol,
-                        address = token_clone.address,
-                        chain = token_clone.chain,
-                    ))
-                })
+            let converted = token;
+            Ok((converted.address.clone(), converted))
         })
         .collect()
 }

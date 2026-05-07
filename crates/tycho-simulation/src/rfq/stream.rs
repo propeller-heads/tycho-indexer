@@ -117,8 +117,11 @@ mod tests {
     use tokio_stream::wrappers::IntervalStream;
     use tycho_client::feed::synchronizer::{Snapshot, StateSyncMessage};
     use tycho_common::{
-        dto::{ProtocolComponent, ProtocolStateDelta, ResponseProtocolState},
-        models::{protocol::GetAmountOutParams, token::Token},
+        dto::{ProtocolStateDelta, ResponseProtocolState},
+        models::{
+            protocol::{GetAmountOutParams, ProtocolComponent},
+            token::Token,
+        },
         simulation::{
             errors::{SimulationError, TransitionError},
             indicatively_priced::SignedQuote,
@@ -240,7 +243,8 @@ mod tests {
                                     component_id: name.clone(),
                                     attributes: HashMap::new(),
                                     balances: HashMap::new(),
-                                },
+                                }
+                                .into(),
                                 component: protocol_component,
                                 component_tvl: None,
                                 entrypoints: vec![],

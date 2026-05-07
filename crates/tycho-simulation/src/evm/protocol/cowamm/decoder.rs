@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
-use tycho_common::{dto::ProtocolComponent, models::token::Token, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, token::Token},
+    Bytes,
+};
 
 use crate::{
     evm::protocol::cowamm::state::CowAMMState,
@@ -166,7 +169,7 @@ mod tests {
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState { attributes: attributes(), ..Default::default() },
+            state: ResponseProtocolState { attributes: attributes(), ..Default::default() }.into(),
             component: component(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -210,7 +213,8 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component,
             component_tvl: None,
             entrypoints: Vec::new(),

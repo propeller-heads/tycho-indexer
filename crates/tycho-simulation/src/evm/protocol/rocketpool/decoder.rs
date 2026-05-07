@@ -131,7 +131,8 @@ mod tests {
                     ),
                 ]),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: Default::default(),
             component_tvl: None,
             entrypoints: Vec::new(),

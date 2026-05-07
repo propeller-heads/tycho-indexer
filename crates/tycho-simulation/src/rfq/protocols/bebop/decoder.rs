@@ -86,7 +86,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
             InvalidSnapshotError::ValueError(format!("Failed to get Bebop authentication: {e}"))
         })?;
 
-        let client = BebopClientBuilder::new(snapshot.component.chain.into(), auth.user, auth.key)
+        let client = BebopClientBuilder::new(snapshot.component.chain, auth.user, auth.key)
             .build()
             .map_err(|e| {
                 InvalidSnapshotError::MissingAttribute(format!("Couldn't create BebopClient: {e}"))
@@ -101,8 +101,8 @@ mod tests {
     use std::env;
 
     use tycho_common::{
-        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
-        models::Chain as ModelChain,
+        dto::{Chain, ChangeType, ResponseProtocolState},
+        models::{protocol::ProtocolComponent, Chain as ModelChain},
     };
 
     use super::*;
@@ -164,16 +164,17 @@ mod tests {
                 attributes: state_attributes,
                 component_id: "bebop_wbtc_usdc".to_string(),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: ProtocolComponent {
                 id: "bebop_wbtc_usdc".to_string(),
                 protocol_system: "bebop".to_string(),
                 protocol_type_name: "bebop".to_string(),
-                chain: Chain::Ethereum,
+                chain: Chain::Ethereum.into(),
                 tokens: vec![wbtc_token.address.clone(), usdc_token.address.clone()],
-                contract_ids: Vec::new(),
+                contract_addresses: Vec::new(),
                 static_attributes: HashMap::new(),
-                change: ChangeType::Creation,
+                change: ChangeType::Creation.into(),
                 creation_tx: Bytes::default(),
                 created_at: chrono::NaiveDateTime::default(),
             },

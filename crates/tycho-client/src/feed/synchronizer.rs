@@ -1,7 +1,9 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
     select,
@@ -14,9 +16,14 @@ use tokio::{
 };
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{
-        BlockChanges, EntryPointWithTracingParams, ExtractorIdentity, ProtocolComponent,
-        ResponseAccount, ResponseProtocolState, TracingResult,
+    models::{
+        blockchain::{
+            BlockAggregatedChanges, DCIUpdate, EntryPoint, EntryPointWithTracingParams,
+            TracingParams, TracingResult,
+        },
+        contract::Account,
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        ExtractorIdentity,
     },
     Bytes,
 };
@@ -99,18 +106,18 @@ pub struct ProtocolStateSynchronizer<R: RPCClient, D: DeltasClient> {
     deferred_snapshot_components: Vec<String>,
 }
 
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ComponentWithState {
-    pub state: ResponseProtocolState,
+    pub state: ProtocolComponentState,
     pub component: ProtocolComponent,
     pub component_tvl: Option<f64>,
     pub entrypoints: Vec<(EntryPointWithTracingParams, TracingResult)>,
 }
 
-#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct Snapshot {
     pub states: HashMap<String, ComponentWithState>,
-    pub vm_storage: HashMap<Bytes, ResponseAccount>,
+    pub vm_storage: HashMap<Bytes, Account>,
 }
 
 impl Snapshot {
@@ -123,12 +130,12 @@ impl Snapshot {
         &self.states
     }
 
-    pub fn get_vm_storage(&self) -> &HashMap<Bytes, ResponseAccount> {
+    pub fn get_vm_storage(&self) -> &HashMap<Bytes, Account> {
         &self.vm_storage
     }
 }
 
-#[derive(Clone, PartialEq, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct StateSyncMessage<H>
 where
     H: HeaderLike,
@@ -140,7 +147,7 @@ where
     /// A single delta contains state updates for all tracked components, as well as additional
     /// information about the system components e.g. newly added components (even below tvl), tvl
     /// updates, balance updates.
-    pub deltas: Option<BlockChanges>,
+    pub deltas: Option<BlockAggregatedChanges>,
     /// Components that stopped being tracked.
     pub removed_components: HashMap<String, ProtocolComponent>,
 }
@@ -328,7 +335,13 @@ where
             return Ok(StateSyncMessage { header, ..Default::default() });
         }
 
-        let entrypoints_result = if self.uses_dci {
+        let entrypoints_result: HashMap<
+            String,
+            Vec<(
+                tycho_common::models::blockchain::EntryPointWithTracingParams,
+                tycho_common::models::blockchain::TracingResult,
+            )>,
+        > = if self.uses_dci {
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
@@ -339,9 +352,49 @@ where
                     RPC_CLIENT_CONCURRENCY,
                 )
                 .await?;
+            let mut new_entrypoints: HashMap<String, HashSet<EntryPoint>> = HashMap::new();
+            let mut new_entrypoint_params: HashMap<String, HashSet<(TracingParams, String)>> =
+                HashMap::new();
+            let mut trace_results: HashMap<String, TracingResult> = HashMap::new();
+            for (component, traces) in &result {
+                let mut eps: HashSet<EntryPoint> = HashSet::new();
+                for (ep_with_params, trace) in traces {
+                    let ep_id = ep_with_params
+                        .entry_point
+                        .external_id
+                        .clone();
+                    eps.insert(ep_with_params.entry_point.clone());
+                    new_entrypoint_params
+                        .entry(ep_id.clone())
+                        .or_default()
+                        .insert((ep_with_params.params.clone(), component.clone()));
+                    trace_results
+                        .entry(ep_id)
+                        .and_modify(|existing| {
+                            existing
+                                .retriggers
+                                .extend(trace.retriggers.clone());
+                            for (address, slots) in trace.accessed_slots.clone() {
+                                existing
+                                    .accessed_slots
+                                    .entry(address)
+                                    .or_default()
+                                    .extend(slots);
+                            }
+                        })
+                        .or_insert_with(|| trace.clone());
+                }
+                if !eps.is_empty() {
+                    new_entrypoints.insert(component.clone(), eps);
+                }
+            }
             self.component_tracker
-                .process_entrypoints(&result.clone().into());
-            result.traced_entry_points.clone()
+                .process_entrypoints(&DCIUpdate {
+                    new_entrypoints,
+                    new_entrypoint_params,
+                    trace_results,
+                });
+            result
         } else {
             HashMap::new()
         };
@@ -708,7 +761,7 @@ where
         }
         false
     }
-    fn filter_deltas(&self, deltas: &mut BlockChanges) {
+    fn filter_deltas(&self, deltas: &mut BlockAggregatedChanges) {
         deltas.filter_by_component(|id| {
             self.component_tracker
                 .components
@@ -850,13 +903,21 @@ mod test {
 
     use std::{collections::HashSet, sync::Arc};
 
-    use tycho_common::dto::{
-        AddressStorageLocation, Block, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
-        DCIUpdate, EntryPoint, PaginationResponse, ProtocolComponentRequestResponse,
-        ProtocolComponentsRequestBody, ProtocolStateRequestBody, ProtocolStateRequestResponse,
-        ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse, RPCTracerParams,
-        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
-        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, TracingParams,
+    use tycho_common::{
+        dto::{
+            AddressStorageLocation, Block, BlockChanges, Chain, DCIUpdate, EntryPoint,
+            PaginationResponse, ProtocolStateRequestResponse, RPCTracerParams, ResponseAccount,
+            ResponseProtocolState, StateRequestResponse, TracingParams,
+        },
+        models::{
+            blockchain::{
+                BlockAggregatedChanges,
+                EntryPointWithTracingParams as ModelEntryPointWithTracingParams,
+                TracingResult as ModelTracingResult,
+            },
+            protocol::{ProtocolComponent, ProtocolComponentState},
+            token::Token,
+        },
     };
     use uuid::Uuid;
 
@@ -880,58 +941,57 @@ mod test {
     {
         async fn get_tokens(
             &self,
-            request: &TokensRequestBody,
-        ) -> Result<TokensRequestResponse, RPCError> {
-            self.0.get_tokens(request).await
+            params: crate::rpc::TokensParams,
+        ) -> Result<Vec<Token>, RPCError> {
+            self.0.get_tokens(params).await
         }
 
         async fn get_contract_state(
             &self,
-            request: &StateRequestBody,
-        ) -> Result<StateRequestResponse, RPCError> {
-            self.0.get_contract_state(request).await
+            params: crate::rpc::ContractStateParams,
+        ) -> Result<Vec<Account>, RPCError> {
+            self.0.get_contract_state(params).await
         }
 
         async fn get_protocol_components(
             &self,
-            request: &ProtocolComponentsRequestBody,
-        ) -> Result<ProtocolComponentRequestResponse, RPCError> {
+            params: crate::rpc::ProtocolComponentsParams,
+        ) -> Result<Vec<ProtocolComponent>, RPCError> {
             self.0
-                .get_protocol_components(request)
+                .get_protocol_components(params)
                 .await
         }
 
         async fn get_protocol_states(
             &self,
-            request: &ProtocolStateRequestBody,
-        ) -> Result<ProtocolStateRequestResponse, RPCError> {
-            self.0
-                .get_protocol_states(request)
-                .await
+            params: crate::rpc::ProtocolStatesParams,
+        ) -> Result<Vec<ProtocolComponentState>, RPCError> {
+            self.0.get_protocol_states(params).await
         }
 
         async fn get_protocol_systems(
             &self,
-            request: &ProtocolSystemsRequestBody,
-        ) -> Result<ProtocolSystemsRequestResponse, RPCError> {
+            params: crate::rpc::ProtocolSystemsParams,
+        ) -> Result<crate::rpc::ProtocolSystemsResponse, RPCError> {
             self.0
-                .get_protocol_systems(request)
+                .get_protocol_systems(params)
                 .await
         }
 
         async fn get_component_tvl(
             &self,
-            request: &ComponentTvlRequestBody,
-        ) -> Result<ComponentTvlRequestResponse, RPCError> {
-            self.0.get_component_tvl(request).await
+            params: crate::rpc::ComponentTvlParams,
+        ) -> Result<HashMap<String, f64>, RPCError> {
+            self.0.get_component_tvl(params).await
         }
 
         async fn get_traced_entry_points(
             &self,
-            request: &TracedEntryPointRequestBody,
-        ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+            params: crate::rpc::TracedEntryPointsParams,
+        ) -> Result<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>, RPCError>
+        {
             self.0
-                .get_traced_entry_points(request)
+                .get_traced_entry_points(params)
                 .await
         }
 
@@ -968,9 +1028,9 @@ mod test {
     {
         async fn subscribe(
             &self,
-            extractor_id: ExtractorIdentity,
+            extractor_id: tycho_common::models::ExtractorIdentity,
             options: SubscriptionOptions,
-        ) -> Result<(Uuid, Receiver<BlockChanges>), DeltasError> {
+        ) -> Result<(Uuid, Receiver<BlockAggregatedChanges>), DeltasError> {
             self.0
                 .subscribe(extractor_id, options)
                 .await
@@ -1002,7 +1062,7 @@ mod test {
         let deltas_client = ArcDeltasClient(Arc::new(deltas_client.unwrap_or_default()));
 
         ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
             native,
             ComponentFilter::with_tvl_range(50.0, 50.0),
             1,
@@ -1050,7 +1110,7 @@ mod test {
                             (
                                 state.component_id.clone(),
                                 ComponentWithState {
-                                    state,
+                                    state: state.into(),
                                     component: component_clone.clone(),
                                     entrypoints: vec![],
                                     component_tvl: None,
@@ -1063,12 +1123,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
         state_sync
@@ -1086,7 +1141,7 @@ mod test {
                         (
                             state.component_id.clone(),
                             ComponentWithState {
-                                state,
+                                state: state.into(),
                                 component: component.clone(),
                                 entrypoints: vec![],
                                 component_tvl: None,
@@ -1125,7 +1180,7 @@ mod test {
                             (
                                 state.component_id.clone(),
                                 ComponentWithState {
-                                    state,
+                                    state: state.into(),
                                     component: component_clone.clone(),
                                     component_tvl: Some(100.0),
                                     entrypoints: vec![],
@@ -1138,12 +1193,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut state_sync = with_mocked_clients(true, true, Some(rpc), None);
         state_sync
@@ -1161,7 +1211,7 @@ mod test {
                         (
                             state.component_id.clone(),
                             ComponentWithState {
-                                state,
+                                state: state.into(),
                                 component: component.clone(),
                                 component_tvl: Some(100.0),
                                 entrypoints: vec![],
@@ -1193,38 +1243,40 @@ mod test {
         }
     }
 
-    fn traced_entry_point_response() -> TracedEntryPointRequestResponse {
-        TracedEntryPointRequestResponse {
-            traced_entry_points: HashMap::from([(
-                "Component1".to_string(),
-                vec![(
-                    EntryPointWithTracingParams {
-                        entry_point: EntryPoint {
-                            external_id: "entrypoint_a".to_string(),
-                            target: Bytes::from("0x0badc0ffee"),
-                            signature: "sig()".to_string(),
-                        },
-                        params: TracingParams::RPCTracer(RPCTracerParams {
-                            caller: Some(Bytes::from("0x0badc0ffee")),
-                            calldata: Bytes::from("0x0badc0ffee"),
-                            state_overrides: None,
-                            prune_addresses: None,
-                        }),
+    fn traced_entry_point_response(
+    ) -> HashMap<String, Vec<(ModelEntryPointWithTracingParams, ModelTracingResult)>> {
+        use tycho_common::models::blockchain::{
+            AddressStorageLocation as ModelASL, EntryPoint as ModelEntryPoint,
+            RPCTracerParams as ModelRPCTP, TracingParams as ModelTP,
+        };
+        HashMap::from([(
+            "Component1".to_string(),
+            vec![(
+                ModelEntryPointWithTracingParams {
+                    entry_point: ModelEntryPoint {
+                        external_id: "entrypoint_a".to_string(),
+                        target: Bytes::from("0x0badc0ffee"),
+                        signature: "sig()".to_string(),
                     },
-                    TracingResult {
-                        retriggers: HashSet::from([(
-                            Bytes::from("0x0badc0ffee"),
-                            AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
-                        )]),
-                        accessed_slots: HashMap::from([(
-                            Bytes::from("0x0badc0ffee"),
-                            HashSet::from([Bytes::from("0xbadbeef0")]),
-                        )]),
-                    },
-                )],
-            )]),
-            pagination: PaginationResponse::new(0, 20, 0),
-        }
+                    params: ModelTP::RPCTracer(ModelRPCTP {
+                        caller: Some(Bytes::from("0x0badc0ffee")),
+                        calldata: Bytes::from("0x0badc0ffee"),
+                        state_overrides: None,
+                        prune_addresses: None,
+                    }),
+                },
+                ModelTracingResult {
+                    retriggers: HashSet::from([(
+                        Bytes::from("0x0badc0ffee"),
+                        ModelASL::new(Bytes::from("0x0badc0ffee"), 12),
+                    )]),
+                    accessed_slots: HashMap::from([(
+                        Bytes::from("0x0badc0ffee"),
+                        HashSet::from([Bytes::from("0xbadbeef0")]),
+                    )]),
+                },
+            )],
+        )])
     }
 
     #[test_log::test(tokio::test)]
@@ -1243,10 +1295,11 @@ mod test {
                             state: ResponseProtocolState {
                                 component_id: "Component1".to_string(),
                                 ..Default::default()
-                            },
+                            }
+                            .into(),
                             component: ProtocolComponent {
                                 id: "Component1".to_string(),
-                                contract_ids: vec![
+                                contract_addresses: vec![
                                     Bytes::from("0x0badc0ffee"),
                                     Bytes::from("0xbabe42"),
                                 ],
@@ -1254,7 +1307,6 @@ mod test {
                             },
                             component_tvl: None,
                             entrypoints: traced_ep_response
-                                .traced_entry_points
                                 .get("Component1")
                                 .cloned()
                                 .unwrap_or_default(),
@@ -1265,18 +1317,21 @@ mod test {
                     vm_storage: vm_storage_accounts
                         .accounts
                         .into_iter()
-                        .map(|state| (state.address.clone(), state))
+                        .map(|state| {
+                            let addr = state.address.clone();
+                            (addr, Account::from(state))
+                        })
                         .collect(),
                 })
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| Ok(traced_entry_point_response()));
+            .returning(move |_| Ok(traced_entry_point_response()));
 
         let mut state_sync = with_mocked_clients(false, false, Some(rpc), None);
         let component = ProtocolComponent {
             id: "Component1".to_string(),
-            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            contract_addresses: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
             ..Default::default()
         };
         state_sync
@@ -1293,34 +1348,13 @@ mod test {
                         state: ResponseProtocolState {
                             component_id: "Component1".to_string(),
                             ..Default::default()
-                        },
+                        }
+                        .into(),
                         component: component.clone(),
                         component_tvl: None,
-                        entrypoints: vec![(
-                            EntryPointWithTracingParams {
-                                entry_point: EntryPoint {
-                                    external_id: "entrypoint_a".to_string(),
-                                    target: Bytes::from("0x0badc0ffee"),
-                                    signature: "sig()".to_string(),
-                                },
-                                params: TracingParams::RPCTracer(RPCTracerParams {
-                                    caller: Some(Bytes::from("0x0badc0ffee")),
-                                    calldata: Bytes::from("0x0badc0ffee"),
-                                    state_overrides: None,
-                                    prune_addresses: None,
-                                }),
-                            },
-                            TracingResult {
-                                retriggers: HashSet::from([(
-                                    Bytes::from("0x0badc0ffee"),
-                                    AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
-                                )]),
-                                accessed_slots: HashMap::from([(
-                                    Bytes::from("0x0badc0ffee"),
-                                    HashSet::from([Bytes::from("0xbadbeef0")]),
-                                )]),
-                            },
-                        )],
+                        entrypoints: traced_entry_point_response()
+                            .remove("Component1")
+                            .unwrap_or_default(),
                     },
                 )]
                 .into_iter()
@@ -1328,7 +1362,7 @@ mod test {
                 vm_storage: state_snapshot_vm()
                     .accounts
                     .into_iter()
-                    .map(|state| (state.address.clone(), state))
+                    .map(|state| (state.address.clone(), Account::from(state)))
                     .collect(),
             },
             deltas: None,
@@ -1349,7 +1383,7 @@ mod test {
         let mut rpc = make_mock_client();
         let component = ProtocolComponent {
             id: "Component1".to_string(),
-            contract_ids: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
+            contract_addresses: vec![Bytes::from("0x0badc0ffee"), Bytes::from("0xbabe42")],
             ..Default::default()
         };
 
@@ -1364,7 +1398,8 @@ mod test {
                             state: ResponseProtocolState {
                                 component_id: "Component1".to_string(),
                                 ..Default::default()
-                            },
+                            }
+                            .into(),
                             component: component_clone.clone(),
                             component_tvl: Some(100.0),
                             entrypoints: vec![],
@@ -1375,18 +1410,13 @@ mod test {
                     vm_storage: vm_storage_accounts
                         .accounts
                         .into_iter()
-                        .map(|state| (state.address.clone(), state))
+                        .map(|state| (state.address.clone(), Account::from(state)))
                         .collect(),
                 })
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut state_sync = with_mocked_clients(false, true, Some(rpc), None);
         state_sync
@@ -1403,7 +1433,8 @@ mod test {
                         state: ResponseProtocolState {
                             component_id: "Component1".to_string(),
                             ..Default::default()
-                        },
+                        }
+                        .into(),
                         component: component.clone(),
                         component_tvl: Some(100.0),
                         entrypoints: vec![],
@@ -1414,7 +1445,7 @@ mod test {
                 vm_storage: state_snapshot_vm()
                     .accounts
                     .into_iter()
-                    .map(|state| (state.address.clone(), state))
+                    .map(|state| (state.address.clone(), Account::from(state)))
                     .collect(),
             },
             deltas: None,
@@ -1466,7 +1497,8 @@ mod test {
                             state: ResponseProtocolState {
                                 component_id: "Component2".to_string(),
                                 ..Default::default()
-                            },
+                            }
+                            .into(),
                             component: component2_clone.clone(),
                             entrypoints: vec![],
                             component_tvl: None,
@@ -1479,12 +1511,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
 
@@ -1526,30 +1553,24 @@ mod test {
             .contains_key("Component3"));
     }
 
-    fn mock_clients_for_state_sync() -> (MockRPCClient, MockDeltasClient, Sender<BlockChanges>) {
+    fn mock_clients_for_state_sync(
+    ) -> (MockRPCClient, MockDeltasClient, Sender<BlockAggregatedChanges>) {
         let mut rpc_client = make_mock_client();
         // Mocks for the start_tracking call, these need to come first because they are more
         // specific, see: https://docs.rs/mockall/latest/mockall/#matching-multiple-calls
         rpc_client
             .expect_get_protocol_components()
-            .with(mockall::predicate::function(
-                move |request_params: &ProtocolComponentsRequestBody| {
-                    if let Some(ids) = request_params.component_ids.as_ref() {
-                        ids.contains(&"Component3".to_string())
-                    } else {
-                        false
-                    }
-                },
-            ))
+            .withf(|params: &crate::rpc::ProtocolComponentsParams| {
+                params
+                    .component_ids()
+                    .is_some_and(|ids| ids.contains(&"Component3".to_string()))
+            })
             .returning(|_| {
                 // return Component3
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        // this component shall have a tvl update above threshold
-                        ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![
+                    // this component shall have a tvl update above threshold
+                    ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
+                ])
             });
         // Mock get_snapshots for Component3
         rpc_client
@@ -1568,10 +1589,11 @@ mod test {
                     states: [(
                         "Component3".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component3".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component3",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Component3".to_string(),
                                 ..Default::default()
@@ -1591,16 +1613,13 @@ mod test {
             .expect_get_protocol_components()
             .returning(|_| {
                 // Initial sync of components
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        // this component shall have a tvl update above threshold
-                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                        // this component shall have a tvl update below threshold.
-                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                        // a third component will have a tvl update above threshold
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![
+                    // this component shall have a tvl update above threshold
+                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                    // this component shall have a tvl update below threshold.
+                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                    // a third component will have a tvl update above threshold
+                ])
             });
 
         rpc_client
@@ -1611,10 +1630,11 @@ mod test {
                         (
                             "Component1".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component1".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component1",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component1".to_string(),
                                     ..Default::default()
@@ -1626,10 +1646,11 @@ mod test {
                         (
                             "Component2".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component2".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component2",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component2".to_string(),
                                     ..Default::default()
@@ -1648,12 +1669,7 @@ mod test {
         // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         // Mock deltas client and messages
         let mut deltas_client = MockDeltasClient::new();
@@ -1683,7 +1699,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            BlockChanges {
+            BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1717,7 +1733,7 @@ mod test {
                     )]),
                     trace_results: HashMap::from([(
                         "entrypoint_a".to_string(),
-                        TracingResult {
+                        tycho_common::dto::TracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
                                 AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
@@ -1730,8 +1746,8 @@ mod test {
                     )]),
                 },
                 ..Default::default()
-            },
-            BlockChanges {
+            }),
+            BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1750,7 +1766,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            },
+            }),
         ];
         let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client));
         state_sync
@@ -1793,10 +1809,11 @@ mod test {
                     (
                         "Component1".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component1".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component1",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Component1".to_string(),
                                 ..Default::default()
@@ -1808,10 +1825,11 @@ mod test {
                     (
                         "Component2".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component2".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component2",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Component2".to_string(),
                                 ..Default::default()
@@ -1843,10 +1861,11 @@ mod test {
                     (
                         "Component3".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component3".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component3",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Component3".to_string(),
                                 ..Default::default()
@@ -1862,7 +1881,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-common we don't have much to do here.
-            deltas: Some(BlockChanges {
+            deltas: Some(BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1881,7 +1900,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            })),
             // "Component2" was removed, because its tvl changed to 0.
             removed_components: [(
                 "Component2".to_string(),
@@ -1905,23 +1924,13 @@ mod test {
 
         rpc_client
             .expect_get_protocol_components()
-            .with(mockall::predicate::function(
-                move |request_params: &ProtocolComponentsRequestBody| {
-                    if let Some(ids) = request_params.component_ids.as_ref() {
-                        ids.contains(&"Component3".to_string())
-                    } else {
-                        false
-                    }
-                },
-            ))
+            .withf(|params: &crate::rpc::ProtocolComponentsParams| {
+                params
+                    .component_ids()
+                    .is_some_and(|ids| ids.contains(&"Component3".to_string()))
+            })
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![ProtocolComponent {
-                        id: "Component3".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![ProtocolComponent { id: "Component3".to_string(), ..Default::default() }])
             });
         // Mock get_snapshots for Component3
         rpc_client
@@ -1940,10 +1949,11 @@ mod test {
                     states: [(
                         "Component3".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component3".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component3",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Component3".to_string(),
                                 ..Default::default()
@@ -1962,13 +1972,10 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![
+                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                ])
             });
 
         // Mock get_snapshots for initial snapshot
@@ -1980,10 +1987,11 @@ mod test {
                         (
                             "Component1".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component1".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component1",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component1".to_string(),
                                     ..Default::default()
@@ -1995,10 +2003,11 @@ mod test {
                         (
                             "Component2".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component2".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component2",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component2".to_string(),
                                     ..Default::default()
@@ -2017,12 +2026,7 @@ mod test {
         // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse { page: 0, page_size: 100, total: 0 },
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let (tx, rx) = channel(1);
         deltas_client
@@ -2035,7 +2039,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(remove_tvl_threshold, add_tvl_threshold),
             1,
@@ -2054,7 +2058,7 @@ mod test {
 
         // Simulate the incoming BlockChanges
         let deltas = [
-            BlockChanges {
+            BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2066,8 +2070,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            },
-            BlockChanges {
+            }),
+            BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2086,7 +2090,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            },
+            }),
         ];
 
         let (handle, mut rx) = state_sync.start().await;
@@ -2129,10 +2133,11 @@ mod test {
                 states: [(
                     "Component3".to_string(),
                     ComponentWithState {
-                        state: ResponseProtocolState {
-                            component_id: "Component3".to_string(),
-                            ..Default::default()
-                        },
+                        state: ProtocolComponentState::new(
+                            "Component3",
+                            Default::default(),
+                            Default::default(),
+                        ),
                         component: ProtocolComponent {
                             id: "Component3".to_string(),
                             ..Default::default()
@@ -2145,7 +2150,7 @@ mod test {
                 .collect(),
                 vm_storage: HashMap::new(),
             },
-            deltas: Some(BlockChanges {
+            deltas: Some(BlockAggregatedChanges::from(BlockChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2163,7 +2168,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            })),
             removed_components: [(
                 "Component2".to_string(),
                 ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
@@ -2189,12 +2194,7 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         // Set up deltas client that will wait for messages (blocking in state_sync)
         let (_tx, rx) = channel(1);
@@ -2208,7 +2208,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             5, // Enough retries
@@ -2253,12 +2253,7 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         // Mock to fail during snapshot retrieval (this will cause an error during processing)
         rpc_client
@@ -2273,7 +2268,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send a delta message that will require a snapshot
-                let delta = BlockChanges {
+                let delta = BlockAggregatedChanges::from(BlockChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2289,17 +2284,9 @@ mod test {
                     // Add a new component to trigger snapshot request
                     new_protocol_components: [(
                         "new_component".to_string(),
-                        ProtocolComponent {
+                        tycho_common::dto::ProtocolComponent {
                             id: "new_component".to_string(),
-                            protocol_system: "test_protocol".to_string(),
-                            protocol_type_name: "test".to_string(),
-                            chain: Chain::Ethereum,
-                            tokens: vec![Bytes::from("0x0badc0ffee")],
-                            contract_ids: vec![Bytes::from("0x0badc0ffee")],
-                            static_attributes: Default::default(),
-                            creation_tx: Default::default(),
-                            created_at: Default::default(),
-                            change: Default::default(),
+                            ..Default::default()
                         },
                     )]
                     .into_iter()
@@ -2308,7 +2295,7 @@ mod test {
                         .into_iter()
                         .collect(),
                     ..Default::default()
-                };
+                });
 
                 tokio::spawn(async move {
                     let _ = tx.send(delta).await;
@@ -2324,7 +2311,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0), // Include the component
             1,
@@ -2377,12 +2364,7 @@ mod test {
 
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         let (_tx, rx) = channel(1);
         deltas_client
@@ -2394,7 +2376,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             1,
@@ -2450,40 +2432,20 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         // Mock the snapshot retrieval that happens after first message
         rpc_client
             .expect_get_protocol_states()
-            .returning(|_| {
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         rpc_client
             .expect_get_component_tvl()
-            .returning(|_| {
-                Ok(ComponentTvlRequestResponse {
-                    tvl: HashMap::new(),
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         // Set up deltas client to send one message, then keep channel open
         let (tx, rx) = channel(10);
@@ -2491,7 +2453,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send first message immediately
-                let first_delta = BlockChanges {
+                let first_delta = BlockAggregatedChanges::from(BlockChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2505,7 +2467,7 @@ mod test {
                     },
                     revert: false,
                     ..Default::default()
-                };
+                });
 
                 tokio::spawn(async move {
                     let _ = tx.send(first_delta).await;
@@ -2522,7 +2484,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -2587,12 +2549,7 @@ mod test {
         // Mock the initial components call to succeed
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 0 },
-                })
-            });
+            .returning(|_| Ok(vec![]));
 
         // Set up deltas client to consistently fail after subscription
         // This will cause connection errors and trigger retries
@@ -2611,7 +2568,7 @@ mod test {
 
         // Create synchronizer with only 2 retries and short cooldown
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             2,                         // max_retries = 2
@@ -2724,13 +2681,7 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![ProtocolComponent {
-                        id: "Component1".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }])
             });
 
         // Set up deltas client to send a message that is the next expected block
@@ -2738,7 +2689,7 @@ mod test {
         deltas_client
             .expect_subscribe()
             .return_once(move |_, _| {
-                let expected_next_delta = BlockChanges {
+                let expected_next_delta = BlockAggregatedChanges::from(BlockChanges {
                     extractor: "uniswap-v2".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2756,7 +2707,7 @@ mod test {
                     },
                     revert: false,
                     ..Default::default()
-                };
+                });
 
                 tokio::spawn(async move {
                     let _ = tx.send(expected_next_delta).await;
@@ -2770,7 +2721,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -2860,47 +2811,31 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![ProtocolComponent {
-                        id: "Component1".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }])
             });
 
         // Mock snapshot calls for when we process the expected next block (block 6)
         rpc_client
             .expect_get_protocol_states()
             .returning(|_| {
-                Ok(ProtocolStateRequestResponse {
-                    states: vec![ResponseProtocolState {
-                        component_id: "Component1".to_string(),
-                        ..Default::default()
-                    }],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok(vec![ProtocolComponentState::new(
+                    "Component1",
+                    Default::default(),
+                    Default::default(),
+                )])
             });
 
         rpc_client
             .expect_get_component_tvl()
             .returning(|_| {
-                Ok(ComponentTvlRequestResponse {
-                    tvl: [("Component1".to_string(), 100.0)]
-                        .into_iter()
-                        .collect(),
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-                })
+                Ok([("Component1".to_string(), 100.0)]
+                    .into_iter()
+                    .collect())
             });
 
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         // Set up deltas client to send old messages first, then the expected next block
         let (tx, rx) = channel(10);
@@ -2909,7 +2844,7 @@ mod test {
             .return_once(move |_, _| {
                 // Send messages for blocks 3, 4, 5 (already processed), then block 6 (expected)
                 let old_messages = vec![
-                    BlockChanges {
+                    BlockAggregatedChanges::from(BlockChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2921,8 +2856,8 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    },
-                    BlockChanges {
+                    }),
+                    BlockAggregatedChanges::from(BlockChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2934,8 +2869,8 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    },
-                    BlockChanges {
+                    }),
+                    BlockAggregatedChanges::from(BlockChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2947,9 +2882,9 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    },
+                    }),
                     // This is the expected next block (block 6)
-                    BlockChanges {
+                    BlockAggregatedChanges::from(BlockChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2961,7 +2896,7 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    },
+                    }),
                 ];
 
                 tokio::spawn(async move {
@@ -2979,7 +2914,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -3065,11 +3000,11 @@ mod test {
         }
     }
 
-    fn make_block_changes(block_num: u64, partial_idx: Option<u32>) -> BlockChanges {
+    fn make_block_changes(block_num: u64, partial_idx: Option<u32>) -> BlockAggregatedChanges {
         // Use vec to create Bytes from block number
         let hash = Bytes::from(vec![block_num as u8; 32]);
         let parent_hash = Bytes::from(vec![block_num.saturating_sub(1) as u8; 32]);
-        BlockChanges {
+        BlockAggregatedChanges::from(BlockChanges {
             extractor: "uniswap-v2".to_string(),
             chain: Chain::Ethereum,
             block: Block {
@@ -3082,7 +3017,7 @@ mod test {
             revert: false,
             partial_block_index: partial_idx,
             ..Default::default()
-        }
+        })
     }
 
     /// Test that full block as first message in partial mode is accepted
@@ -3241,10 +3176,11 @@ mod test {
                     states: [(
                         "Component1".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component1".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component1",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: component_clone.clone(),
                             entrypoints: vec![],
                             component_tvl: None,
@@ -3292,10 +3228,11 @@ mod test {
                     states: [(
                         "Component1".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Component1".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Component1",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: component_clone.clone(),
                             entrypoints: vec![],
                             component_tvl: None,
@@ -3310,12 +3247,7 @@ mod test {
         // get_traced_entry_points SHOULD be called for a DCI protocol
         rpc.expect_get_traced_entry_points()
             .times(1)
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 20, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None).with_dci(true);
         state_sync
@@ -3351,31 +3283,25 @@ mod test {
         // 2)
         rpc_client
             .expect_get_protocol_components()
-            .with(mockall::predicate::function(|req: &ProtocolComponentsRequestBody| {
-                req.component_ids
-                    .as_ref()
+            .withf(|params: &crate::rpc::ProtocolComponentsParams| {
+                params
+                    .component_ids()
                     .is_some_and(|ids| ids.contains(&"BrandNew".to_string()))
-            }))
+            })
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
-                        ProtocolComponent { id: "Preexisting".to_string(), ..Default::default() },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
-                })
+                Ok(vec![
+                    ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
+                    ProtocolComponent { id: "Preexisting".to_string(), ..Default::default() },
+                ])
             });
         // get_protocol_components for initial sync (via get_protocol_components_paginated)
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(ProtocolComponentRequestResponse {
-                    protocol_components: vec![
-                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                    ],
-                    pagination: PaginationResponse { page: 0, page_size: 20, total: 2 },
-                })
+                Ok(vec![
+                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                ])
             });
         // get_snapshots: more specific expectations first so init (block 0, all components)
         // does not match the block 1/2 ones.
@@ -3397,10 +3323,11 @@ mod test {
                     states: [(
                         "BrandNew".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "BrandNew".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "BrandNew",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "BrandNew".to_string(),
                                 ..Default::default()
@@ -3432,10 +3359,11 @@ mod test {
                     states: [(
                         "Preexisting".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
-                                component_id: "Preexisting".to_string(),
-                                ..Default::default()
-                            },
+                            state: ProtocolComponentState::new(
+                                "Preexisting",
+                                Default::default(),
+                                Default::default(),
+                            ),
                             component: ProtocolComponent {
                                 id: "Preexisting".to_string(),
                                 ..Default::default()
@@ -3458,10 +3386,11 @@ mod test {
                         (
                             "Component1".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component1".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component1",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component1".to_string(),
                                     ..Default::default()
@@ -3473,10 +3402,11 @@ mod test {
                         (
                             "Component2".to_string(),
                             ComponentWithState {
-                                state: ResponseProtocolState {
-                                    component_id: "Component2".to_string(),
-                                    ..Default::default()
-                                },
+                                state: ProtocolComponentState::new(
+                                    "Component2",
+                                    Default::default(),
+                                    Default::default(),
+                                ),
                                 component: ProtocolComponent {
                                     id: "Component2".to_string(),
                                     ..Default::default()
@@ -3493,12 +3423,7 @@ mod test {
             });
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| {
-                Ok(TracedEntryPointRequestResponse {
-                    traced_entry_points: HashMap::new(),
-                    pagination: PaginationResponse::new(0, 100, 0),
-                })
-            });
+            .returning(|_| Ok(HashMap::new()));
 
         let mut deltas_client = MockDeltasClient::new();
         let (tx, rx) = channel(1);

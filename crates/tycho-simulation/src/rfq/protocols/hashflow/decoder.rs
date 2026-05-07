@@ -90,15 +90,14 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for HashflowState {
             InvalidSnapshotError::ValueError(format!("Failed to get Hashflow authentication: {e}"))
         })?;
 
-        let client =
-            HashflowClientBuilder::new(snapshot.component.chain.into(), auth.user, auth.key)
-                .tokens(HashSet::from([base_token_address.clone(), quote_token_address.clone()]))
-                .build()
-                .map_err(|e| {
-                    InvalidSnapshotError::MissingAttribute(format!(
-                        "Couldn't create HashflowClient: {e}"
-                    ))
-                })?;
+        let client = HashflowClientBuilder::new(snapshot.component.chain, auth.user, auth.key)
+            .tokens(HashSet::from([base_token_address.clone(), quote_token_address.clone()]))
+            .build()
+            .map_err(|e| {
+                InvalidSnapshotError::MissingAttribute(format!(
+                    "Couldn't create HashflowClient: {e}"
+                ))
+            })?;
 
         Ok(HashflowState::new(base_token, quote_token, levels, market_maker, client))
     }
@@ -109,8 +108,8 @@ mod tests {
     use std::env;
 
     use tycho_common::{
-        dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState},
-        models::Chain as ModelChain,
+        dto::{Chain, ChangeType, ResponseProtocolState},
+        models::{protocol::ProtocolComponent, Chain as ModelChain},
     };
 
     use super::*;
@@ -189,16 +188,17 @@ mod tests {
                 attributes: state_attributes,
                 component_id: "hashflow_wbtc_usdc".to_string(),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: ProtocolComponent {
                 id: "hashflow_wbtc_usdc".to_string(),
                 protocol_system: "hashflow".to_string(),
                 protocol_type_name: "hashflow".to_string(),
-                chain: Chain::Ethereum,
+                chain: Chain::Ethereum.into(),
                 tokens: vec![wbtc_token.address.clone(), usdc_token.address.clone()],
-                contract_ids: Vec::new(),
+                contract_addresses: Vec::new(),
                 static_attributes: HashMap::new(),
-                change: ChangeType::Creation,
+                change: ChangeType::Creation.into(),
                 creation_tx: Bytes::default(),
                 created_at: chrono::NaiveDateTime::default(),
             },

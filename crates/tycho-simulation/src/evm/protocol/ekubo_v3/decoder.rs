@@ -374,8 +374,9 @@ mod tests {
             state: ResponseProtocolState {
                 attributes: case.state_attributes,
                 ..Default::default()
-            },
-            component: case.component,
+            }
+            .into(),
+            component: case.component.into(),
             component_tvl: None,
             entrypoints: Vec::new(),
         };
@@ -407,7 +408,8 @@ mod tests {
             EkuboV3State::BoostedFees(_) => return,
         };
 
-        let mut component = case.component;
+        let mut component: tycho_common::models::protocol::ProtocolComponent =
+            case.component.into();
         // Add legacy extension_id attribute (keeps real extension address since
         // the SDK validates it)
         component
@@ -433,7 +435,8 @@ mod tests {
             .collect();
 
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState { attributes: state_attributes, ..Default::default() },
+            state: ResponseProtocolState { attributes: state_attributes, ..Default::default() }
+                .into(),
             component,
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -450,7 +453,8 @@ mod tests {
     #[tokio::test]
     async fn test_try_from_invalid(case: TestCase) {
         for missing_attribute in case.required_attributes {
-            let mut component = case.component.clone();
+            let mut component: tycho_common::models::protocol::ProtocolComponent =
+                case.component.clone().into();
             let mut attributes = case.state_attributes.clone();
 
             component
@@ -463,7 +467,8 @@ mod tests {
                     attributes,
                     component_id: Default::default(),
                     balances: Default::default(),
-                },
+                }
+                .into(),
                 component,
                 component_tvl: None,
                 entrypoints: Vec::new(),

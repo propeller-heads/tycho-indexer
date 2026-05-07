@@ -137,7 +137,10 @@ mod tests {
 
     use chrono::DateTime;
     use rstest::rstest;
-    use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
+    use tycho_common::{
+        dto::{Chain, ChangeType, ResponseProtocolState},
+        models::protocol::ProtocolComponent,
+    };
 
     use super::*;
     use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
@@ -155,11 +158,11 @@ mod tests {
             id: "State1".to_string(),
             protocol_system: "system1".to_string(),
             protocol_type_name: "typename1".to_string(),
-            chain: Chain::Ethereum,
+            chain: Chain::Ethereum.into(),
             tokens: Vec::new(),
-            contract_ids: Vec::new(),
+            contract_addresses: Vec::new(),
             static_attributes,
-            change: ChangeType::Creation,
+            change: ChangeType::Creation.into(),
             creation_tx: Bytes::from_str("0x0000").unwrap(),
             created_at: creation_time,
         }
@@ -183,7 +186,8 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: usv3_component(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -235,7 +239,8 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component,
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -263,7 +268,8 @@ mod tests {
                 component_id: "State1".to_owned(),
                 attributes: usv3_attributes(),
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component,
             component_tvl: None,
             entrypoints: Vec::new(),

@@ -25,17 +25,35 @@ use tokio::{
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockParam, Chain, ComponentTvlRequestBody, ComponentTvlRequestResponse,
-        EntryPointWithTracingParams, PaginationLimits, PaginationParams, PaginationResponse,
-        ProtocolComponent, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
+        BlockParam, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationLimits,
+        PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
         ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, ResponseToken, StateRequestBody, StateRequestResponse,
-        TokensRequestBody, TokensRequestResponse, TracedEntryPointRequestBody,
-        TracedEntryPointRequestResponse, TracingResult, VersionParam,
+        ProtocolSystemsRequestResponse, StateRequestBody, StateRequestResponse, TokensRequestBody,
+        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
+        VersionParam,
     },
-    models::ComponentId,
+    models::{
+        blockchain::{EntryPointWithTracingParams, TracedEntryPoints, TracingResult},
+        contract::Account,
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        token::Token,
+        Chain, ComponentId,
+    },
     Bytes,
 };
+
+/// Response from `RPCClient::get_protocol_systems`.
+///
+/// Carries the raw lists returned by the server without wrapping dto types.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolSystemsResponse {
+    /// All protocol systems known to the server.
+    pub protocol_systems: Vec<String>,
+    /// Subset of `protocol_systems` that use Dynamic Contract Indexing.
+    pub dci_protocols: Vec<String>,
+    /// Total number of protocol systems on the server (may exceed what was fetched).
+    pub total: i64,
+}
 
 use crate::{
     feed::synchronizer::{ComponentWithState, Snapshot},
@@ -44,6 +62,267 @@ use crate::{
 
 /// Suggested concurrency level for RPC clients.
 pub const RPC_CLIENT_CONCURRENCY: usize = 4;
+
+/// Parameters for [`RPCClient::get_contract_state`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct ContractStateParams {
+    chain: Chain,
+    protocol_system: String,
+    contract_ids: Option<Vec<Bytes>>,
+    block_number: Option<u64>,
+    page: i64,
+    page_size: i64,
+}
+
+impl ContractStateParams {
+    pub fn new(chain: Chain, protocol_system: impl Into<String>) -> Self {
+        Self {
+            chain,
+            protocol_system: protocol_system.into(),
+            contract_ids: None,
+            block_number: None,
+            page: 0,
+            page_size: StateRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_contract_ids(mut self, ids: Vec<Bytes>) -> Self {
+        self.contract_ids = Some(ids);
+        self
+    }
+
+    pub fn with_block_number(mut self, block_number: u64) -> Self {
+        self.block_number = Some(block_number);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
+
+/// Parameters for [`RPCClient::get_protocol_components`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct ProtocolComponentsParams {
+    chain: Chain,
+    protocol_system: String,
+    component_ids: Option<Vec<ComponentId>>,
+    tvl_gt: Option<f64>,
+    page: i64,
+    page_size: i64,
+}
+
+impl ProtocolComponentsParams {
+    pub fn new(chain: Chain, protocol_system: impl Into<String>) -> Self {
+        Self {
+            chain,
+            protocol_system: protocol_system.into(),
+            component_ids: None,
+            tvl_gt: None,
+            page: 0,
+            page_size: ProtocolComponentsRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_component_ids(mut self, ids: Vec<ComponentId>) -> Self {
+        self.component_ids = Some(ids);
+        self
+    }
+
+    pub fn with_tvl_gt(mut self, tvl_gt: f64) -> Self {
+        self.tvl_gt = Some(tvl_gt);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn component_ids(&self) -> Option<&Vec<ComponentId>> {
+        self.component_ids.as_ref()
+    }
+}
+
+/// Parameters for [`RPCClient::get_protocol_states`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct ProtocolStatesParams {
+    chain: Chain,
+    protocol_system: String,
+    protocol_ids: Option<Vec<String>>,
+    include_balances: bool,
+    block_number: Option<u64>,
+    page: i64,
+    page_size: i64,
+}
+
+impl ProtocolStatesParams {
+    pub fn new(chain: Chain, protocol_system: impl Into<String>) -> Self {
+        Self {
+            chain,
+            protocol_system: protocol_system.into(),
+            protocol_ids: None,
+            include_balances: false,
+            block_number: None,
+            page: 0,
+            page_size: ProtocolStateRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_protocol_ids(mut self, ids: Vec<String>) -> Self {
+        self.protocol_ids = Some(ids);
+        self
+    }
+
+    pub fn with_include_balances(mut self, include_balances: bool) -> Self {
+        self.include_balances = include_balances;
+        self
+    }
+
+    pub fn with_block_number(mut self, block_number: u64) -> Self {
+        self.block_number = Some(block_number);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
+
+/// Parameters for [`RPCClient::get_tokens`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct TokensParams {
+    chain: Chain,
+    min_quality: Option<i32>,
+    traded_n_days_ago: Option<u64>,
+    page: i64,
+    page_size: i64,
+}
+
+impl TokensParams {
+    pub fn new(chain: Chain) -> Self {
+        Self {
+            chain,
+            min_quality: None,
+            traded_n_days_ago: None,
+            page: 0,
+            page_size: TokensRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_min_quality(mut self, min_quality: i32) -> Self {
+        self.min_quality = Some(min_quality);
+        self
+    }
+
+    pub fn with_traded_n_days_ago(mut self, days: u64) -> Self {
+        self.traded_n_days_ago = Some(days);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
+
+/// Parameters for [`RPCClient::get_protocol_systems`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct ProtocolSystemsParams {
+    chain: Chain,
+    page: i64,
+    page_size: i64,
+}
+
+impl ProtocolSystemsParams {
+    pub fn new(chain: Chain) -> Self {
+        Self { chain, page: 0, page_size: ProtocolSystemsRequestBody::MAX_PAGE_SIZE_COMPRESSED }
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
+
+/// Parameters for [`RPCClient::get_component_tvl`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct ComponentTvlParams {
+    chain: Chain,
+    protocol_system: Option<String>,
+    component_ids: Option<Vec<String>>,
+    page: i64,
+    page_size: i64,
+}
+
+impl ComponentTvlParams {
+    pub fn new(chain: Chain) -> Self {
+        Self {
+            chain,
+            protocol_system: None,
+            component_ids: None,
+            page: 0,
+            page_size: ComponentTvlRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_protocol_system(mut self, protocol_system: impl Into<String>) -> Self {
+        self.protocol_system = Some(protocol_system.into());
+        self
+    }
+
+    pub fn with_component_ids(mut self, ids: Vec<String>) -> Self {
+        self.component_ids = Some(ids);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
+
+/// Parameters for [`RPCClient::get_traced_entry_points`].
+#[derive(Clone, PartialEq, Debug)]
+pub struct TracedEntryPointsParams {
+    chain: Chain,
+    protocol_system: String,
+    component_ids: Option<Vec<String>>,
+    page: i64,
+    page_size: i64,
+}
+
+impl TracedEntryPointsParams {
+    pub fn new(chain: Chain, protocol_system: impl Into<String>) -> Self {
+        Self {
+            chain,
+            protocol_system: protocol_system.into(),
+            component_ids: None,
+            page: 0,
+            page_size: TracedEntryPointRequestBody::MAX_PAGE_SIZE_COMPRESSED,
+        }
+    }
+
+    pub fn with_component_ids(mut self, ids: Vec<String>) -> Self {
+        self.component_ids = Some(ids);
+        self
+    }
+
+    pub(crate) fn with_pagination(mut self, page: i64, page_size: i64) -> Self {
+        self.page = page;
+        self.page_size = page_size;
+        self
+    }
+}
 
 /// Request body for fetching a snapshot of protocol states and VM storage.
 ///
@@ -57,8 +336,8 @@ pub struct SnapshotParameters<'a> {
     pub protocol_system: &'a str,
     /// Components to fetch protocol states for
     pub components: &'a HashMap<ComponentId, ProtocolComponent>,
-    /// Traced entry points data mapped by component id
-    pub entrypoints: Option<&'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>,
+    /// Traced entry points data mapped by component id (model types)
+    pub entrypoints: Option<&'a TracedEntryPoints>,
     /// Contract addresses to fetch VM storage for
     pub contract_ids: &'a [Bytes],
     /// Block number for versioning
@@ -101,10 +380,7 @@ impl<'a> SnapshotParameters<'a> {
         self
     }
 
-    pub fn entrypoints(
-        mut self,
-        entrypoints: &'a HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>,
-    ) -> Self {
+    pub fn entrypoints(mut self, entrypoints: &'a TracedEntryPoints) -> Self {
         self.entrypoints = Some(entrypoints);
         self
     }
@@ -174,23 +450,26 @@ pub trait RPCClient: Send + Sync {
     /// Returns whether compression is enabled for requests.
     fn compression(&self) -> bool;
 
-    /// Retrieves a snapshot of contract state.
+    /// Retrieves a snapshot of contract state for the given contract addresses.
+    ///
+    /// `block_number` pins the query to a specific block; pass `None` to use the latest state.
     async fn get_contract_state(
         &self,
-        request: &StateRequestBody,
-    ) -> Result<StateRequestResponse, RPCError>;
+        params: ContractStateParams,
+    ) -> Result<Vec<Account>, RPCError>;
 
     /// Retrieves a snapshot of contract state for a set of contract IDs.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_contract_state_paginated(
         &self,
         chain: Chain,
         ids: &[Bytes],
         protocol_system: &str,
-        version: &VersionParam,
+        block_number: Option<u64>,
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<StateRequestResponse, RPCError> {
+    ) -> Result<Vec<Account>, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         // Sort the ids to maximize server-side cache hits
@@ -200,26 +479,25 @@ pub trait RPCClient: Send + Sync {
         let chunk_size = chunk_size
             .unwrap_or(StateRequestBody::effective_max_page_size(self.compression()) as usize);
 
-        let chunked_bodies = sorted_ids
-            .chunks(chunk_size)
-            .map(|chunk| StateRequestBody {
-                contract_ids: Some(chunk.to_vec()),
-                protocol_system: protocol_system.to_string(),
-                chain,
-                version: version.clone(),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
-            })
-            .collect::<Vec<_>>();
-
         let mut tasks = Vec::new();
-        for body in chunked_bodies.iter() {
+        for chunk in sorted_ids.chunks(chunk_size) {
             let sem = semaphore.clone();
+            let chunk = chunk.to_vec();
+            let base_params = ContractStateParams::new(chain, protocol_system)
+                .with_contract_ids(chunk)
+                .with_pagination(0, chunk_size as i64);
+            let base_params = if let Some(bn) = block_number {
+                base_params.with_block_number(bn)
+            } else {
+                base_params
+            };
             tasks.push(async move {
                 let _permit = sem
                     .acquire()
                     .await
                     .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                self.get_contract_state(body).await
+                self.get_contract_state(base_params)
+                    .await
             });
         }
 
@@ -228,33 +506,33 @@ pub trait RPCClient: Send + Sync {
 
         // Aggregate the responses into a single result.
         let accounts = responses
-            .iter()
-            .flat_map(|r| r.accounts.clone())
+            .into_iter()
+            .flat_map(|r| r.into_iter())
             .collect();
-        let total: i64 = responses
-            .iter()
-            .map(|r| r.pagination.total)
-            .sum();
 
-        Ok(StateRequestResponse {
-            accounts,
-            pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
-        })
+        Ok(accounts)
     }
 
+    /// Retrieves protocol components matching the given filters.
+    ///
+    /// Pass `component_ids` to filter by specific IDs, or `tvl_gt` to filter by minimum TVL.
     async fn get_protocol_components(
         &self,
-        request: &ProtocolComponentsRequestBody,
-    ) -> Result<ProtocolComponentRequestResponse, RPCError>;
+        params: ProtocolComponentsParams,
+    ) -> Result<Vec<ProtocolComponent>, RPCError>;
 
-    /// Retrieves protocol components.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
+    /// Retrieves protocol components, fetching all pages automatically.
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_protocol_components_paginated(
         &self,
-        request: &ProtocolComponentsRequestBody,
+        chain: Chain,
+        protocol_system: String,
+        component_ids: Option<Vec<ComponentId>>,
+        tvl_gt: Option<f64>,
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<ProtocolComponentRequestResponse, RPCError> {
+    ) -> Result<Vec<ProtocolComponent>, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         let chunk_size = chunk_size.unwrap_or(
@@ -263,150 +541,109 @@ pub trait RPCClient: Send + Sync {
 
         // If a set of component IDs is specified, the maximum return size is already known,
         // allowing us to pre-compute the number of requests to be made.
-        match request.component_ids {
-            Some(ref ids) => {
-                // We can divide the component_ids into chunks of size chunk_size
-                let chunked_bodies = ids
-                    .chunks(chunk_size)
-                    .enumerate()
-                    .map(|(index, _)| ProtocolComponentsRequestBody {
-                        protocol_system: request.protocol_system.clone(),
-                        component_ids: request.component_ids.clone(),
-                        tvl_gt: request.tvl_gt,
-                        chain: request.chain,
-                        pagination: PaginationParams {
-                            page: index as i64,
-                            page_size: chunk_size as i64,
-                        },
-                    })
-                    .collect::<Vec<_>>();
-
-                let mut tasks = Vec::new();
-                for body in chunked_bodies.iter() {
-                    let sem = semaphore.clone();
-                    tasks.push(async move {
-                        let _permit = sem
-                            .acquire()
-                            .await
-                            .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                        self.get_protocol_components(body).await
-                    });
-                }
-
-                try_join_all(tasks)
-                    .await
-                    .map(|responses| ProtocolComponentRequestResponse {
-                        protocol_components: responses
-                            .into_iter()
-                            .flat_map(|r| r.protocol_components.into_iter())
-                            .collect(),
-                        pagination: PaginationResponse {
-                            page: 0,
-                            page_size: chunk_size as i64,
-                            total: ids.len() as i64,
-                        },
-                    })
-            }
-            _ => {
-                // If no component ids are specified, we need to make requests based on the total
-                // number of results from the first response.
-
-                let initial_request = ProtocolComponentsRequestBody {
-                    protocol_system: request.protocol_system.clone(),
-                    component_ids: request.component_ids.clone(),
-                    tvl_gt: request.tvl_gt,
-                    chain: request.chain,
-                    pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
-                };
-                let first_response = self
-                    .get_protocol_components(&initial_request)
-                    .await?;
-
-                let total_items = first_response.pagination.total;
-                let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
-
-                // Initialize the final response accumulator
-                let mut accumulated_response = ProtocolComponentRequestResponse {
-                    protocol_components: first_response.protocol_components,
-                    pagination: PaginationResponse {
-                        page: 0,
-                        page_size: chunk_size as i64,
-                        total: total_items,
-                    },
-                };
-
-                let mut page = 1;
-                while page < total_pages {
-                    let requests_in_this_iteration = (total_pages - page).min(concurrency as i64);
-
-                    // Create request bodies for parallel requests, respecting the concurrency limit
-                    let chunked_bodies = (0..requests_in_this_iteration)
-                        .map(|iter| ProtocolComponentsRequestBody {
-                            protocol_system: request.protocol_system.clone(),
-                            component_ids: request.component_ids.clone(),
-                            tvl_gt: request.tvl_gt,
-                            chain: request.chain,
-                            pagination: PaginationParams {
-                                page: page + iter,
-                                page_size: chunk_size as i64,
-                            },
-                        })
-                        .collect::<Vec<_>>();
-
-                    let tasks: Vec<_> = chunked_bodies
-                        .iter()
-                        .map(|body| {
+        match component_ids {
+            Some(ids) => {
+                let tasks: Vec<_> =
+                    ids.chunks(chunk_size)
+                        .enumerate()
+                        .map(|(index, chunk)| {
                             let sem = semaphore.clone();
+                            let mut base =
+                                ProtocolComponentsParams::new(chain, protocol_system.as_str())
+                                    .with_component_ids(chunk.to_vec())
+                                    .with_pagination(index as i64, chunk_size as i64);
+                            if let Some(tvl) = tvl_gt {
+                                base = base.with_tvl_gt(tvl);
+                            }
                             async move {
                                 let _permit = sem.acquire().await.map_err(|_| {
                                     RPCError::Fatal("Semaphore dropped".to_string())
                                 })?;
-                                self.get_protocol_components(body).await
+                                self.get_protocol_components(base).await
                             }
                         })
                         .collect();
 
-                    let responses = try_join_all(tasks)
-                        .await
-                        .map(|responses| {
-                            let total = responses[0].pagination.total;
-                            ProtocolComponentRequestResponse {
-                                protocol_components: responses
-                                    .into_iter()
-                                    .flat_map(|r| r.protocol_components.into_iter())
-                                    .collect(),
-                                pagination: PaginationResponse {
-                                    page,
-                                    page_size: chunk_size as i64,
-                                    total,
-                                },
-                            }
-                        });
+                try_join_all(tasks)
+                    .await
+                    .map(|responses| {
+                        responses
+                            .into_iter()
+                            .flatten()
+                            .collect()
+                    })
+            }
+            None => {
+                // If no component ids are specified, we need to make requests based on the total
+                // number of results from the first response.
+                let mut base_params =
+                    ProtocolComponentsParams::new(chain, protocol_system.as_str())
+                        .with_pagination(0, chunk_size as i64);
+                if let Some(tvl) = tvl_gt {
+                    base_params = base_params.with_tvl_gt(tvl);
+                }
 
-                    // Update the accumulated response or set the initial response
-                    match responses {
-                        Ok(mut resp) => {
-                            accumulated_response
-                                .protocol_components
-                                .append(&mut resp.protocol_components);
+                let first_result = self
+                    .get_protocol_components(base_params)
+                    .await
+                    .map_err(|err| RPCError::Fatal(err.to_string()))?;
+
+                if first_result.len() < chunk_size {
+                    return Ok(first_result);
+                }
+
+                let mut all = first_result;
+                let mut page = 1i64;
+                loop {
+                    let tasks: Vec<_> = (0..concurrency as i64)
+                        .map(|iter| {
+                            let sem = semaphore.clone();
+                            let mut p =
+                                ProtocolComponentsParams::new(chain, protocol_system.as_str())
+                                    .with_pagination(page + iter, chunk_size as i64);
+                            if let Some(tvl) = tvl_gt {
+                                p = p.with_tvl_gt(tvl);
+                            }
+                            async move {
+                                let _permit = sem.acquire().await.map_err(|_| {
+                                    RPCError::Fatal("Semaphore dropped".to_string())
+                                })?;
+                                self.get_protocol_components(p).await
+                            }
+                        })
+                        .collect();
+
+                    let batch = try_join_all(tasks).await?;
+
+                    let mut done = false;
+                    for r in batch {
+                        if r.len() < chunk_size {
+                            done = true;
                         }
-                        Err(e) => return Err(e),
+                        all.extend(r);
                     }
 
                     page += concurrency as i64;
+                    if done {
+                        break;
+                    }
                 }
-                Ok(accumulated_response)
+                Ok(all)
             }
         }
     }
 
+    /// Retrieves a page of protocol component states.
+    ///
+    /// `block_number` pins the query to a specific block; pass `None` to use the latest state.
     async fn get_protocol_states(
         &self,
-        request: &ProtocolStateRequestBody,
-    ) -> Result<ProtocolStateRequestResponse, RPCError>;
+        params: ProtocolStatesParams,
+    ) -> Result<Vec<ProtocolComponentState>, RPCError>;
 
-    /// Retrieves protocol states for a set of protocol IDs.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
+    /// Retrieves protocol states for a set of protocol IDs, fetching all pages automatically.
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     #[allow(clippy::too_many_arguments)]
     async fn get_protocol_states_paginated<T>(
         &self,
@@ -414,10 +651,10 @@ pub trait RPCClient: Send + Sync {
         ids: &[T],
         protocol_system: &str,
         include_balances: bool,
-        version: &VersionParam,
+        block_number: Option<u64>,
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<ProtocolStateRequestResponse, RPCError>
+    ) -> Result<Vec<ProtocolComponentState>, RPCError>
     where
         T: AsRef<str> + Sync + 'static,
     {
@@ -427,62 +664,49 @@ pub trait RPCClient: Send + Sync {
             self.compression(),
         ) as usize);
 
-        let chunked_bodies = ids
+        let tasks: Vec<_> = ids
             .chunks(chunk_size)
-            .map(|c| ProtocolStateRequestBody {
-                protocol_ids: Some(
-                    c.iter()
-                        .map(|id| id.as_ref().to_string())
-                        .collect(),
-                ),
-                protocol_system: protocol_system.to_string(),
-                chain,
-                include_balances,
-                version: version.clone(),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+            .map(|c| {
+                let sem = semaphore.clone();
+                let chunk: Vec<String> = c
+                    .iter()
+                    .map(|id| id.as_ref().to_string())
+                    .collect();
+                let mut params = ProtocolStatesParams::new(chain, protocol_system)
+                    .with_protocol_ids(chunk)
+                    .with_include_balances(include_balances)
+                    .with_pagination(0, chunk_size as i64);
+                if let Some(bn) = block_number {
+                    params = params.with_block_number(bn);
+                }
+                async move {
+                    let _permit = sem
+                        .acquire()
+                        .await
+                        .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    self.get_protocol_states(params).await
+                }
             })
-            .collect::<Vec<_>>();
-
-        let mut tasks = Vec::new();
-        for body in chunked_bodies.iter() {
-            let sem = semaphore.clone();
-            tasks.push(async move {
-                let _permit = sem
-                    .acquire()
-                    .await
-                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                self.get_protocol_states(body).await
-            });
-        }
+            .collect();
 
         try_join_all(tasks)
             .await
             .map(|responses| {
-                let states = responses
-                    .clone()
+                responses
                     .into_iter()
-                    .flat_map(|r| r.states)
-                    .collect();
-                let total = responses
-                    .iter()
-                    .map(|r| r.pagination.total)
-                    .sum();
-                ProtocolStateRequestResponse {
-                    states,
-                    pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
-                }
+                    .flatten()
+                    .collect()
             })
     }
 
-    /// This function returns only one chunk of tokens. To get all tokens please call
-    /// get_all_tokens.
-    async fn get_tokens(
-        &self,
-        request: &TokensRequestBody,
-    ) -> Result<TokensRequestResponse, RPCError>;
+    /// Retrieves a page of tokens.
+    ///
+    /// Use `get_all_tokens` to fetch all matching tokens automatically.
+    async fn get_tokens(&self, params: TokensParams) -> Result<Vec<Token>, RPCError>;
 
-    /// Retrieves all tokens matching the given criteria.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
+    /// Retrieves all tokens matching the given criteria, fetching all pages automatically.
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_all_tokens(
         &self,
         chain: Chain,
@@ -490,7 +714,7 @@ pub trait RPCClient: Send + Sync {
         traded_n_days_ago: Option<u64>,
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<Vec<ResponseToken>, RPCError> {
+    ) -> Result<Vec<Token>, RPCError> {
         let chunk_size = chunk_size
             .unwrap_or(TokensRequestBody::effective_max_page_size(self.compression()) as usize);
 
@@ -501,209 +725,194 @@ pub trait RPCClient: Send + Sync {
             RPCError::FormatRequest("Failed to convert chunk_size into i64".to_string())
         })?;
 
-        let initial_request = TokensRequestBody {
-            token_addresses: None,
-            min_quality,
-            traded_n_days_ago,
-            pagination: PaginationParams { page: 0, page_size },
-            chain,
-        };
-
-        let first_response = self
-            .get_tokens(&initial_request)
-            .await?;
-        let total_items = first_response.pagination.total;
-        let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
-
-        let mut all_tokens = first_response.tokens;
-
-        // If only one page, return immediately
-        if total_pages <= 1 {
-            return Ok(all_tokens);
+        let mut base_params = TokensParams::new(chain).with_pagination(0, page_size);
+        if let Some(q) = min_quality {
+            base_params = base_params.with_min_quality(q);
+        }
+        if let Some(d) = traded_n_days_ago {
+            base_params = base_params.with_traded_n_days_ago(d);
         }
 
-        // Create a task for each remaining page
-        let tasks: Vec<_> = (1..total_pages)
-            .map(|page| {
-                let sem = semaphore.clone();
-                let request = TokensRequestBody {
-                    token_addresses: None,
-                    min_quality,
-                    traded_n_days_ago,
-                    pagination: PaginationParams { page, page_size },
-                    chain,
-                };
+        let first_response = self.get_tokens(base_params).await?;
 
-                async move {
-                    // Semaphore controls how many requests are actually in-flight
-                    let _permit = sem
-                        .acquire()
-                        .await
-                        .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                    self.get_tokens(&request).await
+        if first_response.len() < chunk_size {
+            return Ok(first_response);
+        }
+
+        let mut all_tokens = first_response;
+        let mut page = 1i64;
+
+        loop {
+            // Create a task for each page in this batch
+            let tasks: Vec<_> = (0..concurrency as i64)
+                .map(|i| {
+                    let sem = semaphore.clone();
+                    let mut p = TokensParams::new(chain).with_pagination(page + i, page_size);
+                    if let Some(q) = min_quality {
+                        p = p.with_min_quality(q);
+                    }
+                    if let Some(d) = traded_n_days_ago {
+                        p = p.with_traded_n_days_ago(d);
+                    }
+                    async move {
+                        // Semaphore controls how many requests are actually in-flight
+                        let _permit = sem
+                            .acquire()
+                            .await
+                            .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                        self.get_tokens(p).await
+                    }
+                })
+                .collect();
+
+            let responses = try_join_all(tasks).await?;
+
+            let mut done = false;
+            for response in responses {
+                if response.len() < chunk_size {
+                    done = true;
                 }
-            })
-            .collect();
+                all_tokens.extend(response);
+            }
 
-        // Join all tasks - semaphore ensures only 'concurrency' execute at once
-        let responses = try_join_all(tasks).await?;
-
-        // Aggregate all tokens from all pages
-        for mut response in responses {
-            all_tokens.append(&mut response.tokens);
+            page += concurrency as i64;
+            if done {
+                break;
+            }
         }
 
         Ok(all_tokens)
     }
 
+    /// Retrieves the protocol systems known to the server.
     async fn get_protocol_systems(
         &self,
-        request: &ProtocolSystemsRequestBody,
-    ) -> Result<ProtocolSystemsRequestResponse, RPCError>;
+        params: ProtocolSystemsParams,
+    ) -> Result<ProtocolSystemsResponse, RPCError>;
 
+    /// Retrieves component TVL values.
+    ///
+    /// Filter by `component_ids` or by `protocol_system`; both are optional.
     async fn get_component_tvl(
         &self,
-        request: &ComponentTvlRequestBody,
-    ) -> Result<ComponentTvlRequestResponse, RPCError>;
+        params: ComponentTvlParams,
+    ) -> Result<HashMap<String, f64>, RPCError>;
 
-    /// Retrieves component TVL for a set of component IDs.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
+    /// Retrieves component TVL values, fetching all pages automatically.
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_component_tvl_paginated(
         &self,
-        request: &ComponentTvlRequestBody,
+        chain: Chain,
+        protocol_system: Option<String>,
+        component_ids: Option<Vec<String>>,
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<ComponentTvlRequestResponse, RPCError> {
+    ) -> Result<HashMap<String, f64>, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         let chunk_size = chunk_size.unwrap_or(ComponentTvlRequestBody::effective_max_page_size(
             self.compression(),
         ) as usize);
 
-        match request.component_ids {
-            Some(ref ids) => {
-                let chunked_requests = ids
-                    .chunks(chunk_size)
-                    .enumerate()
-                    .map(|(index, _)| ComponentTvlRequestBody {
-                        chain: request.chain,
-                        protocol_system: request.protocol_system.clone(),
-                        component_ids: Some(ids.clone()),
-                        pagination: PaginationParams {
-                            page: index as i64,
-                            page_size: chunk_size as i64,
-                        },
-                    })
-                    .collect::<Vec<_>>();
-
-                let tasks: Vec<_> = chunked_requests
-                    .into_iter()
-                    .map(|req| {
-                        let sem = semaphore.clone();
-                        async move {
-                            let _permit = sem
-                                .acquire()
-                                .await
-                                .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                            self.get_component_tvl(&req).await
-                        }
-                    })
-                    .collect();
+        match component_ids {
+            Some(ids) => {
+                let tasks: Vec<_> =
+                    ids.chunks(chunk_size)
+                        .enumerate()
+                        .map(|(index, chunk)| {
+                            let sem = semaphore.clone();
+                            let mut p = ComponentTvlParams::new(chain)
+                                .with_component_ids(chunk.to_vec())
+                                .with_pagination(index as i64, chunk_size as i64);
+                            if let Some(ref ps) = protocol_system {
+                                p = p.with_protocol_system(ps.as_str());
+                            }
+                            async move {
+                                let _permit = sem.acquire().await.map_err(|_| {
+                                    RPCError::Fatal("Semaphore dropped".to_string())
+                                })?;
+                                self.get_component_tvl(p).await
+                            }
+                        })
+                        .collect();
 
                 let responses = try_join_all(tasks).await?;
 
                 let mut merged_tvl = HashMap::new();
                 for resp in responses {
-                    for (key, value) in resp.tvl {
+                    for (key, value) in resp {
                         *merged_tvl.entry(key).or_insert(0.0) = value;
                     }
                 }
 
-                Ok(ComponentTvlRequestResponse {
-                    tvl: merged_tvl,
-                    pagination: PaginationResponse {
-                        page: 0,
-                        page_size: chunk_size as i64,
-                        total: ids.len() as i64,
-                    },
-                })
+                Ok(merged_tvl)
             }
-            _ => {
-                let first_request = ComponentTvlRequestBody {
-                    chain: request.chain,
-                    protocol_system: request.protocol_system.clone(),
-                    component_ids: request.component_ids.clone(),
-                    pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
-                };
+            None => {
+                let mut base = ComponentTvlParams::new(chain).with_pagination(0, chunk_size as i64);
+                if let Some(ref ps) = protocol_system {
+                    base = base.with_protocol_system(ps.as_str());
+                }
 
-                let first_response = self
-                    .get_component_tvl(&first_request)
-                    .await?;
-                let total_items = first_response.pagination.total;
-                let total_pages = (total_items as f64 / chunk_size as f64).ceil() as i64;
+                let first = self.get_component_tvl(base).await?;
 
-                let mut merged_tvl = first_response.tvl;
+                if first.len() < chunk_size {
+                    return Ok(first);
+                }
 
-                let mut page = 1;
-                while page < total_pages {
-                    let requests_in_this_iteration = (total_pages - page).min(concurrency as i64);
+                let mut merged_tvl = first;
+                let mut page = 1i64;
 
-                    let chunked_requests: Vec<_> = (0..requests_in_this_iteration)
-                        .map(|i| ComponentTvlRequestBody {
-                            chain: request.chain,
-                            protocol_system: request.protocol_system.clone(),
-                            component_ids: request.component_ids.clone(),
-                            pagination: PaginationParams {
-                                page: page + i,
-                                page_size: chunk_size as i64,
-                            },
-                        })
-                        .collect();
-
-                    let tasks: Vec<_> = chunked_requests
-                        .into_iter()
-                        .map(|req| {
+                loop {
+                    let tasks: Vec<_> = (0..concurrency as i64)
+                        .map(|i| {
                             let sem = semaphore.clone();
+                            let mut p = ComponentTvlParams::new(chain)
+                                .with_pagination(page + i, chunk_size as i64);
+                            if let Some(ref ps) = protocol_system {
+                                p = p.with_protocol_system(ps.as_str());
+                            }
                             async move {
                                 let _permit = sem.acquire().await.map_err(|_| {
                                     RPCError::Fatal("Semaphore dropped".to_string())
                                 })?;
-                                self.get_component_tvl(&req).await
+                                self.get_component_tvl(p).await
                             }
                         })
                         .collect();
 
-                    let responses = try_join_all(tasks).await?;
+                    let batch = try_join_all(tasks).await?;
 
-                    // merge hashmap
-                    for resp in responses {
-                        for (key, value) in resp.tvl {
-                            *merged_tvl.entry(key).or_insert(0.0) += value;
+                    let mut done = false;
+                    for resp in batch {
+                        if resp.len() < chunk_size {
+                            done = true;
                         }
+                        merged_tvl.extend(resp);
                     }
 
                     page += concurrency as i64;
+                    if done {
+                        break;
+                    }
                 }
 
-                Ok(ComponentTvlRequestResponse {
-                    tvl: merged_tvl,
-                    pagination: PaginationResponse {
-                        page: 0,
-                        page_size: chunk_size as i64,
-                        total: total_items,
-                    },
-                })
+                Ok(merged_tvl)
             }
         }
     }
 
+    /// Retrieves a page of traced entry points.
+    ///
+    /// Use `get_traced_entry_points_paginated` to fetch all pages automatically.
     async fn get_traced_entry_points(
         &self,
-        request: &TracedEntryPointRequestBody,
-    ) -> Result<TracedEntryPointRequestResponse, RPCError>;
+        params: TracedEntryPointsParams,
+    ) -> Result<TracedEntryPoints, RPCError>;
 
-    /// Retrieves traced entry points for a set of component IDs.
-    /// If the `chunk_size` is `None`, it defaults to the maximum page size.
+    /// Retrieves traced entry points for a set of component IDs, fetching all pages automatically.
+    ///
+    /// If `chunk_size` is `None`, it defaults to the maximum page size.
     async fn get_traced_entry_points_paginated(
         &self,
         chain: Chain,
@@ -711,51 +920,38 @@ pub trait RPCClient: Send + Sync {
         component_ids: &[String],
         chunk_size: Option<usize>,
         concurrency: usize,
-    ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+    ) -> Result<TracedEntryPoints, RPCError> {
         let semaphore = Arc::new(Semaphore::new(concurrency));
 
         let chunk_size = chunk_size.unwrap_or(
             TracedEntryPointRequestBody::effective_max_page_size(self.compression()) as usize,
         );
 
-        let chunked_bodies = component_ids
+        let tasks: Vec<_> = component_ids
             .chunks(chunk_size)
-            .map(|c| TracedEntryPointRequestBody {
-                chain,
-                protocol_system: protocol_system.to_string(),
-                component_ids: Some(c.to_vec()),
-                pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+            .map(|c| {
+                let sem = semaphore.clone();
+                let params = TracedEntryPointsParams::new(chain, protocol_system)
+                    .with_component_ids(c.to_vec())
+                    .with_pagination(0, chunk_size as i64);
+                async move {
+                    let _permit = sem
+                        .acquire()
+                        .await
+                        .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
+                    self.get_traced_entry_points(params)
+                        .await
+                }
             })
-            .collect::<Vec<_>>();
-
-        let mut tasks = Vec::new();
-        for body in chunked_bodies.iter() {
-            let sem = semaphore.clone();
-            tasks.push(async move {
-                let _permit = sem
-                    .acquire()
-                    .await
-                    .map_err(|_| RPCError::Fatal("Semaphore dropped".to_string()))?;
-                self.get_traced_entry_points(body).await
-            });
-        }
+            .collect();
 
         try_join_all(tasks)
             .await
             .map(|responses| {
-                let traced_entry_points = responses
-                    .clone()
+                responses
                     .into_iter()
-                    .flat_map(|r| r.traced_entry_points)
-                    .collect();
-                let total = responses
-                    .iter()
-                    .map(|r| r.pagination.total)
-                    .sum();
-                TracedEntryPointRequestResponse {
-                    traced_entry_points,
-                    pagination: PaginationResponse { page: 0, page_size: chunk_size as i64, total },
-                }
+                    .flatten()
+                    .collect()
             })
     }
 
@@ -1004,25 +1200,49 @@ fn parse_retry_value(val: &str) -> Option<SystemTime> {
     None
 }
 
+/// Builds a `VersionParam` pinned to a block number on the given chain.
+///
+/// When `block_number` is `None`, returns the default (current-time timestamp).
+fn build_version_param(chain: Chain, block_number: Option<u64>) -> VersionParam {
+    match block_number {
+        Some(n) => VersionParam::new(
+            None,
+            Some({
+                #[allow(deprecated)]
+                BlockParam { hash: None, chain: Some(chain.into()), number: Some(n as i64) }
+            }),
+        ),
+        None => VersionParam::default(),
+    }
+}
+
 #[async_trait]
 impl RPCClient for HttpRPCClient {
     fn compression(&self) -> bool {
         self.compression
     }
 
-    #[instrument(skip(self, request))]
+    #[instrument(skip(self))]
     async fn get_contract_state(
         &self,
-        request: &StateRequestBody,
-    ) -> Result<StateRequestResponse, RPCError> {
-        // Check if contract ids are specified
-        if request
+        params: ContractStateParams,
+    ) -> Result<Vec<Account>, RPCError> {
+        if params
             .contract_ids
             .as_ref()
             .is_none_or(|ids| ids.is_empty())
         {
             warn!("No contract ids specified in request.");
         }
+
+        let version = build_version_param(params.chain, params.block_number);
+        let request = StateRequestBody {
+            contract_ids: params.contract_ids,
+            protocol_system: params.protocol_system,
+            chain: params.chain.into(),
+            version,
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
 
         let uri = format!(
             "{}/{}/contract_state",
@@ -1034,7 +1254,7 @@ impl RPCClient for HttpRPCClient {
         debug!(%uri, "Sending contract_state request to Tycho server");
         trace!(?request, "Sending request to Tycho server");
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
         trace!(?response, "Received response from Tycho server");
 
@@ -1044,27 +1264,32 @@ impl RPCClient for HttpRPCClient {
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
         if body.is_empty() {
             // Pure native protocols will return empty contract states
-            return Ok(StateRequestResponse {
-                accounts: vec![],
-                pagination: PaginationResponse {
-                    page: request.pagination.page,
-                    page_size: request.pagination.page,
-                    total: 0,
-                },
-            });
+            return Ok(vec![]);
         }
 
-        let accounts = serde_json::from_str::<StateRequestResponse>(&body)
+        let dto_response = serde_json::from_str::<StateRequestResponse>(&body)
             .map_err(|err| RPCError::from_parse_error(err, &body))?;
-        trace!(?accounts, "Received contract_state response from Tycho server");
+        trace!(?dto_response, "Received contract_state response from Tycho server");
 
-        Ok(accounts)
+        Ok(dto_response
+            .accounts
+            .into_iter()
+            .map(Account::from)
+            .collect())
     }
 
     async fn get_protocol_components(
         &self,
-        request: &ProtocolComponentsRequestBody,
-    ) -> Result<ProtocolComponentRequestResponse, RPCError> {
+        params: ProtocolComponentsParams,
+    ) -> Result<Vec<ProtocolComponent>, RPCError> {
+        let request = ProtocolComponentsRequestBody {
+            protocol_system: params.protocol_system,
+            component_ids: params.component_ids,
+            tvl_gt: params.tvl_gt,
+            chain: params.chain.into(),
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
+
         let uri = format!(
             "{}/{}/protocol_components",
             self.url
@@ -1076,7 +1301,7 @@ impl RPCClient for HttpRPCClient {
         trace!(?request, "Sending request to Tycho server");
 
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
 
         trace!(?response, "Received response from Tycho server");
@@ -1085,25 +1310,38 @@ impl RPCClient for HttpRPCClient {
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let components = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
+        let dto_response = serde_json::from_str::<ProtocolComponentRequestResponse>(&body)
             .map_err(|err| RPCError::from_parse_error(err, &body))?;
-        trace!(?components, "Received protocol_components response from Tycho server");
+        trace!(?dto_response, "Received protocol_components response from Tycho server");
 
-        Ok(components)
+        Ok(dto_response
+            .protocol_components
+            .into_iter()
+            .map(ProtocolComponent::from)
+            .collect())
     }
 
     async fn get_protocol_states(
         &self,
-        request: &ProtocolStateRequestBody,
-    ) -> Result<ProtocolStateRequestResponse, RPCError> {
-        // Check if protocol ids are specified
-        if request
+        params: ProtocolStatesParams,
+    ) -> Result<Vec<ProtocolComponentState>, RPCError> {
+        if params
             .protocol_ids
             .as_ref()
             .is_none_or(|ids| ids.is_empty())
         {
             warn!("No protocol ids specified in request.");
         }
+
+        let version = build_version_param(params.chain, params.block_number);
+        let request = ProtocolStateRequestBody {
+            protocol_ids: params.protocol_ids,
+            protocol_system: params.protocol_system,
+            chain: params.chain.into(),
+            include_balances: params.include_balances,
+            version,
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
 
         let uri = format!(
             "{}/{}/protocol_state",
@@ -1116,7 +1354,7 @@ impl RPCClient for HttpRPCClient {
         trace!(?request, "Sending request to Tycho server");
 
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
         trace!(?response, "Received response from Tycho server");
 
@@ -1127,27 +1365,29 @@ impl RPCClient for HttpRPCClient {
 
         if body.is_empty() {
             // Pure VM protocols will return empty states
-            return Ok(ProtocolStateRequestResponse {
-                states: vec![],
-                pagination: PaginationResponse {
-                    page: request.pagination.page,
-                    page_size: request.pagination.page_size,
-                    total: 0,
-                },
-            });
+            return Ok(vec![]);
         }
 
-        let states = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
+        let dto_response = serde_json::from_str::<ProtocolStateRequestResponse>(&body)
             .map_err(|err| RPCError::from_parse_error(err, &body))?;
-        trace!(?states, "Received protocol_states response from Tycho server");
+        trace!(?dto_response, "Received protocol_states response from Tycho server");
 
-        Ok(states)
+        Ok(dto_response
+            .states
+            .into_iter()
+            .map(ProtocolComponentState::from)
+            .collect())
     }
 
-    async fn get_tokens(
-        &self,
-        request: &TokensRequestBody,
-    ) -> Result<TokensRequestResponse, RPCError> {
+    async fn get_tokens(&self, params: TokensParams) -> Result<Vec<Token>, RPCError> {
+        let request = TokensRequestBody {
+            token_addresses: None,
+            min_quality: params.min_quality,
+            traded_n_days_ago: params.traded_n_days_ago,
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+            chain: params.chain.into(),
+        };
+
         let uri = format!(
             "{}/{}/tokens",
             self.url
@@ -1158,23 +1398,32 @@ impl RPCClient for HttpRPCClient {
         debug!(%uri, "Sending tokens request to Tycho server");
 
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
 
         let body = response
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let tokens = serde_json::from_str::<TokensRequestResponse>(&body)
+        let dto_response = serde_json::from_str::<TokensRequestResponse>(&body)
             .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
 
-        Ok(tokens)
+        Ok(dto_response
+            .tokens
+            .into_iter()
+            .map(Token::from)
+            .collect())
     }
 
     async fn get_protocol_systems(
         &self,
-        request: &ProtocolSystemsRequestBody,
-    ) -> Result<ProtocolSystemsRequestResponse, RPCError> {
+        params: ProtocolSystemsParams,
+    ) -> Result<ProtocolSystemsResponse, RPCError> {
+        let request = ProtocolSystemsRequestBody {
+            chain: params.chain.into(),
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
+
         let uri = format!(
             "{}/{}/protocol_systems",
             self.url
@@ -1185,23 +1434,34 @@ impl RPCClient for HttpRPCClient {
         debug!(%uri, "Sending protocol_systems request to Tycho server");
         trace!(?request, "Sending request to Tycho server");
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
         trace!(?response, "Received response from Tycho server");
         let body = response
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let protocol_systems = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
+        let dto = serde_json::from_str::<ProtocolSystemsRequestResponse>(&body)
             .map_err(|err| RPCError::ParseResponse(format!("Error: {err}, Body: {body}")))?;
-        trace!(?protocol_systems, "Received protocol_systems response from Tycho server");
-        Ok(protocol_systems)
+        trace!(?dto, "Received protocol_systems response from Tycho server");
+        Ok(ProtocolSystemsResponse {
+            protocol_systems: dto.protocol_systems,
+            dci_protocols: dto.dci_protocols,
+            total: dto.pagination.total,
+        })
     }
 
     async fn get_component_tvl(
         &self,
-        request: &ComponentTvlRequestBody,
-    ) -> Result<ComponentTvlRequestResponse, RPCError> {
+        params: ComponentTvlParams,
+    ) -> Result<HashMap<String, f64>, RPCError> {
+        let request = ComponentTvlRequestBody {
+            chain: params.chain.into(),
+            protocol_system: params.protocol_system,
+            component_ids: params.component_ids,
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
+
         let uri = format!(
             "{}/{}/component_tvl",
             self.url
@@ -1212,26 +1472,33 @@ impl RPCClient for HttpRPCClient {
         debug!(%uri, "Sending get_component_tvl request to Tycho server");
         trace!(?request, "Sending request to Tycho server");
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
         trace!(?response, "Received response from Tycho server");
         let body = response
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let component_tvl =
+        let dto_response =
             serde_json::from_str::<ComponentTvlRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse component_tvl response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
-        trace!(?component_tvl, "Received component_tvl response from Tycho server");
-        Ok(component_tvl)
+        trace!(?dto_response, "Received component_tvl response from Tycho server");
+        Ok(dto_response.tvl)
     }
 
     async fn get_traced_entry_points(
         &self,
-        request: &TracedEntryPointRequestBody,
-    ) -> Result<TracedEntryPointRequestResponse, RPCError> {
+        params: TracedEntryPointsParams,
+    ) -> Result<TracedEntryPoints, RPCError> {
+        let request = TracedEntryPointRequestBody {
+            chain: params.chain.into(),
+            protocol_system: params.protocol_system,
+            component_ids: params.component_ids,
+            pagination: PaginationParams { page: params.page, page_size: params.page_size },
+        };
+
         let uri = format!(
             "{}/{TYCHO_SERVER_VERSION}/traced_entry_points",
             self.url
@@ -1242,7 +1509,7 @@ impl RPCClient for HttpRPCClient {
         trace!(?request, "Sending request to Tycho server");
 
         let response = self
-            .make_post_request(request, &uri)
+            .make_post_request(&request, &uri)
             .await?;
 
         trace!(?response, "Received response from Tycho server");
@@ -1251,13 +1518,26 @@ impl RPCClient for HttpRPCClient {
             .text()
             .await
             .map_err(|e| RPCError::ParseResponse(e.to_string()))?;
-        let entrypoints =
+        let dto_response =
             serde_json::from_str::<TracedEntryPointRequestResponse>(&body).map_err(|err| {
                 error!("Failed to parse traced_entry_points response: {:?}", &body);
                 RPCError::ParseResponse(format!("Error: {err}, Body: {body}"))
             })?;
-        trace!(?entrypoints, "Received traced_entry_points response from Tycho server");
-        Ok(entrypoints)
+        trace!(?dto_response, "Received traced_entry_points response from Tycho server");
+        Ok(dto_response
+            .traced_entry_points
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    k,
+                    v.into_iter()
+                        .map(|(ep, tr)| {
+                            (EntryPointWithTracingParams::from(ep), TracingResult::from(tr))
+                        })
+                        .collect(),
+                )
+            })
+            .collect())
     }
 
     async fn get_snapshots<'a>(
@@ -1272,23 +1552,15 @@ impl RPCClient for HttpRPCClient {
             .cloned()
             .collect();
 
-        let version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(request.chain),
-                    number: Some(request.block_number as i64),
-                }
-            }),
-        );
-
         let component_tvl = if request.include_tvl && !component_ids.is_empty() {
-            let body = ComponentTvlRequestBody::id_filtered(component_ids.clone(), request.chain);
-            self.get_component_tvl_paginated(&body, chunk_size, concurrency)
-                .await?
-                .tvl
+            self.get_component_tvl_paginated(
+                request.chain,
+                None,
+                Some(component_ids.clone()),
+                chunk_size,
+                concurrency,
+            )
+            .await?
         } else {
             HashMap::new()
         };
@@ -1299,12 +1571,11 @@ impl RPCClient for HttpRPCClient {
                 &component_ids,
                 request.protocol_system,
                 request.include_balances,
-                &version,
+                Some(request.block_number),
                 chunk_size,
                 concurrency,
             )
             .await?
-            .states
             .into_iter()
             .map(|state| (state.component_id.clone(), state))
             .collect()
@@ -1351,12 +1622,11 @@ impl RPCClient for HttpRPCClient {
                     request.chain,
                     request.contract_ids,
                     request.protocol_system,
-                    &version,
+                    Some(request.block_number),
                     chunk_size,
                     concurrency,
                 )
                 .await?
-                .accounts
                 .into_iter()
                 .map(|acc| (acc.address.clone(), acc))
                 .collect::<HashMap<_, _>>();
@@ -1369,7 +1639,7 @@ impl RPCClient for HttpRPCClient {
                 .filter_map(|(id, comp)| {
                     if component_ids.contains(id) {
                         Some(
-                            comp.contract_ids
+                            comp.contract_addresses
                                 .iter()
                                 .map(|address| (address.clone(), comp.id.clone())),
                         )
@@ -1419,10 +1689,7 @@ mod tests {
 
     use mockito::Server;
     use rstest::rstest;
-    // TODO: remove once deprecated ProtocolId struct is removed
-    #[allow(deprecated)]
-    use tycho_common::dto::ProtocolId;
-    use tycho_common::dto::{AddressStorageLocation, TracingParams};
+    use tycho_common::models::blockchain::AddressStorageLocation;
 
     use super::*;
 
@@ -1436,26 +1703,26 @@ mod tests {
             ids: &[T],
             protocol_system: &str,
             include_balances: bool,
-            version: &VersionParam,
+            block_number: Option<u64>,
             chunk_size: usize,
             _concurrency: usize,
-        ) -> Vec<ProtocolStateRequestBody>
+        ) -> Vec<(Chain, Vec<String>, String, bool, Option<u64>, PaginationParams)>
         where
             T: AsRef<str> + Clone + Send + Sync + 'static,
         {
             ids.chunks(chunk_size)
-                .map(|chunk| ProtocolStateRequestBody {
-                    protocol_ids: Some(
+                .map(|chunk| {
+                    (
+                        chain,
                         chunk
                             .iter()
                             .map(|id| id.as_ref().to_string())
                             .collect(),
-                    ),
-                    protocol_system: protocol_system.to_string(),
-                    chain,
-                    include_balances,
-                    version: version.clone(),
-                    pagination: PaginationParams { page: 0, page_size: chunk_size as i64 },
+                        protocol_system.to_string(),
+                        include_balances,
+                        block_number,
+                        PaginationParams { page: 0, page_size: chunk_size as i64 },
+                    )
                 })
                 .collect()
         }
@@ -1486,46 +1753,33 @@ mod tests {
         }
         "#;
 
-    // TODO: remove once deprecated ProtocolId struct is removed
-    #[allow(deprecated)]
     #[rstest]
-    #[case::protocol_id_input(vec![
-        ProtocolId { id: "id1".to_string(), chain: Chain::Ethereum },
-        ProtocolId { id: "id2".to_string(), chain: Chain::Ethereum }
-    ])]
     #[case::string_input(vec![
         "id1".to_string(),
         "id2".to_string()
     ])]
     #[tokio::test]
-    async fn test_get_protocol_states_paginated_backwards_compatibility<T>(#[case] ids: Vec<T>)
+    async fn test_get_protocol_states_paginated<T>(#[case] ids: Vec<T>)
     where
         T: AsRef<str> + Clone + Send + Sync + 'static,
     {
         let mock_client = MockRPCClient::new();
 
-        let request_bodies = mock_client
+        let request_args = mock_client
             .test_get_protocol_states_paginated(
                 Chain::Ethereum,
                 &ids,
                 "test_system",
                 true,
-                &VersionParam::default(),
+                None,
                 2,
                 2,
             )
             .await;
 
-        // Verify that the request bodies have been created correctly
-        assert_eq!(request_bodies.len(), 1);
-        assert_eq!(
-            request_bodies[0]
-                .protocol_ids
-                .as_ref()
-                .unwrap()
-                .len(),
-            2
-        );
+        // Verify that the request args have been split into chunks correctly
+        assert_eq!(request_args.len(), 1);
+        assert_eq!(request_args[0].1.len(), 2);
     }
 
     #[tokio::test]
@@ -1545,11 +1799,10 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_contract_state(&Default::default())
+        let accounts = client
+            .get_contract_state(ContractStateParams::new(Chain::Ethereum, ""))
             .await
             .expect("get state");
-        let accounts = response.accounts;
 
         mocked_server.assert();
         assert_eq!(accounts.len(), 1);
@@ -1609,11 +1862,10 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_protocol_components(&Default::default())
+        let components = client
+            .get_protocol_components(ProtocolComponentsParams::new(Chain::Ethereum, ""))
             .await
             .expect("get state");
-        let components = response.protocol_components;
 
         mocked_server.assert();
         assert_eq!(components.len(), 1);
@@ -1664,11 +1916,12 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_protocol_states(&Default::default())
+        let states = client
+            .get_protocol_states(
+                ProtocolStatesParams::new(Chain::Ethereum, "").with_include_balances(true),
+            )
             .await
             .expect("get state");
-        let states = response.states;
 
         mocked_server.assert();
         assert_eq!(states.len(), 1);
@@ -1738,14 +1991,14 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_tokens(&Default::default())
+        let tokens = client
+            .get_tokens(TokensParams::new(Chain::Ethereum))
             .await
             .expect("get tokens");
 
         let expected = vec![
-            ResponseToken {
-                chain: Chain::Ethereum,
+            Token {
+                chain: tycho_common::models::Chain::Ethereum,
                 address: Bytes::from_str("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2").unwrap(),
                 symbol: "WETH".to_string(),
                 decimals: 18,
@@ -1753,8 +2006,8 @@ mod tests {
                 gas: vec![Some(29962)],
                 quality: 100,
             },
-            ResponseToken {
-                chain: Chain::Ethereum,
+            Token {
+                chain: tycho_common::models::Chain::Ethereum,
                 address: Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
                 symbol: "USDC".to_string(),
                 decimals: 6,
@@ -1765,8 +2018,7 @@ mod tests {
         ];
 
         mocked_server.assert();
-        assert_eq!(response.tokens, expected);
-        assert_eq!(response.pagination, PaginationResponse { page: 0, page_size: 20, total: 10 });
+        assert_eq!(tokens, expected);
     }
 
     #[rstest]
@@ -1799,7 +2051,7 @@ mod tests {
             .expect("create client");
 
         let response = client
-            .get_protocol_systems(&Default::default())
+            .get_protocol_systems(ProtocolSystemsParams::new(Chain::Ethereum))
             .await
             .expect("get protocol systems");
 
@@ -1835,11 +2087,10 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_component_tvl(&Default::default())
+        let component_tvl = client
+            .get_component_tvl(ComponentTvlParams::new(Chain::Ethereum))
             .await
-            .expect("get protocol systems");
-        let component_tvl = response.tvl;
+            .expect("get component tvl");
 
         mocked_server.assert();
         assert_eq!(component_tvl.get("component1"), Some(&100.0));
@@ -1900,11 +2151,10 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        let response = client
-            .get_traced_entry_points(&Default::default())
+        let entrypoints = client
+            .get_traced_entry_points(TracedEntryPointsParams::new(Chain::Ethereum, ""))
             .await
             .expect("get traced entry points");
-        let entrypoints = response.traced_entry_points;
 
         mocked_server.assert();
         assert_eq!(entrypoints.len(), 1);
@@ -1920,7 +2170,8 @@ mod tests {
             Bytes::from_str("0x0000000000000000000000000000000000000001").unwrap()
         );
         assert_eq!(entrypoint.entry_point.signature, "sig()");
-        let TracingParams::RPCTracer(rpc_params) = &entrypoint.params;
+        let tycho_common::models::blockchain::TracingParams::RPCTracer(rpc_params) =
+            &entrypoint.params;
         assert_eq!(
             rpc_params.caller,
             Some(Bytes::from("0x000000000000000000000000000000000000000a"))
@@ -2605,23 +2856,25 @@ mod tests {
             .expect("create client");
 
         #[allow(deprecated)]
-        let component = tycho_common::dto::ProtocolComponent {
-            id: "component1".to_string(),
-            protocol_system: "test_protocol".to_string(),
-            protocol_type_name: "test_type".to_string(),
-            chain: Chain::Ethereum,
-            tokens: vec![],
-            contract_ids: vec![
-                Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
-            ],
-            static_attributes: HashMap::new(),
-            change: tycho_common::dto::ChangeType::Creation,
-            creation_tx: Bytes::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .unwrap(),
-            created_at: chrono::Utc::now().naive_utc(),
-        };
+        let component = tycho_common::models::protocol::ProtocolComponent::from(
+            tycho_common::dto::ProtocolComponent {
+                id: "component1".to_string(),
+                protocol_system: "test_protocol".to_string(),
+                protocol_type_name: "test_type".to_string(),
+                chain: Chain::Ethereum.into(),
+                tokens: vec![],
+                contract_ids: vec![
+                    Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
+                ],
+                static_attributes: HashMap::new(),
+                change: tycho_common::dto::ChangeType::Creation,
+                creation_tx: Bytes::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                created_at: chrono::Utc::now().naive_utc(),
+            },
+        );
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
@@ -2728,21 +2981,23 @@ mod tests {
 
         // Create test component
         #[allow(deprecated)]
-        let component = tycho_common::dto::ProtocolComponent {
-            id: "component1".to_string(),
-            protocol_system: "test_protocol".to_string(),
-            protocol_type_name: "test_type".to_string(),
-            chain: Chain::Ethereum,
-            tokens: vec![],
-            contract_ids: vec![],
-            static_attributes: HashMap::new(),
-            change: tycho_common::dto::ChangeType::Creation,
-            creation_tx: Bytes::from_str(
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-            )
-            .unwrap(),
-            created_at: chrono::Utc::now().naive_utc(),
-        };
+        let component = tycho_common::models::protocol::ProtocolComponent::from(
+            tycho_common::dto::ProtocolComponent {
+                id: "component1".to_string(),
+                protocol_system: "test_protocol".to_string(),
+                protocol_type_name: "test_type".to_string(),
+                chain: Chain::Ethereum.into(),
+                tokens: vec![],
+                contract_ids: vec![],
+                static_attributes: HashMap::new(),
+                change: tycho_common::dto::ChangeType::Creation,
+                creation_tx: Bytes::from_str(
+                    "0x0000000000000000000000000000000000000000000000000000000000000000",
+                )
+                .unwrap(),
+                created_at: chrono::Utc::now().naive_utc(),
+            },
+        );
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
@@ -2802,10 +3057,10 @@ mod tests {
         .expect("create client");
 
         let response = client
-            .get_contract_state(&Default::default())
+            .get_contract_state(ContractStateParams::new(Chain::Ethereum, ""))
             .await
             .expect("get state");
-        let accounts = response.accounts;
+        let accounts = response;
 
         mocked_server.assert();
         assert_eq!(accounts.len(), 1);
@@ -2836,10 +3091,10 @@ mod tests {
         .expect("create client");
 
         let response = client
-            .get_contract_state(&Default::default())
+            .get_contract_state(ContractStateParams::new(Chain::Ethereum, ""))
             .await
             .expect("get state");
-        let accounts = response.accounts;
+        let accounts = response;
 
         // Verify the mock was called (client sent request without Accept-Encoding header)
         mocked_server.assert();

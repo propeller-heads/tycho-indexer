@@ -78,7 +78,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for EVMPoolState<PreCache
         }
         let involved_contracts = snapshot
             .component
-            .contract_ids
+            .contract_addresses
             .iter()
             .map(|bytes: &Bytes| Address::from_slice(bytes.as_ref()))
             .collect::<HashSet<Address>>();
@@ -196,7 +196,10 @@ mod tests {
     use chrono::DateTime;
     use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
-    use tycho_common::dto::{Chain, ChangeType, ProtocolComponent, ResponseProtocolState};
+    use tycho_common::{
+        dto::{Chain, ChangeType, ResponseProtocolState},
+        models::protocol::ProtocolComponent,
+    };
 
     use super::*;
     use crate::evm::{
@@ -227,13 +230,13 @@ mod tests {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
             protocol_system: "vm:balancer_v2".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
-            chain: Chain::Ethereum,
+            chain: Chain::Ethereum.into(),
             tokens,
-            contract_ids: vec![
+            contract_addresses: vec![
                 Bytes::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()
             ],
             static_attributes,
-            change: ChangeType::Creation,
+            change: ChangeType::Creation.into(),
             creation_tx: Bytes::from_str("0x0000").unwrap(),
             created_at: creation_time,
         }
@@ -292,7 +295,8 @@ mod tests {
                     .to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            },
+            }
+            .into(),
             component: vm_component(),
             component_tvl: None,
             entrypoints: Vec::new(),
