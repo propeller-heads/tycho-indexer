@@ -22,7 +22,7 @@ The `Solution` struct defines your order and how it should be filled. This is th
 {% tab title="UserTransferType" %}
 Specifies how user funds (the input token) enter the router:
 
-<table><thead><tr><th width="210.01953125" align="center">Variant</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>TransferFromPermit2</strong></td><td>Use Permit2 for token transfer. You must approve the Permit2 contract and sign the permit externally.</td></tr><tr><td align="center"><strong>TransferFrom</strong> <em>(default)</em></td><td>Use standard ERC-20 approve + transferFrom. You must approve the TychoRouter to spend your tokens.</td></tr><tr><td align="center"><strong>UseVaultsFunds</strong></td><td>No transfer is performed. Uses tokens already deposited in the TychoRouter vault.</td></tr></tbody></table>
+<table><thead><tr><th width="210.01953125" align="center">Variant</th><th>Description</th></tr></thead><tbody><tr><td align="center"><strong>TransferFrom</strong> <em>(default)</em></td><td>Use standard ERC-20 approve + transferFrom. You must approve the TychoRouter to spend your tokens.</td></tr><tr><td align="center"><strong>TransferFromPermit2</strong></td><td>Use Permit2 for token transfer. You must approve the Permit2 contract and sign the permit externally.</td></tr><tr><td align="center"><strong>UseVaultsFunds</strong></td><td>No transfer is performed. Uses tokens already deposited in the TychoRouter vault.</td></tr></tbody></table>
 {% endtab %}
 
 {% tab title="Swap" %}
@@ -168,7 +168,7 @@ Convert solutions into calldata:
 let encoded_solutions = encoder.encode_solutions(solutions);
 ```
 
-This returns a `Vec<`[`EncodedSolution`](./#encoded-solution-struct)`>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
+This returns a `Vec<EncodedSolution>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
 creation and signing yourself using the public `Permit2` utility (see [Token transfers](../#permit2)).
 
 The full method call includes the following parameters, which act as **execution guardrails:**
