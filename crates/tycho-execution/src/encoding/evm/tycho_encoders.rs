@@ -281,7 +281,7 @@ impl TychoExecutorEncoder {
             swap_encoder.executor_address().clone(),
             "".to_string(),
             0,
-            grouped_swap.estimated_gas_usage.clone(),
+            grouped_swap.estimated_gas.clone(),
         ))
     }
 }
