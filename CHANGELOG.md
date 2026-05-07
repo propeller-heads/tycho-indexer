@@ -1,3 +1,11 @@
+## [0.287.0](https://github.com/propeller-heads/tycho-indexer/compare/0.286.0...0.287.0) (2026-05-07)
+
+
+### Features
+
+* add signed error ratio ([1c9980b](https://github.com/propeller-heads/tycho-indexer/commit/1c9980b098da47f5ae5e831ce5749c82c7030407))
+* add signed gas_error_ratio metric histogram for integration tests ([#995](https://github.com/propeller-heads/tycho-indexer/issues/995)) ([5a18b0b](https://github.com/propeller-heads/tycho-indexer/commit/5a18b0bc17a1197687d6db5aec0fec56850d715c))
+
 ## [0.286.0](https://github.com/propeller-heads/tycho-indexer/compare/0.285.4...0.286.0) (2026-05-07)
 
 
