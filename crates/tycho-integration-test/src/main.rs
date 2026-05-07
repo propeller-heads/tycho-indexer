@@ -1366,10 +1366,12 @@ fn process_execution_result(
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
 
             if let Some(estimated) = execution_info.estimated_gas.to_f64() {
-                metrics::record_gas_error_ratio(
+                let actual = *gas_used as f64;
+                metrics::record_gas_error_ratio(&execution_info.protocol_system, estimated, actual);
+                metrics::record_gas_signed_error_ratio(
                     &execution_info.protocol_system,
                     estimated,
-                    *gas_used as f64,
+                    actual,
                 );
             }
 
