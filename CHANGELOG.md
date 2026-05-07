@@ -1,3 +1,11 @@
+## [0.286.0](https://github.com/propeller-heads/tycho-indexer/compare/0.285.4...0.286.0) (2026-05-07)
+
+
+### Features
+
+* **router v3:** Timelock FeeCalculator ([0091337](https://github.com/propeller-heads/tycho-indexer/commit/00913377dd3a53f4951307d625027ca32c4143ac))
+* **router v3:** Timelock FeeCalculator ([#986](https://github.com/propeller-heads/tycho-indexer/issues/986)) ([62ccdcc](https://github.com/propeller-heads/tycho-indexer/commit/62ccdccc77b79b1f61516553835d6d7d0919507a))
+
 ## [0.285.4](https://github.com/propeller-heads/tycho-indexer/compare/0.285.3...0.285.4) (2026-05-07)
 
 
