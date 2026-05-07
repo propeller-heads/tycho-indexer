@@ -36,7 +36,10 @@ We welcome community contributions to expand language support. See our contribut
 
 ## Authentication
 
-Currently, interacting with the hosted Tycho Indexer requires a personalized API Key. Please contact `@tanay_j` on Telegram to get your API key.
+Interacting with the hosted Tycho Indexer requires a personalized API Key.
+
+1. **Get a base key**: Message [@fynd_portal_bot](https://t.me/fynd_portal_bot) on Telegram to receive a Tycho Fynd key. This gives you access to [Tycho Fynd endpoints](../../hosted-endpoints.md#tycho-fynd).
+2. **Need full Tycho Indexer access?** Once you have a base key, DM `@tanay_j` on Telegram to request an upgrade.
 
 ***
 

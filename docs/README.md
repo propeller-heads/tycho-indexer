@@ -107,7 +107,7 @@ The quickstart shows you how to:
 Run Tycho Indexer by setting up the following environment variables:
 
 * TYCHO\_URL (by default `"tycho-beta.propellerheads.xyz"`)
-* TYCHO\_API\_KEY key
+* TYCHO\_API\_KEY key ([get one from @fynd\_portal\_bot](https://t.me/fynd_portal_bot))
 * PRIVATE\_KEY if you wish to execute the swap against the Tycho Router
 
 The Indexer stream or the Simulation does not manage tokens; you manage them yourself.
