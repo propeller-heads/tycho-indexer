@@ -29,7 +29,9 @@ Each API key is assigned a plan that determines rate limits and endpoint access.
 <table><thead><tr><th>Plan</th><th>Requests/sec</th><th>Burst</th><th>Max WebSocket Connections</th><th>Allowed Endpoints</th></tr></thead><tbody><tr><td>basic</td><td>50</td><td>300/s (6x)</td><td>2</td><td>Tycho Indexer, Tycho Fynd</td></tr><tr><td>fynd-basic</td><td>50</td><td>300/s (6x)</td><td>2</td><td>Tycho Fynd only</td></tr></tbody></table>
 
 {% hint style="info" %}
-Need higher limits? Contact @tanay\_j on Telegram.
+Don't have a key yet? Get a base-tier key from [@fynd_portal_bot](https://t.me/fynd_portal_bot) on Telegram.
+
+Need higher limits or full Tycho Indexer access? DM `@tanay_j` on Telegram to request an upgrade.
 {% endhint %}
 
 ### Data Restrictions
