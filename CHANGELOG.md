@@ -1,3 +1,11 @@
+## [0.285.4](https://github.com/propeller-heads/tycho-indexer/compare/0.285.3...0.285.4) (2026-05-07)
+
+
+### Bug Fixes
+
+* **encoding:** Estimate gas properly for grouped swaps ([1e31ca2](https://github.com/propeller-heads/tycho-indexer/commit/1e31ca2992bcecae07baf6357bd9a8c111e75fcb))
+* **encoding:** Estimate gas properly for grouped swaps ([#993](https://github.com/propeller-heads/tycho-indexer/issues/993)) ([837c2b3](https://github.com/propeller-heads/tycho-indexer/commit/837c2b3adf6dc3371a076729c473c935a0690343))
+
 ## [0.285.3](https://github.com/propeller-heads/tycho-indexer/compare/0.285.2...0.285.3) (2026-05-06)
 
 
