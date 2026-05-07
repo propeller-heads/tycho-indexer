@@ -33,7 +33,7 @@ Tokens in the vault can be used for swaps by setting `user_transfer_type: UseVau
 
 ## Crediting Output to the Vault
 
-By default, output tokens are sent to the receiver address after a swap. If you set the receiver to the TychoRouter address, the output tokens are credited to the caller's vault balance instead of being transferred out.
+By default, output tokens are sent to the receiver address after a swap. If you set the receiver to the TychoRouter address, the output tokens are credited to the caller's vault balance instead of transferred out.
 
 This works with all swap types — single, sequential, and split — and with both wallet-funded and vault-funded swaps.
 
@@ -45,9 +45,9 @@ It also supports cyclical arbitrage, where you route through multiple pools and 
 
 The vault serves three purposes:
 
-1. Gas savings for repeat users. Solvers and market makers can keep tokens in the contract, avoiding repeated approval and transfer costs.
-2. In-contract rebalancing. Convert between tokens in the vault without additional ERC-20 transfers or approvals, since both input and output stay in the router.
-3. Fee accounting. Client fees and router fees are credited directly to the receiver's vault balance. No ERC-20 transfers needed at fee-taking time, just a persistent storage write.
+1. Gas savings. Keep tokens in the contract to avoid repeated approvals and transfer costs across swaps.
+2. In-contract rebalancing. Convert between tokens without ERC-20 transfers or approvals — input and output settle entirely within the router.
+3. Fee accounting. Fees are credited with a storage write rather than an ERC-20 transfer, saving gas at fee-taking time.
 
 ## Security Guarantees
 

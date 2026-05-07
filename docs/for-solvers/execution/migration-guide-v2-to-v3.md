@@ -14,32 +14,19 @@ Router V3.
 
 **Renamed fields:**
 
-| V2               | V3               | Notes                            |
-|------------------|------------------|----------------------------------|
-| `given_token`    | `token_in`       | The token being sold             |
-| `given_amount`   | `amount_in`      | Amount of the input token        |
-| `checked_token`  | `token_out`      | The token being bought           |
-| `checked_amount` | `min_amount_out` | Minimum acceptable output amount |
+<table><thead><tr><th width="210">V2</th><th width="210">V3</th><th width="280">Notes</th></tr></thead><tbody><tr><td><code>given_token</code></td><td><code>token_in</code></td><td>The input token</td></tr><tr><td><code>given_amount</code></td><td><code>amount_in</code></td><td>Amount of the input token</td></tr><tr><td><code>checked_token</code></td><td><code>token_out</code></td><td>The output token</td></tr><tr><td><code>checked_amount</code></td><td><code>min_amount_out</code></td><td>Minimum acceptable output amount</td></tr></tbody></table>
 
 **Removed fields:**
 
-| Field                                 | Replacement                                                                                                                                                            |
-|---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `native_action: Option<NativeAction>` | No longer needed. The encoder automatically inserts WETH wrap/unwrap swaps (see [Wrapping and Unwrapping](encoding/native-token-handling-wrapping-and-unwrapping.md)). |
-| `exact_out: bool`                     | Only exact-in was ever supported. Removed for simplicity.                                                                                                              |
+<table><thead><tr><th width="280">Field</th><th width="420">Replacement</th></tr></thead><tbody><tr><td><code>native_action: Option&#x3C;NativeAction></code></td><td>The encoder now inserts WETH wrap/unwrap swaps automatically (see <a href="encoding/native-token-handling-wrapping-and-unwrapping.md">Wrapping and Unwrapping</a>).</td></tr><tr><td><code>exact_out: bool</code></td><td>Only exact-in was ever supported. Removed for simplicity.</td></tr></tbody></table>
 
 **New fields:**
 
-| Field                     | Type               | Description                                                                                                      |
-|---------------------------|--------------------|------------------------------------------------------------------------------------------------------------------|
-| `user_transfer_type`      | `UserTransferType` | How user funds enter the router. Moved here from the encoder builder.                                            |
-| `client_fee_bps`          | `u16`              | Fee in basis points charged by the client (0–10000).                                                             |
-| `client_fee_receiver`     | `Bytes`            | Address to receive the client fee.                                                                               |
-| `max_client_contribution` | `BigUint`          | Maximum amount the client will subsidize from their vault if slippage reduces the output below `min_amount_out`. |
+<table><thead><tr><th width="210">Field</th><th width="210">Type</th><th width="280">Description</th></tr></thead><tbody><tr><td><code>user_transfer_type</code></td><td><code>UserTransferType</code></td><td>How user funds enter the router. Moved here from the encoder builder.</td></tr><tr><td><code>client_fee_bps</code></td><td><code>u16</code></td><td>Fee in basis points charged by the client (0–10000).</td></tr><tr><td><code>client_fee_receiver</code></td><td><code>Bytes</code></td><td>Address to receive the client fee.</td></tr><tr><td><code>max_client_contribution</code></td><td><code>BigUint</code></td><td>Maximum amount the client will subsidize from their vault if slippage reduces the output below <code>min_amount_out</code>.</td></tr></tbody></table>
 
 **Private fields with getters/setters:**
 
-In V2, `Solution` fields were `pub`. In V3, all fields are private. Use the constructor and builder methods:
+`Solution` fields are now private — use the constructor and builder methods instead of direct field access:
 
 ```rust
 // V2
@@ -73,8 +60,7 @@ vec![swap],  // swaps
 
 #### UserTransferType Moved to Solution
 
-In V2, `UserTransferType` was set on the encoder builder. In V3, it is a field on each `Solution`, allowing different
-solutions in the same batch to use different funding methods.
+`UserTransferType` has moved from the encoder builder to each `Solution`, so solutions in the same batch can use different funding methods.
 
 ```rust
 // V2
@@ -234,11 +220,11 @@ like `min_amount_out`, `receiver`, and fee configuration.
 ```rust
 // V2
 let registry = SwapEncoderRegistry::new()
-.add_default_encoders(executors_addresses) ?;
+.add_default_encoders(executors_addresses)?;
 
 // V3
 let registry = SwapEncoderRegistry::new(Chain::Ethereum)
-.add_default_encoders(executors_addresses) ?;
+.add_default_encoders(executors_addresses)?;
 ```
 
 ### Execution Changes
@@ -279,7 +265,7 @@ See [native-token-handling-wrapping-and-unwrapping.md](encoding/native-token-han
 
 #### Method Variants
 
-Each swap strategy (single, sequential, split) now has three variants instead of two, with a new UsingVault variant:
+Each swap strategy (single, sequential, split) gains a third variant — `UsingVault` — alongside the existing standard and Permit2 variants:
 
 | V2                       | V3                          |
 |--------------------------|-----------------------------|
@@ -287,5 +273,4 @@ Each swap strategy (single, sequential, split) now has three variants instead of
 | `singleSwapPermit2(...)` | `singleSwapPermit2(...)`    |
 | —                        | `singleSwapUsingVault(...)` |
 
-The same pattern applies for `sequentialSwap` and `splitSwap`. The `EncodedSolution.function_signature` tells you which
-variant to call.
+`sequentialSwap` and `splitSwap` follow the same pattern. Use `EncodedSolution.function_signature` to determine which variant to call.
