@@ -22,8 +22,8 @@ This catches encoding errors and balance mismatches before any persistent state 
 // Deposit ERC-20 tokens 
 router.deposit(tokenAddress, amount);
 
-// Deposit native ETH 
-router.deposit{value: amount}(address(0), amount);
+// Deposit native ETH (use ETH_ADDRESS, not address(0))
+router.deposit{value: amount}(0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE, amount);
 
 // Withdraw 
 router.withdraw(tokenAddress, amount);
