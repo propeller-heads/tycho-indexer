@@ -1,3 +1,11 @@
+## [0.288.1](https://github.com/propeller-heads/tycho-indexer/compare/0.288.0...0.288.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* update CI workflow and Dockerfile for improved profiling ([e02d13f](https://github.com/propeller-heads/tycho-indexer/commit/e02d13f7854e395d66ee6a0cc4af8957762c39b1))
+* update CI workflow and Dockerfile for improved profiling ([#1002](https://github.com/propeller-heads/tycho-indexer/issues/1002)) ([ca6a961](https://github.com/propeller-heads/tycho-indexer/commit/ca6a9613f11a19f10520dcfe871a807835550a10))
+
 ## [0.288.0](https://github.com/propeller-heads/tycho-indexer/compare/0.287.0...0.288.0) (2026-05-08)
 
 
