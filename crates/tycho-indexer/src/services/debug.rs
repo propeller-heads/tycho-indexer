@@ -2,17 +2,17 @@ use actix_web::{HttpResponse, Responder};
 
 /// Returns a heap profile in gzipped pprof protobuf format.
 ///
-/// Requires: built with `--features jemalloc` and started with
-/// `MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:19`.
+/// Requires: started with
+/// `_RJEM_MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:19`.
 ///
 /// Usage:
-///   curl -o heap.pb.gz localhost:4242/debug/pprof/heap
+///   curl -H "Authorization: $AUTH_API_KEY" -o heap.pb.gz localhost:4242/debug/pprof/heap
 ///   go tool pprof -http=:8080 heap.pb.gz
 #[cfg(feature = "jemalloc")]
 pub async fn heap_profile() -> impl Responder {
     let Some(ctl) = jemalloc_pprof::PROF_CTL.as_ref() else {
         return HttpResponse::InternalServerError().body(
-            "heap profiling not available — set MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:19",
+            "heap profiling not available — set _RJEM_MALLOC_CONF=prof:true,prof_active:true,lg_prof_sample:19",
         );
     };
     let mut prof_ctl = ctl.lock().await;
@@ -26,9 +26,4 @@ pub async fn heap_profile() -> impl Responder {
             .body(pprof),
         Err(err) => HttpResponse::InternalServerError().body(format!("heap dump failed: {err}")),
     }
-}
-
-#[cfg(not(feature = "jemalloc"))]
-pub async fn heap_profile() -> impl Responder {
-    HttpResponse::NotFound().body("not built with jemalloc feature")
 }

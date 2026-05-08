@@ -301,9 +301,6 @@ fn run_indexer(global_args: GlobalArgs, index_args: IndexArgs) -> Result<(), Ext
 #[tokio::main]
 async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
-    let _metrics_task = create_metrics_exporter();
-    #[cfg(feature = "jemalloc")]
-    spawn_jemalloc_stats_reporter();
     info!("Starting Tycho");
 
     let dci_plugin = run_args
@@ -361,9 +358,6 @@ async fn run_spkg(global_args: GlobalArgs, run_args: RunSpkgArgs) -> Result<(), 
 #[tokio::main]
 async fn run_rpc(global_args: GlobalArgs) -> Result<(), ExtractionError> {
     create_tracing_subscriber();
-    let _metrics_task = create_metrics_exporter();
-    #[cfg(feature = "jemalloc")]
-    spawn_jemalloc_stats_reporter();
 
     let rpc_client = global_args.rpc.build_client()?;
 

@@ -32,6 +32,7 @@ use crate::{
 mod access_control;
 mod api_docs;
 mod cache;
+#[cfg(feature = "jemalloc")]
 mod debug;
 mod deltas_buffer;
 mod middleware;
@@ -264,11 +265,16 @@ where
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
                 )
-                .service(
+                ;
+
+            #[cfg(feature = "jemalloc")]
+            {
+                app = app.service(
                     web::resource("/debug/pprof/heap")
                         .wrap(access_control::AccessControl::new(&self.api_key))
                         .route(web::get().to(debug::heap_profile)),
                 );
+            }
 
             if let Some(ws_data) = ws_data.clone() {
                 app = app.app_data(ws_data).service(
