@@ -264,8 +264,7 @@ where
                 )
                 .service(
                     SwaggerUi::new("/docs/{_:.*}").url("/api-docs/openapi.json", openapi.clone()),
-                )
-                ;
+                );
 
             #[cfg(feature = "jemalloc")]
             {
