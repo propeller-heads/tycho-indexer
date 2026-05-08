@@ -161,7 +161,7 @@ impl Executor {
                     },
                     receiver: Address::Zero,
                     token_in: if is_native_sell {
-                        Address::Zero
+                        Address::NativeETH
                     } else {
                         params.request(
                             ParamKey::ProtocolData { swap_index, start: 21, end: 41 },
