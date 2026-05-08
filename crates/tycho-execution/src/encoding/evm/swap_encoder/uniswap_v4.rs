@@ -11,7 +11,9 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         constants::ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE,
-        utils::{bytes_to_address, get_static_attribute, pad_or_truncate_to_size},
+        utils::{
+            bytes_to_address, get_static_attribute, native_to_router_eth, pad_or_truncate_to_size,
+        },
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -179,8 +181,9 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         // Early check if this is not the first swap
         if encoding_context.group_token_in != *swap.token_in().address {
+            let token_out = native_to_router_eth(bytes_to_address(&swap.token_out().address)?);
             return Ok((
-                bytes_to_address(&swap.token_out().address)?,
+                token_out,
                 pool_fee_u24,
                 pool_tick_spacing_u24,
                 hook_address,
@@ -193,13 +196,20 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         // This is the first swap, compute all necessary values
         let token_in_address = bytes_to_address(&swap.token_in().address)?;
         let token_out_address = bytes_to_address(&swap.token_out().address)?;
-        let group_token_in_address = bytes_to_address(&encoding_context.group_token_in)?;
-        let group_token_out_address = bytes_to_address(&encoding_context.group_token_out)?;
 
+        // Compute zero_to_one with protocol-native addresses (before translation)
+        // because the V4 executor translates back to address(0) for pool key construction.
         let zero_to_one = Self::get_zero_to_one(token_in_address, token_out_address);
 
+        // Translate for encoding: Tycho uses ETH_ADDRESS
+        let group_token_in_encoded =
+            native_to_router_eth(bytes_to_address(&encoding_context.group_token_in)?);
+        let group_token_out_encoded =
+            native_to_router_eth(bytes_to_address(&encoding_context.group_token_out)?);
+        let token_out_encoded = native_to_router_eth(token_out_address);
+
         let pool_params = (
-            token_out_address,
+            token_out_encoded,
             pool_fee_u24,
             pool_tick_spacing_u24,
             hook_address,
@@ -208,7 +218,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (group_token_in_address, group_token_out_address, zero_to_one, pool_params);
+        let args = (group_token_in_encoded, group_token_out_encoded, zero_to_one, pool_params);
 
         Ok(args.abi_encode_packed())
     }

@@ -133,6 +133,10 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         uint128 tokenInDebtAmount = uint128(nextAmountIn);
         address receiver = address(bytes20(swapData[16:36]));
         address tokenIn = address(bytes20(swapData[36:56]));
+        // Swap data uses ETH_ADDRESS for native ETH; translate to
+        // address(0) for Ekubo protocol interaction (pool keys, pay,
+        // withdraw).
+        if (tokenIn == ETH_ADDRESS) tokenIn = address(0);
 
         address nextTokenIn = tokenIn;
         address nextTokenOut = address(0);
@@ -145,6 +149,7 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         for (uint256 i = 0; i < hopsLength; i++) {
             nextTokenOut =
                 address(bytes20(LibBytes.loadCalldata(swapData, offset)));
+            if (nextTokenOut == ETH_ADDRESS) nextTokenOut = address(0);
             Config poolConfig =
                 Config.wrap(LibBytes.loadCalldata(swapData, offset + 20));
 
@@ -264,8 +269,6 @@ contract EkuboExecutor is IExecutor, ILocker, IPayer, ICallback {
         uint256 lastHopOffset = 20 + (hopsLength - 1) * _HOP_BYTE_LEN;
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[lastHopOffset:lastHopOffset + 20]));
-        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
-        if (tokenOut == address(0)) tokenOut = ETH_ADDRESS;
         return (
             TransferManager.TransferType.None,
             address(0),

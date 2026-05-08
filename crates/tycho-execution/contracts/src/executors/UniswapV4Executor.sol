@@ -171,6 +171,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
+        // Swap data uses ETH_ADDRESS for native ETH; translate to
+        // address(0) for V4 protocol interaction (pool keys, sync).
+        if (tokenIn == ETH_ADDRESS) tokenIn = address(0);
+        if (tokenOut == ETH_ADDRESS) tokenOut = address(0);
         zeroForOne = data[40] != 0;
 
         bytes calldata remaining = data[41:];
@@ -182,6 +186,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         }
 
         address firstToken = address(bytes20(remaining[0:20]));
+        if (firstToken == ETH_ADDRESS) firstToken = address(0);
         uint24 firstFee = uint24(bytes3(remaining[20:23]));
         int24 firstTickSpacing = int24(uint24(bytes3(remaining[23:26])));
         address firstHook = address(bytes20(remaining[26:46]));
@@ -231,6 +236,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 tickSpacing := and(shr(208, mload(add(dataPtr, 20))), 0xffffff)
                 hook := shr(96, mload(add(dataPtr, 26)))
                 hookDataLength := and(shr(240, mload(add(dataPtr, 46))), 0xffff)
+            }
+
+            if (intermediaryToken == ETH_ADDRESS) {
+                intermediaryToken = address(0);
             }
 
             if (poolData.length < 48 + hookDataLength) {
@@ -532,10 +541,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        // V4 uses address(0) for native ETH in pool keys, but the
-        // router uses ETH_ADDRESS for balance tracking and deltas.
-        if (tokenIn == address(0)) tokenIn = ETH_ADDRESS;
-        if (tokenOut == address(0)) tokenOut = ETH_ADDRESS;
         return (
             TransferManager.TransferType.None,
             address(0),

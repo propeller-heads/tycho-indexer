@@ -242,7 +242,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         // First swap: USDC -> ETH
         bytes memory pool = abi.encodePacked(
-            address(0), // intermediary token (V4 uses address(0) for ETH)
+            ETH_ADDR, // intermediary token (ETH_ADDRESS)
             bytes3(uint24(3000)), // fee
             int24(60), // tick spacing
             address(0), // hook
@@ -252,7 +252,7 @@ contract TychoRouterUsingVaultTest is TychoRouterTestSetup {
 
         bytes memory protocolData = abi.encodePacked(
             USDC_ADDR,
-            address(0), // ETH in V4 pool key
+            ETH_ADDR, // ETH_ADDRESS
             false, // zeroForOne
             pool
         );
