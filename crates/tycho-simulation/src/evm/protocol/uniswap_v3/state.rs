@@ -573,14 +573,22 @@ impl ProtocolSim for UniswapV3State {
 mod tests {
     use std::{
         collections::{HashMap, HashSet},
+        fs,
+        path::Path,
         str::FromStr,
     };
 
     use num_bigint::ToBigUint;
+    use num_traits::FromPrimitive;
+    use serde_json::Value;
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{hex_bytes::Bytes, models::Chain, simulation::protocol_sim::Price};
 
     use super::*;
-    use crate::evm::protocol::utils::uniswap::sqrt_price_math::get_sqrt_price_q96;
+    use crate::{
+        evm::protocol::utils::uniswap::sqrt_price_math::get_sqrt_price_q96,
+        protocol::models::{DecoderContext, TryFromWithBlock},
+    };
 
     #[test]
     fn test_get_amount_out_full_range_liquidity() {
@@ -859,12 +867,59 @@ mod tests {
         );
     }
 
-    // TODO: test needs rewriting to construct ComponentWithState directly; JSON deserialization
-    // no longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_get_limits() {
-        unimplemented!("needs rewrite: ComponentWithState is no longer Deserialize");
+        use tycho_client::feed::dto::ComponentWithStateDto;
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/uniswap_v3_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+        let state: ComponentWithState =
+            serde_json::from_value::<ComponentWithStateDto>(data)
+                .expect("Expected json to match ComponentWithState structure")
+                .into();
+
+        let usv3_state = UniswapV3State::try_from_with_header(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
+
+        let t0 = Token::new(
+            &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+            "WBTC",
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let t1 = Token::new(
+            &Bytes::from_str("0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf").unwrap(),
+            "cbBTC",
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let res = usv3_state
+            .get_limits(t0.address.clone(), t1.address.clone())
+            .unwrap();
+
+        assert_eq!(&res.0, &BigUint::from_u128(155144999154).unwrap());
+
+        let out = usv3_state
+            .get_amount_out(res.0, &t0, &t1)
+            .expect("swap for limit in didn't work");
+
+        assert_eq!(&res.1, &out.amount);
     }
 
     // Helper to create a basic test pool
@@ -1379,16 +1434,61 @@ mod tests {
 mod tests_forks {
     use std::str::FromStr;
 
+    use tycho_client::feed::synchronizer::ComponentWithState;
     use tycho_common::{hex_bytes::Bytes, models::Chain};
 
     use super::*;
+    use crate::protocol::models::{DecoderContext, TryFromWithBlock};
 
-    // TODO: test needs rewriting to construct ComponentWithState directly; JSON deserialization
-    // no longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_pancakeswap_get_amount_out() {
-        unimplemented!("needs rewrite: ComponentWithState is no longer Deserialize");
+        use std::{fs, path::Path};
+        use serde_json::Value;
+        use tycho_client::feed::dto::ComponentWithStateDto;
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/pancakeswap_v3_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+        let state: ComponentWithState =
+            serde_json::from_value::<ComponentWithStateDto>(data)
+                .expect("Expected json to match ComponentWithState structure")
+                .into();
+
+        let pool_state = UniswapV3State::try_from_with_header(
+            state,
+            Default::default(),
+            &Default::default(),
+            &Default::default(),
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
+
+        let usdc = Token::new(
+            &Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+            "USDC",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let usdt = Token::new(
+            &Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+            "USDT",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let res = pool_state
+            .get_amount_out(BigUint::from_str("5976361609").unwrap(), &usdt, &usdc)
+            .unwrap();
+
+        assert_eq!(res.amount, BigUint::from_str("5975901673").unwrap());
     }
 
     #[test]

@@ -974,28 +974,32 @@ impl ProtocolSim for UniswapV4State {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, str::FromStr};
+    use std::{collections::HashSet, fs, path::Path, str::FromStr};
 
     use alloy::primitives::aliases::U24;
     use num_traits::FromPrimitive;
     use rstest::rstest;
-    use tycho_client::feed::BlockHeader;
-    use tycho_common::simulation::protocol_sim::Price;
+    use serde_json::Value;
+    use tycho_client::feed::{synchronizer::ComponentWithState, BlockHeader};
+    use tycho_common::{models::Chain, simulation::protocol_sim::Price};
 
     use super::*;
-    use crate::evm::{
-        engine_db::{
-            create_engine,
-            simulation_db::SimulationDB,
-            utils::{get_client, get_runtime},
-        },
-        protocol::{
-            uniswap_v4::hooks::{
-                angstrom::hook_handler::{AngstromFees, AngstromHookHandler},
-                generic_vm_hook_handler::GenericVMHookHandler,
+    use crate::{
+        evm::{
+            engine_db::{
+                create_engine,
+                simulation_db::SimulationDB,
+                utils::{get_client, get_runtime},
             },
-            utils::uniswap::{lp_fee, sqrt_price_math::get_sqrt_price_q96},
+            protocol::{
+                uniswap_v4::hooks::{
+                    angstrom::hook_handler::{AngstromFees, AngstromHookHandler},
+                    generic_vm_hook_handler::GenericVMHookHandler,
+                },
+                utils::uniswap::{lp_fee, sqrt_price_math::get_sqrt_price_q96},
+            },
         },
+        protocol::models::{DecoderContext, TryFromWithBlock},
     };
 
     // Helper methods to create commonly used tokens
@@ -1117,22 +1121,140 @@ mod tests {
         );
     }
 
-    // TODO: test needs rewriting to construct ComponentWithState directly; JSON deserialization
-    // no longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
-    /// Compares a quote that we got from the UniswapV4 Quoter contract on Sepolia with a simulation
-    /// using Tycho-simulation and a state extracted with Tycho-indexer
+    /// Compares a quote from the UniswapV4 Quoter contract on Sepolia with a simulation.
     async fn test_swap_sim() {
-        unimplemented!("needs rewrite: ComponentWithState is no longer Deserialize");
+        use tycho_client::feed::dto::ComponentWithStateDto;
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path = Path::new(project_root)
+            .join("tests/assets/decoder/uniswap_v4_snapshot_sepolia_block_7239119.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+        let state: ComponentWithState =
+            serde_json::from_value::<ComponentWithStateDto>(data)
+                .expect("Expected json to match ComponentWithState structure")
+                .into();
+
+        let block = BlockHeader {
+            number: 7239119,
+            hash: Bytes::from_str(
+                "0x28d41d40f2ac275a4f5f621a636b9016b527d11d37d610a45ac3a821346ebf8c",
+            )
+            .expect("Invalid block hash"),
+            parent_hash: Bytes::from(vec![0; 32]),
+            ..Default::default()
+        };
+
+        let t0 = Token::new(
+            &Bytes::from_str("0x647e32181a64f4ffd4f0b0b4b052ec05b277729c").unwrap(),
+            "T0",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let t1 = Token::new(
+            &Bytes::from_str("0xe390a1c311b26f14ed0d55d3b0261c2320d15ca5").unwrap(),
+            "T1",
+            18,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let all_tokens = [t0.clone(), t1.clone()]
+            .iter()
+            .map(|t| (t.address.clone(), t.clone()))
+            .collect();
+
+        let usv4_state = UniswapV4State::try_from_with_header(
+            state,
+            block,
+            &Default::default(),
+            &all_tokens,
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
+
+        let res = usv4_state
+            .get_amount_out(BigUint::from_u64(1000000000000000000).unwrap(), &t0, &t1)
+            .unwrap();
+
+        let expected_amount = BigUint::from(9999909699895_u64);
+        assert_eq!(res.amount, expected_amount);
     }
 
-    // TODO: test needs rewriting to construct ComponentWithState directly; JSON deserialization
-    // no longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_get_limits() {
-        unimplemented!("needs rewrite: ComponentWithState is no longer Deserialize");
+        use tycho_client::feed::dto::ComponentWithStateDto;
+        let block = BlockHeader {
+            number: 22689129,
+            hash: Bytes::from_str(
+                "0x7763ea30d11aef68da729b65250c09a88ad00458c041064aad8c9a9dbf17adde",
+            )
+            .expect("Invalid block hash"),
+            parent_hash: Bytes::from(vec![0; 32]),
+            ..Default::default()
+        };
+
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join("tests/assets/decoder/uniswap_v4_snapshot.json");
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
+        let state: ComponentWithState =
+            serde_json::from_value::<ComponentWithStateDto>(data)
+                .expect("Expected json to match ComponentWithState structure")
+                .into();
+
+        let t0 = Token::new(
+            &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),
+            "WBTC",
+            8,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+        let t1 = Token::new(
+            &Bytes::from_str("0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+            "USDT",
+            6,
+            0,
+            &[Some(10_000)],
+            Chain::Ethereum,
+            100,
+        );
+
+        let all_tokens = [t0.clone(), t1.clone()]
+            .iter()
+            .map(|t| (t.address.clone(), t.clone()))
+            .collect();
+
+        let usv4_state = UniswapV4State::try_from_with_header(
+            state,
+            block,
+            &Default::default(),
+            &all_tokens,
+            &DecoderContext::new(),
+        )
+        .await
+        .unwrap();
+
+        let res = usv4_state
+            .get_limits(t0.address.clone(), t1.address.clone())
+            .unwrap();
+
+        assert_eq!(&res.0, &BigUint::from_u128(71698353688830259750744466706).unwrap());
+
+        let out = usv4_state
+            .get_amount_out(res.0, &t0, &t1)
+            .expect("swap for limit in didn't work");
+
+        assert_eq!(&res.1, &out.amount);
     }
     #[test]
     fn test_get_amount_out_no_hook() {
