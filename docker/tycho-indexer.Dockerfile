@@ -15,17 +15,19 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # ── Stage 3: build ───────────────────────────────────────────────────────────
 FROM chef AS builder
+ARG CARGO_PROFILE=profiling
+ARG EXTRA_CARGO_FLAGS=""
 COPY --from=planner /build/recipe.json recipe.json
 # Pre-build deps only (cached layer)
 RUN cargo chef cook --package tycho-indexer --release --recipe-path recipe.json
 # Full build
 COPY . .
-RUN RUSTFLAGS="--cfg tokio_unstable" cargo build --package tycho-indexer --profile profiling --features jemalloc
+RUN RUSTFLAGS="--cfg tokio_unstable" cargo build --package tycho-indexer --profile ${CARGO_PROFILE} ${EXTRA_CARGO_FLAGS}
 
 # ── Stage 4: minimal runtime ─────────────────────────────────────────────────
 FROM debian:bookworm-slim
 WORKDIR /opt/tycho-indexer
-COPY --from=builder /build/target/profiling/tycho-indexer ./tycho-indexer
+COPY --from=builder /build/target/${CARGO_PROFILE}/tycho-indexer ./tycho-indexer
 COPY crates/tycho-indexer/extractors.yaml ./extractors.yaml
 RUN apt-get update && apt-get install -y libpq5 libcurl4 ca-certificates && \
     rm -rf /var/lib/apt/lists/*
