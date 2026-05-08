@@ -2,14 +2,14 @@
 
 To integrate a new protocol into Tycho, you need to implement two key components:
 
-1. **SwapEncoder** (Rust struct) – Handles swap encoding.
-2. **Executor** (Solidity contract) – Executes the swap on-chain.
+1. **SwapEncoder** (Rust struct) – Translates swap parameters into protocol-specific calldata.
+2. **Executor** (Solidity contract) – Processes that calldata to perform the swap on-chain.
 
 See more about our code architecture [here](code-architecture.md).
 
 ## Encoder Interface
 
-Each new protocol requires a dedicated `SwapEncoder` that implements the `SwapEncoder` trait. This trait defines how swaps for the protocol are encoded into calldata.
+Each protocol needs a dedicated encoder that implements the `SwapEncoder` trait:
 
 ```rust
 fn encode_swap(
@@ -21,20 +21,20 @@ fn encode_swap(
 
 This function encodes a swap and its relevant context information into calldata that is compatible with the `Executor` contract. The output of the `SwapEncoder` is the input of the `Executor` (see next section). We recommend using packed encoding to save gas. See current implementations <a href="https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution/src/encoding/evm/swap_encoder" target="_blank" rel="noopener noreferrer">here</a>.
 
-If your protocol needs some specific constant addresses please add them in <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/protocol_specific_addresses.json" target="_blank" rel="noopener noreferrer">config/protocol\_specific\_addresses.json</a>.
+For protocol-specific constant addresses, add them to <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/protocol_specific_addresses.json" target="_blank" rel="noopener noreferrer">config/protocol\_specific\_addresses.json</a>.
 
-After implementing your `SwapEncoder` , you need to:
+Once your `SwapEncoder` is implemented:
 
-* Add your protocol with a placeholder address in: <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/executor_addresses.json" target="_blank" rel="noopener noreferrer">config/executor\_addresses.json</a> and <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/test_executor_addresses.json" target="_blank" rel="noopener noreferrer">config/test\_executor\_addresses.json</a>
-* Add your protocol in the <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/src/encoding/evm/swap_encoder/swap_encoder_registry.rs" target="_blank" rel="noopener noreferrer">`SwapEncoderRegister`</a> (if you want it to be one of the default protocols)
+* Add a placeholder address to <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/executor_addresses.json" target="_blank" rel="noopener noreferrer">config/executor\_addresses.json</a> and <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/config/test_executor_addresses.json" target="_blank" rel="noopener noreferrer">config/test\_executor\_addresses.json</a>
+* Register your encoder in <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/src/encoding/evm/swap_encoder/swap_encoder_registry.rs" target="_blank" rel="noopener noreferrer">`SwapEncoderRegister`</a> if you want it included as a default protocol
 
 <details>
 
 <summary>Protocols Supporting Consecutive Swap Optimizations</summary>
 
-As described in the [Swap Group](../../../for-solvers/execution/encoding/#swap-group) section, our encoding supports protocols which save token transfers between consecutive swaps using systems such as flash accounting. In such cases, as shown in the diagram below using Uniswap V4 as an example, the `SwapEncoder` is still only in charge of encoding a **single swap**. These swaps will then be concatenated at the `StrategyEncoder` level as a single executor call.
+Some protocols — like Uniswap V4 — use flash accounting to batch consecutive swaps without intermediate token transfers. As described in the [Swap Group](../../../for-solvers/execution/encoding/#swap-group) section, each `SwapEncoder` still encodes only a **single swap**; the `StrategyEncoder` concatenates them into a single executor call.
 
-Depending on the index of the swap in the swap group, the encoder may be responsible for adding additional information which is not necessary in other swaps of the sequence (see the first swap in the diagram below).
+The first swap in a group may carry extra data that subsequent swaps omit (see the diagram below).
 
 <figure><img src="../../../.gitbook/assets/both (1).svg" alt=""><figcaption><p>Diagram representing swap groups</p></figcaption></figure>
 
@@ -48,7 +48,7 @@ Every integrated protocol requires its own swap executor contract. This contract
 
 The `IExecutor` interface requires three methods:
 
-#### `swap`
+#### swap
 
 ```solidity
 function swap(uint256 amountIn, bytes calldata data, address receiver)
@@ -65,7 +65,7 @@ Called by the Dispatcher via `delegatecall`. This function:
 
 **Important:** Executors must not transfer **any** ERC20 tokens. All input and output token transfers are handled by the Dispatcher (via the `TransferManager`). The only exception is native ETH — executors that interact with protocols requiring ETH as `msg.value` (e.g., Fluid, Rocketpool) handle this themselves and declare `TransferNativeInExecutor` as their transfer type.
 
-#### `getTransferData`
+#### getTransferData
 
 ```solidity
 function getTransferData(bytes calldata data)
@@ -90,7 +90,7 @@ Called by the Dispatcher via `staticcall` before each swap to determine how inpu
 
 `transferType`, `receiver` and `outputToRouter` must be **hardcoded** per-executor based on the protocol's requirements — they are not encodable in calldata.
 
-#### `fundsExpectedAddress`
+#### fundsExpectedAddress
 
 ```solidity
 function fundsExpectedAddress(bytes calldata data)
@@ -151,12 +151,7 @@ This design reduces the attack surface — a malicious or buggy executor cannot 
 
 Each executor must return a hardcoded `TransferManager.TransferType` from `getTransferData` (and `getCallbackTransferData` for callback executors). The available types are:
 
-| Transfer Type              | Description                                                                                                                                                                            |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Transfer`                 | The Dispatcher transfers tokens to the pool (or router) before calling `swap`. Used by protocols that expect tokens to be present in the pool before the swap call (e.g., Uniswap V2). |
-| `ProtocolWillDebit`        | The protocol pulls tokens from the router via an approval. The Dispatcher approves the protocol to spend the required amount. Used by protocols like Curve and Balancer V2.            |
-| `TransferNativeInExecutor` | The executor sends native ETH as `msg.value` during the swap. The Dispatcher only performs accounting — no ERC-20 transfer occurs. Used by protocols like Fluid and Rocketpool.        |
-| `None`                     | No transfer is needed at this point. Typically returned by `getTransferData` for callback-based protocols where the transfer happens inside the callback instead.                      |
+<table><thead><tr><th width="210">Transfer Type</th><th width="490">Description</th></tr></thead><tbody><tr><td><code>Transfer</code></td><td>The Dispatcher transfers tokens to the pool (or router) before calling <code>swap</code>. Used by protocols that expect tokens to be present in the pool before the swap call (e.g., Uniswap V2).</td></tr><tr><td><code>ProtocolWillDebit</code></td><td>The protocol pulls tokens from the router via an approval. The Dispatcher approves the protocol to spend the required amount. Used by protocols like Curve and Balancer V2.</td></tr><tr><td><code>TransferNativeInExecutor</code></td><td>The executor sends native ETH as <code>msg.value</code> during the swap. The Dispatcher only performs accounting — no ERC-20 transfer occurs. Used by protocols like Fluid and Rocketpool.</td></tr><tr><td><code>None</code></td><td>No transfer is needed at this point. Typically returned by <code>getTransferData</code> for callback-based protocols where the transfer happens inside the callback instead.</td></tr></tbody></table>
 
 **The only case where an executor handles a token transfer is native ETH** (`TransferNativeInExecutor`). For all ERC-20 tokens, the Dispatcher is solely responsible for transfers.
 
@@ -197,7 +192,7 @@ If your protocol uses `address(0)` (e.g., UniswapV4, Ekubo) or another sentinel 
 
 ## Fee Tokens
 
-Balance checks before and after token transfers mean fee-on-transfer tokens and rebasing tokens work on most protocols. The exception is Uniswap V3-like protocols, which require declaring the input swap amount when calling swap but only transfer the input token in the callback.
+Balance checks before and after token transfers mean fee-on-transfer tokens and rebasing tokens work on most protocols. The exception is Uniswap V3-like protocols, because they require the exact input amount to be declared upfront but only transfer it inside a callback.
 
 ## Testing
 
@@ -207,7 +202,7 @@ Each new integration must be thoroughly tested in both Rust and Solidity. This i
 * Unit tests for the `Executor` in Solidity
 * Two key **integration tests** to verify the full swap flow: `SwapEncoder` to `Executor` integration test and a full TychoRouter integration test
 
-#### 1. `SwapEncoder` ↔ `Executor` integration test
+#### 1. SwapEncoder ↔ Executor Integration Test
 
 Verify that the calldata generated by the `SwapEncoder` is accepted by the corresponding `Executor`.
 
