@@ -223,8 +223,7 @@ let registry = SwapEncoderRegistry::new()
 .add_default_encoders(executors_addresses)?;
 
 // V3
-let registry = SwapEncoderRegistry::new(Chain::Ethereum)
-.add_default_encoders(executors_addresses)?;
+let registry = SwapEncoderRegistry::new_with_defaults(Chain::Ethereum)?;
 ```
 
 ### Execution Changes

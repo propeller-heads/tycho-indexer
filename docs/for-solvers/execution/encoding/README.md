@@ -127,16 +127,15 @@ split swaps.
 
 Builder options:
 
-* `swap_encoder_registry` — Registry of protocol-specific `SwapEncoder` s used during encoding.
-  Use `add_default_encoders` for built-in support, or add custom encoders for protocols you've implemented locally.
+* `swap_encoder_registry` — Registry of protocol-specific `SwapEncoder`s used during encoding.
+  Use `new_with_defaults` for built-in support, or add custom encoders for protocols you've implemented locally.
 * `router_address` — Router address for execution. Defaults to the deployed address for the given chain (
   see [Tycho addresses](../contract-addresses.md)).
 
 #### **Builder Example Usage**
 
 ```rust
-let swap_encoder_registry = SwapEncoderRegistry::new(Chain::Ethereum)
-.add_default_encoders(None)
+let swap_encoder_registry = SwapEncoderRegistry::new_with_defaults(Chain::Ethereum)
 .expect("Failed to get default SwapEncoderRegistry");
 
 let encoder = TychoRouterEncoderBuilder::new()
@@ -150,9 +149,7 @@ let encoder = TychoRouterEncoderBuilder::new()
 
 Each protocol needs its own `SwapEncoder` to define how the protocol encodes swaps into calldata.
 
-The `SwapEncoderRegistry` manages these encoders. Call `add_default_encoders()` to use the built-in implementations.
-This method accepts an optional `executors_addresses` JSON string with executor addresses for encoding. Pass `None` to
-default to `config/executor_addresses.json`.
+The `SwapEncoderRegistry` manages these encoders. Use `SwapEncoderRegistry::new_with_defaults(chain)` to get a registry pre-populated with all built-in encoders. If you need to supply custom executor addresses, use `SwapEncoderRegistry::new(chain).add_default_encoders(Some(addresses_json))` instead.
 
 If you need to add custom protocol support, register your own encoder implementation:
 
