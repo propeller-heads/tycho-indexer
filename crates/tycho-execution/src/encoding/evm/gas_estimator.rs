@@ -26,8 +26,15 @@ pub const PROTOCOLS_CALLBACK: &[&str] = &[
 /// ProtocolWillDebit: the router must `approve(protocol)` before swapping.
 /// The protocol's `transferFrom` is inside `swap()` and already in the gas computation of
 /// `get_amount_out`, but the approval is not.
-pub const PROTOCOLS_NEEDING_APPROVAL: &[&str] =
-    &["vm:balancer_v2", "vm:curve", "rfq:bebop", "rfq:hashflow", "rfq:liquorice", "erc4626"];
+pub const PROTOCOLS_NEEDING_APPROVAL: &[&str] = &[
+    "vm:balancer_v2",
+    "vm:curve",
+    "rfq:bebop",
+    "rfq:hashflow",
+    "rfq:liquorice",
+    "rfq:metric",
+    "erc4626",
+];
 
 /// `outputToRouter = true`: the pool sends output to the router, which then does an extra
 /// `_transferOut` to the receiver.
