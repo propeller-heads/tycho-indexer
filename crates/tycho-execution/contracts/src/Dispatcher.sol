@@ -10,8 +10,6 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
-
 error Dispatcher__UnapprovedExecutor(address executor);
 error Dispatcher__ExecutorIsTimelocked(address executor);
 error Dispatcher__NonContractExecutor();
@@ -110,30 +108,13 @@ contract Dispatcher is TransferManager {
         }
 
         // slither-disable-next-line calls-loop
-        (bool transferDataSuccess, bytes memory transferData) = executor.staticcall(
-            abi.encodeWithSelector(IExecutor.getTransferData.selector, data)
-        );
-
-        if (!transferDataSuccess) {
-            revert(
-                string(
-                    transferData.length > 0
-                        ? transferData
-                        : abi.encodePacked("Getting transfer data failed")
-                )
-            );
-        }
-
         (
             TransferManager.TransferType transferType,
             address transferReceiver,
             address tokenIn,
             address tokenOut,
             bool outputToRouter
-        ) = abi.decode(
-            transferData,
-            (TransferManager.TransferType, address, address, address, bool)
-        );
+        ) = IExecutor(executor).getTransferData(data);
 
         if (tokenIn == tokenOut) {
             // Single-hop cycles (such as those made possible via UniswapV4 flash
@@ -228,27 +209,8 @@ contract Dispatcher is TransferManager {
 
         _validateExecutor(executor);
 
-        (bool transferDataSuccess, bytes memory transferData) = executor.staticcall(
-            abi.encodeWithSelector(
-                ICallback.getCallbackTransferData.selector,
-                data,
-                tokenIn,
-                caller
-            )
-        );
-
-        if (!transferDataSuccess) {
-            revert(
-                string(
-                    transferData.length > 0
-                        ? transferData
-                        : abi.encodePacked("Getting transfer data failed")
-                )
-            );
-        }
-
         (TransferManager.TransferType transferType, address receiver) =
-            abi.decode(transferData, (TransferManager.TransferType, address));
+            ICallback(executor).getCallbackTransferData(data, tokenIn, caller);
 
         _transfer(
             receiver,
@@ -301,26 +263,8 @@ contract Dispatcher is TransferManager {
     {
         _validateExecutor(executor);
 
-        // slither-disable-next-line calls-loop,low-level-calls
-        (bool success, bytes memory receiverData) = executor.staticcall(
-            abi.encodeWithSelector(
-                IExecutor.fundsExpectedAddress.selector, data
-            )
-        );
-
-        if (!success) {
-            revert(
-                string(
-                    receiverData.length > 0
-                        ? receiverData
-                        : abi.encodePacked(
-                            "Getting protocol expected address failed"
-                        )
-                )
-            );
-        }
-
-        receiver = abi.decode(receiverData, (address));
+        // slither-disable-next-line calls-loop
+        receiver = IExecutor(executor).fundsExpectedAddress(data);
     }
 
     function _validateExecutor(address executor) private view {
@@ -340,24 +284,9 @@ contract Dispatcher is TransferManager {
         address feeCalculator,
         address client
     ) internal view returns (uint16 routerFeeOnOutputBps) {
-        // slither-disable-next-line calls-loop,low-level-calls
-        (bool success, bytes memory feeData) = feeCalculator.staticcall(
-            abi.encodeWithSelector(
-                IFeeCalculator.getEffectiveRouterFeeOnOutput.selector, client
-            )
-        );
-
-        if (!success) {
-            revert(
-                string(
-                    feeData.length > 0
-                        ? feeData
-                        : abi.encodePacked("Getting router fee failed")
-                )
-            );
-        }
-
-        routerFeeOnOutputBps = abi.decode(feeData, (uint16));
+        // slither-disable-next-line calls-loop
+        routerFeeOnOutputBps =
+            IFeeCalculator(feeCalculator).getEffectiveRouterFeeOnOutput(client);
     }
 
     function _callCalculateFee(
@@ -370,27 +299,8 @@ contract Dispatcher is TransferManager {
         view
         returns (uint256 amountOut, FeeRecipient[] memory feeRecipients)
     {
-        // slither-disable-next-line calls-loop,low-level-calls
-        (bool success, bytes memory feeData) = feeCalculator.staticcall(
-            abi.encodeWithSelector(
-                IFeeCalculator.calculateFee.selector,
-                amountIn,
-                client,
-                clientFeeBps
-            )
-        );
-
-        if (!success) {
-            revert(
-                string(
-                    feeData.length > 0
-                        ? feeData
-                        : abi.encodePacked("Calculating fee failed")
-                )
-            );
-        }
-
-        (amountOut, feeRecipients) =
-            abi.decode(feeData, (uint256, FeeRecipient[]));
+        // slither-disable-next-line calls-loop
+        (amountOut, feeRecipients) = IFeeCalculator(feeCalculator)
+            .calculateFee(amountIn, client, clientFeeBps);
     }
 }
