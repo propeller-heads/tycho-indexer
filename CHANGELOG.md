@@ -1,3 +1,18 @@
+## [0.288.0](https://github.com/propeller-heads/tycho-indexer/compare/0.287.0...0.288.0) (2026-05-08)
+
+
+### Features
+
+* **indexer:** add access control to heap profiling endpoint ([26a2f05](https://github.com/propeller-heads/tycho-indexer/commit/26a2f05dbf79d325cafb7088692b9f9ca5fa8c74))
+* **indexer:** add jemalloc memory profiling support ([7f77178](https://github.com/propeller-heads/tycho-indexer/commit/7f77178f1c218bfc71629043b8a1730cb01d7088))
+* **indexer:** make jemalloc default and add flexible CI build options ([93e691a](https://github.com/propeller-heads/tycho-indexer/commit/93e691aae3d593e5dd7077398939fb9bb8b12751))
+* **indexer:** use jemalloc and add memory profiling tools ([#994](https://github.com/propeller-heads/tycho-indexer/issues/994)) ([13d3ac1](https://github.com/propeller-heads/tycho-indexer/commit/13d3ac10f944ee8e5e0691215afc406baa953002))
+
+
+### Bug Fixes
+
+* **indexer:** enable pprof pre-symbolization for cross-platform profiling ([a2a122b](https://github.com/propeller-heads/tycho-indexer/commit/a2a122be17c1d6df0271997cb451bef3e0928c87))
+
 ## [0.287.0](https://github.com/propeller-heads/tycho-indexer/compare/0.286.0...0.287.0) (2026-05-07)
 
 
