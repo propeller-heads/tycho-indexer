@@ -30,6 +30,7 @@ use crate::feed::{
 
 mod block_history;
 pub mod component_tracker;
+pub mod dto;
 pub mod synchronizer;
 
 /// A trait representing a minimal interface for types that behave like a block header.

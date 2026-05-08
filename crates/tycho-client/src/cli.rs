@@ -5,7 +5,10 @@ use tracing::info;
 use tracing_appender::rolling;
 use tycho_common::{dto::TvlThresholdTier, models::Chain};
 
-use crate::{feed::component_tracker::ComponentFilter, stream::TychoStreamBuilder};
+use crate::{
+    feed::{component_tracker::ComponentFilter, dto::FeedMessageDto},
+    stream::TychoStreamBuilder,
+};
 
 /// Tycho Client CLI - A tool for indexing and tracking blockchain protocol data
 ///
@@ -282,10 +285,9 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             let msg =
                 result.map_err(|e| format!("Message printer received synchronizer error: {e}"))?;
 
-            // TODO: cli.rs needs to convert model types to dto types for serialization
-            // FeedMessage no longer implements Serialize because StateSyncMessage uses model types.
-            // Using Debug output as a temporary fallback until proper serialization is implemented.
-            println!("{msg:?}");
+            let json = serde_json::to_string(&FeedMessageDto::from(msg))
+                .map_err(|e| format!("Message printer failed to serialize message: {e}"))?;
+            println!("{json}");
         }
 
         Ok::<(), String>(())

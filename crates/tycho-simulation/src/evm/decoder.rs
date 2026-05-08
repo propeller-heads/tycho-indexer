@@ -1160,17 +1160,18 @@ mod tests {
         decoder
     }
 
-    fn load_test_msg(_name: &str) -> FeedMessage<BlockHeader> {
-        // TODO: FeedMessage no longer implements Deserialize because ComponentWithState::state is
-        // now ProtocolComponentState (a model type without serde), breaking JSON deserialization
-        // from test assets. These tests need to be rewritten to construct FeedMessage directly
-        // rather than deserializing from JSON fixtures.
-        unimplemented!("FeedMessage deserialization from JSON is no longer supported")
+    fn load_test_msg(name: &str) -> FeedMessage<BlockHeader> {
+        use std::{fs, path::Path};
+        use tycho_client::feed::dto::FeedMessageDto;
+        let project_root = env!("CARGO_MANIFEST_DIR");
+        let asset_path =
+            Path::new(project_root).join(format!("tests/assets/decoder/{name}.json"));
+        let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
+        let dto: FeedMessageDto<BlockHeader> =
+            serde_json::from_str(&json_data).expect("Failed to deserialize FeedMsg json!");
+        FeedMessage::from(dto)
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_decode() {
         let decoder = setup_decoder(true).await;
@@ -1192,9 +1193,6 @@ mod tests {
         assert_eq!(res2.sync_states.len(), 1);
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_decode_component_missing_token() {
         let decoder = setup_decoder(false).await;
@@ -1219,9 +1217,6 @@ mod tests {
         assert_eq!(res1.states.len(), 0);
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_decode_component_bad_id() {
         let decoder = setup_decoder(true).await;
@@ -1237,12 +1232,9 @@ mod tests {
         }
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
     #[rstest]
     #[case(true)]
     #[case(false)]
-    #[ignore]
     #[tokio::test]
     async fn test_decode_component_bad_state(#[case] skip_failures: bool) {
         let mut decoder = setup_decoder(true).await;
@@ -1267,9 +1259,6 @@ mod tests {
         }
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test]
     async fn test_decode_updates_state_on_contract_change() {
         let decoder = setup_decoder(true).await;
@@ -1338,9 +1327,6 @@ mod tests {
         assert_eq!(generated_address, address!("00000000000000000000000000001e240badbabe"));
     }
 
-    // TODO: test needs rewriting to construct FeedMessage directly; JSON deserialization no
-    // longer works because ProtocolComponentState doesn't implement Deserialize.
-    #[ignore]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_euler_hook_low_pool_manager_balance() {
         let mut decoder = TychoStreamDecoder::new();
