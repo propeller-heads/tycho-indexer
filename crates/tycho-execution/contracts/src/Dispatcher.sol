@@ -17,6 +17,8 @@ error Dispatcher__InvalidDataLength();
 error Dispatcher__AddressZero();
 error Dispatcher__UnsupportedSingleHopCycle(address token);
 error Dispatcher__ExecutorAlreadyExists(address executor);
+error Dispatcher__SwapReverted(address executor);
+error Dispatcher__CallbackReverted(address executor);
 
 /**
  * @title Dispatcher - Dispatch execution to external contracts
@@ -165,13 +167,15 @@ contract Dispatcher is TransferManager {
         }
 
         if (!success) {
-            revert(
-                string(
-                    result.length > 0
-                        ? result
-                        : abi.encodePacked("Execution failed")
-                )
-            );
+            // slither-disable-next-line incorrect-equality
+            if (result.length == 0) {
+                revert Dispatcher__SwapReverted(executor);
+            }
+            // Bubble the executor's revert payload byte-for-byte so callers
+            // see the original Error(string)/Panic/custom-error
+            assembly {
+                revert(add(result, 0x20), mload(result))
+            }
         }
 
         uint256 balanceAfterSwap = _balanceOf(tokenOut, measureAt);
@@ -228,13 +232,15 @@ contract Dispatcher is TransferManager {
         );
 
         if (!success) {
-            revert(
-                string(
-                    result.length > 0
-                        ? result
-                        : abi.encodePacked("Callback failed")
-                )
-            );
+            // slither-disable-next-line incorrect-equality
+            if (result.length == 0) {
+                revert Dispatcher__CallbackReverted(executor);
+            }
+            // Bubble the executor's revert payload byte-for-byte so callers
+            // see the original Error(string)/Panic/custom-error
+            assembly {
+                revert(add(result, 0x20), mload(result))
+            }
         }
 
         // Revoke any lingering allowance the protocol didn't consume.

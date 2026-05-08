@@ -3,6 +3,51 @@ pragma solidity ^0.8.26;
 import "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 
+error RevertingExecutor__Custom(uint256 code);
+
+/// @dev Mock executor whose `swap` reverts in a configurable way. The mode is
+/// encoded as the first byte of `data` so it survives delegatecall (executor
+/// storage isn't reachable from the dispatcher's context).
+contract RevertingMockExecutor {
+    uint8 internal constant _MODE_EMPTY = 0;
+    uint8 internal constant _MODE_STRING = 1;
+    uint8 internal constant _MODE_CUSTOM = 2;
+
+    address internal constant _WETH =
+        0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address internal constant _DAI = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
+
+    function getTransferData(bytes calldata)
+        external
+        pure
+        returns (TransferManager.TransferType, address, address, address, bool)
+    {
+        return
+            (TransferManager.TransferType.None, address(0), _WETH, _DAI, false);
+    }
+
+    function swap(uint256, bytes calldata data, address) external payable {
+        uint8 mode = uint8(data[0]);
+        if (mode == _MODE_EMPTY) {
+            assembly {
+                revert(0, 0)
+            }
+        } else if (mode == _MODE_STRING) {
+            revert("user-supplied reason");
+        } else if (mode == _MODE_CUSTOM) {
+            revert RevertingExecutor__Custom(42);
+        }
+    }
+
+    function fundsExpectedAddress(bytes calldata)
+        external
+        pure
+        returns (address)
+    {
+        return address(0);
+    }
+}
+
 contract DispatcherExposed is Dispatcher {
     constructor(address _permit2) Dispatcher(_permit2) {}
 
@@ -138,6 +183,54 @@ contract DispatcherTest is Constants {
             true,
             false,
             address(0)
+        );
+    }
+
+    function _approveExecutor(address executor) internal {
+        uint256 forkBlockTime = vm.getBlockTimestamp();
+        vm.warp(forkBlockTime - _SETUP_TIME_OFFSET_NEW_EXECUTOR);
+        dispatcherExposed.exposedSetExecutor(executor);
+        vm.warp(forkBlockTime);
+    }
+
+    function testSwapEmptyRevertSurfacesTypedError() public {
+        // Empty revert from the executor surfaces as a typed `Dispatcher__SwapReverted(executor)` error,
+        // not "Execution failed".
+        RevertingMockExecutor mock = new RevertingMockExecutor();
+        _approveExecutor(address(mock));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Dispatcher__SwapReverted.selector, address(mock)
+            )
+        );
+        dispatcherExposed.exposedCallExecutor(
+            address(mock), 0, hex"00", true, false, address(0)
+        );
+    }
+
+    function testSwapStringRevertBubblesUnwrapped() public {
+        // `revert("...")` from the executor bubbles up as the original `Error(string)` byte-for-byte,
+        // with no double-wrap.
+        RevertingMockExecutor mock = new RevertingMockExecutor();
+        _approveExecutor(address(mock));
+
+        vm.expectRevert(bytes("user-supplied reason"));
+        dispatcherExposed.exposedCallExecutor(
+            address(mock), 0, hex"01", true, false, address(0)
+        );
+    }
+
+    function testSwapCustomErrorBubblesUnwrapped() public {
+        // Custom errors from the executor bubble up with their original selector intact, so callers can decode them.
+        RevertingMockExecutor mock = new RevertingMockExecutor();
+        _approveExecutor(address(mock));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(RevertingExecutor__Custom.selector, 42)
+        );
+        dispatcherExposed.exposedCallExecutor(
+            address(mock), 0, hex"02", true, false, address(0)
         );
     }
 }
