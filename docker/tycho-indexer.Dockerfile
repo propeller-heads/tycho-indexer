@@ -15,7 +15,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # ── Stage 3: build ───────────────────────────────────────────────────────────
 FROM chef AS builder
-ARG CARGO_PROFILE=profiling
+ARG CARGO_PROFILE=release
 ARG EXTRA_CARGO_FLAGS=""
 COPY --from=planner /build/recipe.json recipe.json
 # Pre-build deps only (cached layer)
