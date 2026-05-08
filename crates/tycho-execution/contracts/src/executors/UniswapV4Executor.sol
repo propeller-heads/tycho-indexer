@@ -153,6 +153,11 @@ contract UniswapV4Executor is IExecutor, ICallback {
         poolManager.unlock(swapData);
     }
 
+    /// @dev Swap data uses ETH_ADDRESS for native ETH; translate to address(0) for V4 protocol interaction.
+    function _toV4Token(address token) internal pure returns (address) {
+        return token == ETH_ADDRESS ? address(0) : token;
+    }
+
     // slither-disable-next-line dead-code
     function _decodeData(bytes calldata data)
         internal
@@ -169,12 +174,8 @@ contract UniswapV4Executor is IExecutor, ICallback {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
-        tokenIn = address(bytes20(data[0:20]));
-        tokenOut = address(bytes20(data[20:40]));
-        // Swap data uses ETH_ADDRESS for native ETH; translate to
-        // address(0) for V4 protocol interaction (pool keys, sync).
-        if (tokenIn == ETH_ADDRESS) tokenIn = address(0);
-        if (tokenOut == ETH_ADDRESS) tokenOut = address(0);
+        tokenIn = _toV4Token(address(bytes20(data[0:20])));
+        tokenOut = _toV4Token(address(bytes20(data[20:40])));
         zeroForOne = data[40] != 0;
 
         bytes calldata remaining = data[41:];
@@ -185,8 +186,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
-        address firstToken = address(bytes20(remaining[0:20]));
-        if (firstToken == ETH_ADDRESS) firstToken = address(0);
+        address firstToken = _toV4Token(address(bytes20(remaining[0:20])));
         uint24 firstFee = uint24(bytes3(remaining[20:23]));
         int24 firstTickSpacing = int24(uint24(bytes3(remaining[23:26])));
         address firstHook = address(bytes20(remaining[26:46]));
@@ -238,9 +238,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 hookDataLength := and(shr(240, mload(add(dataPtr, 46))), 0xffff)
             }
 
-            if (intermediaryToken == ETH_ADDRESS) {
-                intermediaryToken = address(0);
-            }
+            intermediaryToken = _toV4Token(intermediaryToken);
 
             if (poolData.length < 48 + hookDataLength) {
                 revert UniswapV4Executor__InvalidDataLength();
