@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_liquidityparty"
-  version: v0.1.1
+  version: v0.1.2
   url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-liquidityparty"
 
 protobuf:
@@ -20,13 +20,13 @@ network: mainnet
 networks:
   mainnet:
     params:
-      map_protocol_components: planner=0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9&info=0xAAb5751696d081bF077793a6d86EddF9DF512Ac2&mint_impl=0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660&swap_impl=0xE64605889C32cC8ec858146b428Fa38302B5baA9
-      map_protocol_changes: planner=0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9&info=0xAAb5751696d081bF077793a6d86EddF9DF512Ac2&mint_impl=0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660&swap_impl=0xE64605889C32cC8ec858146b428Fa38302B5baA9
+      map_protocol_components: planner=0xdDda7Fa3AC71197309FEf368E366183f9d0365E8&info=0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97&mint_impl=0x04c6108A5b6a3a193F7548F22809900337b6fe56&extra_impl=0x9072Eb97454b33b311CF50d3cc42dc6E627a48Bc
+      map_protocol_changes: planner=0xdDda7Fa3AC71197309FEf368E366183f9d0365E8&info=0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97&mint_impl=0x04c6108A5b6a3a193F7548F22809900337b6fe56&extra_impl=0x9072Eb97454b33b311CF50d3cc42dc6E627a48Bc
 
 modules:
   - name: map_protocol_components
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25067440
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -35,7 +35,7 @@ modules:
 
   - name: store_protocol_components
     kind: store
-    initialBlock: 24535797
+    initialBlock: 25067440
     updatePolicy: set
     valueType: string
     inputs:
@@ -43,7 +43,7 @@ modules:
 
   - name: map_killed_components
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25067440
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
@@ -52,7 +52,7 @@ modules:
 
   - name: map_relative_component_balance
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25067440
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
@@ -61,7 +61,7 @@ modules:
 
   - name: store_balances
     kind: store
-    initialBlock: 24535797
+    initialBlock: 25067440
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -69,7 +69,7 @@ modules:
 
   - name: map_protocol_changes
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25067440
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block

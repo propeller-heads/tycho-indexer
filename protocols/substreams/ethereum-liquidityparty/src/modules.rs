@@ -196,7 +196,7 @@ fn map_protocol_changes(
     param_string: String,
     block: eth::v2::Block,
     new_components: BlockTransactionProtocolComponents,
-    _killed_components: BlockTransactionProtocolComponents, // PC delete events not yet supported
+    killed_components: BlockTransactionProtocolComponents,
     deltas: BlockBalanceDeltas,
     components_store: StoreGetString,
     balance_store: StoreDeltas, // Note, this map module is using the `deltas` mode for the store.
@@ -227,27 +227,33 @@ fn map_protocol_changes(
                 });
         });
 
-    // Aggregate killed components per tx
-    /* Protocol component deletion events not yet supported
+    // Zero out balances for killed components so Tycho reports zero TVL.
     killed_components
         .tx_components
         .iter()
         .for_each(|tx_component| {
-            // initialise builder if not yet present for this tx
             let tx = tx_component.tx.as_ref().unwrap();
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(tx));
 
-            // iterate over individual components killed within this tx
             tx_component
                 .components
                 .iter()
                 .for_each(|component| {
-                    builder.add_protocol_component(component);
+                    if let Some(tokens_str) = components_store.get_last(&component.id) {
+                        if let Ok(token_addrs) = decode_addrs(&tokens_str) {
+                            for token in token_addrs {
+                                builder.add_balance_change(&BalanceChange {
+                                    token,
+                                    balance: vec![0],
+                                    component_id: component.id.as_bytes().to_vec(),
+                                });
+                            }
+                        }
+                    }
                 });
         });
-     */
 
     // Aggregate absolute balances per transaction.
     aggregate_balances_changes(balance_store, deltas)
@@ -276,7 +282,7 @@ fn map_protocol_changes(
                 .get_last(addr_str)
                 .is_some() ||
                 addr == params.mint_impl.as_slice() ||
-                addr == params.swap_impl.as_slice() ||
+                addr == params.extra_impl.as_slice() ||
                 addr == params.planner.as_slice() ||
                 addr == params.info.as_slice()
         },

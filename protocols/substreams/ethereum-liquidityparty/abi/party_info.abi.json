@@ -1,18 +1,7 @@
 [
   {
     "type": "constructor",
-    "inputs": [
-      {
-        "name": "mintImpl",
-        "type": "address",
-        "internalType": "contract PartyPoolMintImpl"
-      },
-      {
-        "name": "swapImpl_",
-        "type": "address",
-        "internalType": "contract PartyPoolSwapImpl"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -184,12 +173,12 @@
         "internalType": "contract IPartyPool"
       },
       {
-        "name": "baseTokenIndex",
+        "name": "inputTokenIndex",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "quoteTokenIndex",
+        "name": "outputTokenIndex",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -197,6 +186,94 @@
     "outputs": [
       {
         "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "swapAmounts",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "contract IPartyPool"
+      },
+      {
+        "name": "inputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "outputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxAmountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "swapAmountsForExactPrice",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "contract IPartyPool"
+      },
+      {
+        "name": "inputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "outputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minPrice",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inFee",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -231,50 +308,6 @@
       },
       {
         "name": "lpMinted",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "inFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "swapToLimitAmounts",
-    "inputs": [
-      {
-        "name": "pool",
-        "type": "address",
-        "internalType": "contract IPartyPool"
-      },
-      {
-        "name": "inputTokenIndex",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "outputTokenIndex",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "limitPrice",
-        "type": "int128",
-        "internalType": "int128"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "amountIn",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountOut",
         "type": "uint256",
         "internalType": "uint256"
       },
