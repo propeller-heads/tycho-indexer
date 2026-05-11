@@ -74,11 +74,11 @@ contract VaultTest is Constants, TestUtils {
         deal(ALICE, amount);
         uint256 balanceBefore = address(vault).balance;
         vm.startPrank(ALICE);
-        vault.deposit{value: amount}(address(0), amount);
+        vault.deposit{value: amount}(ETH_ADDR, amount);
 
         assertEq(ALICE.balance, 0);
         assertEq(address(vault).balance - balanceBefore, amount);
-        assertEq(vault.balanceOf(ALICE, uint256(uint160(address(0)))), amount);
+        assertEq(vault.balanceOf(ALICE, uint256(uint160(ETH_ADDR))), amount);
     }
 
     function testWithdrawERC20() public {
@@ -104,16 +104,15 @@ contract VaultTest is Constants, TestUtils {
         deal(user, amount);
         uint256 balanceBefore = address(vault).balance;
         vm.startPrank(user);
-        vault.deposit{value: amount}(address(0), amount);
+        vault.deposit{value: amount}(ETH_ADDR, amount);
 
         uint256 amountToWithdraw = amount / 2;
-        vault.withdraw(address(0), amountToWithdraw);
+        vault.withdraw(ETH_ADDR, amountToWithdraw);
 
         assertEq(user.balance, amountToWithdraw);
         assertEq(address(vault).balance - balanceBefore, amountToWithdraw);
         assertEq(
-            vault.balanceOf(user, uint256(uint160(address(0)))),
-            amountToWithdraw
+            vault.balanceOf(user, uint256(uint160(ETH_ADDR))), amountToWithdraw
         );
     }
 

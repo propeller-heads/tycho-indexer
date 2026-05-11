@@ -489,7 +489,7 @@ fn test_evm_single_encoding_strategy_usv4_grouped_swap() {
         "6982508145454ce325ddbe47a25d4ec3d2311933", // group token out
         "00",                                       // zero2one
         // First pool params
-        "0000000000000000000000000000000000000000", // intermediary token (ETH)
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", // intermediary token (ETH_ADDRESS)
         "000bb8",                                   // fee
         "00003c",                                   // tick spacing
         "0000000000000000000000000000000000000000", // hook address

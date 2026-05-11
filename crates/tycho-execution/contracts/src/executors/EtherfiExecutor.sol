@@ -7,6 +7,7 @@ import {
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IExecutor} from "@interfaces/IExecutor.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 
 error EtherfiExecutor__InvalidDataLength();
 error EtherfiExecutor__InvalidDirection();
@@ -122,6 +123,7 @@ contract EtherfiExecutor is IExecutor {
         EtherfiDirection direction = _decodeData(data);
 
         if (direction == EtherfiDirection.EthToEeth) {
+            tokenIn = ETH_ADDRESS;
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
             tokenOut = eethAddress;
             outputToRouter = true;
@@ -129,7 +131,7 @@ contract EtherfiExecutor is IExecutor {
             transferType = TransferManager.TransferType.ProtocolWillDebit;
             receiver = redemptionManagerAddress;
             tokenIn = eethAddress;
-            tokenOut = address(0);
+            tokenOut = ETH_ADDRESS;
             outputToRouter = false;
         } else if (direction == EtherfiDirection.EethToWeeth) {
             transferType = TransferManager.TransferType.ProtocolWillDebit;

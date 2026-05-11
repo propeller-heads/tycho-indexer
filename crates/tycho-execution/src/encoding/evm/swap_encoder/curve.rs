@@ -9,7 +9,10 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{bytes_to_address, get_static_attribute},
+    evm::{
+        constants::ROUTER_ETH_ADDRESS,
+        utils::{bytes_to_address, get_static_attribute},
+    },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -18,14 +21,10 @@ use crate::encoding::{
 ///
 /// # Fields
 /// * `executor_address` - The address of the executor contract that will perform the swap.
-/// * `meta_registry_address` - The address of the Curve meta registry contract. Used to get coin
-///   indexes.
-/// * `native_token_curve_address` - The address used as native token in curve pools.
 /// * `native_token_address` - The address of the native token.
 #[derive(Clone)]
 pub struct CurveSwapEncoder {
     executor_address: Bytes,
-    native_token_curve_address: Bytes,
     native_token_address: Bytes,
     wrapped_native_token_address: Bytes,
 }
@@ -72,12 +71,12 @@ impl CurveSwapEncoder {
     // Some curve pools support both ETH and WETH as tokens.
     // They do the wrapping/unwrapping inside the pool
     fn normalize_token(&self, token: Address, coins: &[Address]) -> Result<Address, EncodingError> {
-        let native_token_address = Address::from_slice(&self.native_token_curve_address);
+        let eth_address = Address::from_slice(&ROUTER_ETH_ADDRESS);
         let wrapped_native_token_address = bytes_to_address(&self.wrapped_native_token_address)?;
-        if token == native_token_address && !coins.contains(&token) {
+        if token == eth_address && !coins.contains(&token) {
             Ok(wrapped_native_token_address)
         } else if token == wrapped_native_token_address && !coins.contains(&token) {
-            Ok(native_token_address)
+            Ok(eth_address)
         } else {
             Ok(token)
         }
@@ -115,26 +114,11 @@ impl SwapEncoder for CurveSwapEncoder {
     fn new(
         executor_address: Bytes,
         chain: Chain,
-        config: Option<HashMap<String, String>>,
+        _config: Option<HashMap<String, String>>,
     ) -> Result<Self, EncodingError> {
-        let config = config.ok_or(EncodingError::FatalError(
-            "Missing curve specific addresses in config".to_string(),
-        ))?;
-        let native_token_curve_address = config
-            .get("native_token_address")
-            .map(|s| {
-                Bytes::from_str(s).map_err(|_| {
-                    EncodingError::FatalError("Invalid native token curve address".to_string())
-                })
-            })
-            .ok_or(EncodingError::FatalError(
-                "Missing native token curve address in config".to_string(),
-            ))
-            .flatten()?;
         Ok(Self {
             executor_address,
             native_token_address: chain.native_token().address,
-            native_token_curve_address,
             wrapped_native_token_address: chain.wrapped_native_token().address,
         })
     }
@@ -144,14 +128,14 @@ impl SwapEncoder for CurveSwapEncoder {
         swap: &Swap,
         _encoding_context: &EncodingContext,
     ) -> Result<Vec<u8>, EncodingError> {
-        let native_token_curve_address = Address::from_slice(&self.native_token_curve_address);
+        let eth_address = Address::from_slice(&ROUTER_ETH_ADDRESS);
         let token_in = if *swap.token_in().address == self.native_token_address {
-            native_token_curve_address
+            eth_address
         } else {
             bytes_to_address(&swap.token_in().address)?
         };
         let token_out = if *swap.token_out().address == self.native_token_address {
-            native_token_curve_address
+            eth_address
         } else {
             bytes_to_address(&swap.token_out().address)?
         };
@@ -207,16 +191,7 @@ mod tests {
     use crate::encoding::{evm::swap_encoder::curve::CurveSwapEncoder, models::default_token};
 
     fn curve_config() -> Option<HashMap<String, String>> {
-        Some(HashMap::from([
-            (
-                "native_token_address".to_string(),
-                "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string(),
-            ),
-            (
-                "meta_registry_address".to_string(),
-                "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC".to_string(),
-            ),
-        ]))
+        None
     }
 
     #[rstest]
@@ -456,16 +431,7 @@ mod tests {
         let encoder = CurveSwapEncoder::new(
             Bytes::from("0x5615dEB798BB3E4dFa0139dFa1b3D433Cc23b72f"),
             Chain::Ethereum,
-            Some(HashMap::from([
-                (
-                    "native_token_address".to_string(),
-                    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE".to_string(),
-                ),
-                (
-                    "meta_registry_address".to_string(),
-                    "0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC".to_string(),
-                ),
-            ])),
+            None,
         )
         .unwrap();
         let encoded_swap = encoder

@@ -189,9 +189,8 @@ creation and signing yourself using the public `Permit2` utility (see [Token tra
 
 The full method call includes the following parameters, which act as **execution guardrails:**
 
-* `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you.
-* `minAmountOut` and `tokenOut` — the minimum amount you want to receive. For maximum security, determine this from a *
-  *third-party source**.
+* `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you. For native ETH, use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` — the router reverts on `address(0)`.
+* `minAmountOut` and `tokenOut` — the minimum amount you want to receive. Same ETH address rule applies. For maximum security, determine this from a **third-party source**.
 * `receiver` — who receives the final output. Set this to the TychoRouter address to credit output tokens to the vault.
 * `nTokens` — _(split swaps only)_ the number of distinct tokens in the split routing graph.
 * `clientFeeParams` — controls fee-taking and client contribution (see Client Fee Signature below). Pass all-zero values

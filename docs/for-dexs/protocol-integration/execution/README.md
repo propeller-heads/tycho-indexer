@@ -84,8 +84,8 @@ Called by the Dispatcher via `staticcall` before each swap to determine how inpu
 
 * `transferType`: How the protocol expects to receive tokens (see [Token Transfers](./#token-transfers)).
 * `receiver`: Where tokens should be sent (typically the pool address or the router).
-* `tokenIn`: The input token address.
-* `tokenOut`: The output token address.
+* `tokenIn`: The input token address. For native ETH, this must be `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` (the `ETH_ADDRESS` constant), not `address(0)`.
+* `tokenOut`: The output token address. Same rule applies for native ETH.
 * `outputToRouter`: Whether the protocol automatically sends the output token back to the TychoRouter. The Dispatcher uses this to decide whether it needs to transfer the token to the intended receiver.
 
 `transferType`, `receiver` and `outputToRouter` must be **hardcoded** per-executor based on the protocol's requirements — they are not encodable in calldata.
@@ -179,19 +179,21 @@ The transfer behavior is fully determined by the values your executor returns fr
 
 ### Native Token Address Handling
 
-When encoding swaps, you may need to handle address conversions for native tokens.
+Tycho uses `address(0)` to represent native tokens during indexing and simulation, but uses `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` (`ETH_ADDRESS`) consistently within the router and executor calldata. The boundary between these two representations lives in the **swap encoder**.
 
-#### Converting Zero Address to Protocol-Specific Address
+#### SwapEncoder: translate `address(0)` → `ETH_ADDRESS`
 
-Tycho uses the zero address (`0x0000000000000000000000000000000000000000`) to represent native tokens across all chains during indexing and simulation. However, if your protocol's contracts expect a different address convention—such as `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`—you must convert the address when encoding.
+In your `SwapEncoder`, if you encode token addresses into the calldata, convert `address(0)` to `ETH_ADDRESS` (`0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE`). A helper is available:
 
-**In your `SwapEncoder` implementation:**
+```rust
+use crate::encoding::evm::utils::native_to_router_eth;
 
-1. Check if the input or output token is the zero address
-2. If your protocol requires a different sentinel address for native tokens, convert it in the encoding step
-3. Ensure the conversion happens only in the calldata generation, not in the protocol state
+let token_in = native_to_router_eth(bytes_to_address(&swap.token_in().address)?);
+```
 
-This ensures compatibility with your protocol's on-chain contracts while maintaining Tycho's standardized native token representation throughout indexing and simulation.
+#### Executor `swap`: translate `ETH_ADDRESS` → protocol address
+
+If your protocol uses `address(0)` (e.g., UniswapV4, Ekubo) or another sentinel for native ETH in its pool keys or function calls, translate `ETH_ADDRESS` back to the protocol's expected address inside `swap()` (or `_decodeData()` / `_locked()`), right before interacting with the protocol.
 
 ## Fee Tokens
 

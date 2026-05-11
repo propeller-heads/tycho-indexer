@@ -6,7 +6,7 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{bytes_to_address, get_static_attribute},
+    evm::utils::{bytes_to_address, convert_to_router_token, get_static_attribute},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -56,10 +56,12 @@ impl SwapEncoder for EkuboSwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == *swap.token_in().address {
-            encoded.extend(bytes_to_address(&swap.token_in().address)?);
+            let token_in = convert_to_router_token(bytes_to_address(&swap.token_in().address)?);
+            encoded.extend(token_in);
         }
 
-        encoded.extend(bytes_to_address(&swap.token_out().address)?);
+        let token_out = convert_to_router_token(bytes_to_address(&swap.token_out().address)?);
+        encoded.extend(token_out);
         encoded.extend((extension, fee, tick_spacing).abi_encode_packed());
 
         Ok(encoded)
@@ -123,8 +125,8 @@ mod tests {
         assert_eq!(
             hex_swap,
             concat!(
-                // group token in
-                "0000000000000000000000000000000000000000",
+                // group token in (ETH_ADDRESS)
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                 // token out 1st swap
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // pool config 1st swap
@@ -192,8 +194,8 @@ mod tests {
         assert_eq!(
             combined_hex,
             concat!(
-                // group token in
-                "0000000000000000000000000000000000000000",
+                // group token in (ETH_ADDRESS)
+                "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                 // token out 1st swap
                 "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
                 // pool config 1st swap
