@@ -1,3 +1,12 @@
+## [0.288.3](https://github.com/propeller-heads/tycho-indexer/compare/0.288.2...0.288.3) (2026-05-11)
+
+
+### Bug Fixes
+
+* **Dispatcher:** Handle delegatecall errors nicely ([46ab64f](https://github.com/propeller-heads/tycho-indexer/commit/46ab64ffe85d9d517016ac613926a2f5f6ee9b7a))
+* **Dispatcher:** Use regular calls instead of static calls ([15c2a0c](https://github.com/propeller-heads/tycho-indexer/commit/15c2a0c571772f1cf12f780cb8be2a370c41791a))
+* **Dispatcher:** Use regular calls instead of static calls + Handle delegatecall errors nicely  ([#1004](https://github.com/propeller-heads/tycho-indexer/issues/1004)) ([ce9d535](https://github.com/propeller-heads/tycho-indexer/commit/ce9d53508a89ff271eadec38be7fff390d9479cb))
+
 ## [0.288.2](https://github.com/propeller-heads/tycho-indexer/compare/0.288.1...0.288.2) (2026-05-11)
 
 
