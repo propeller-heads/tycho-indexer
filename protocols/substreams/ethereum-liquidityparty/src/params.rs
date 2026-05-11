@@ -17,7 +17,6 @@ impl StringParams {
 
 pub(crate) struct Params {
     pub planner: Vec<u8>,
-    #[allow(dead_code)] // We keep the unused info field for future pricing/view operations
     pub info: Vec<u8>,
     pub mint_impl: Vec<u8>,
     pub extra_impl: Vec<u8>,

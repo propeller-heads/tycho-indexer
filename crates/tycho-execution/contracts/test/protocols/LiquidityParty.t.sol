@@ -143,10 +143,11 @@ contract LiquidityPartyExecutorTest is Constants, TestUtils {
             loadCallDataFromFile("test_encode_liquidityparty");
         uint256 amountIn = 1e13; // 0.00001 WETH
         uint256 expectedAmountOut = 216042901733749; // AAVE out at fork block
+        address expectedReceiver = makeAddr("decode_swap_receiver");
         _fundPool(WETH_ADDR, amountIn);
-        liquidityPartyExposed.swap(amountIn, protocolData, BOB);
+        liquidityPartyExposed.swap(amountIn, protocolData, expectedReceiver);
 
-        assertGe(AAVE.balanceOf(BOB), expectedAmountOut);
+        assertGe(AAVE.balanceOf(expectedReceiver), expectedAmountOut);
     }
 
     function testSwapWETHToAAVE() public {

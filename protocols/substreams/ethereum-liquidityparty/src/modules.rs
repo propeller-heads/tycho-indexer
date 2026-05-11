@@ -240,9 +240,22 @@ fn map_protocol_changes(
             tx_component
                 .components
                 .iter()
-                .for_each(|component| {
-                    if let Some(tokens_str) = components_store.get_last(&component.id) {
-                        if let Ok(token_addrs) = decode_addrs(&tokens_str) {
+                .for_each(|component| match components_store.get_last(&component.id) {
+                    None => {
+                        substreams::log::info!(
+                            "killed component not found in store: {}",
+                            component.id
+                        );
+                    }
+                    Some(tokens_str) => match decode_addrs(&tokens_str) {
+                        Err(e) => {
+                            substreams::log::info!(
+                                "failed to decode token addresses for killed component {}: {}",
+                                component.id,
+                                e
+                            );
+                        }
+                        Ok(token_addrs) => {
                             for token in token_addrs {
                                 builder.add_balance_change(&BalanceChange {
                                     token,
@@ -251,7 +264,7 @@ fn map_protocol_changes(
                                 });
                             }
                         }
-                    }
+                    },
                 });
         });
 
