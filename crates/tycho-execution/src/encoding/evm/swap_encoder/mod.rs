@@ -12,6 +12,7 @@ mod hashflow;
 mod liquidity_party;
 mod liquorice;
 mod maverick_v2;
+mod metric;
 mod rocketpool;
 mod slipstreams;
 pub mod swap_encoder_registry;
