@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::{
-        BlockChanges, EntryPointWithTracingParams as DtoEntryPointWithTracingParams,
+        BlockAggregatedChanges, EntryPointWithTracingParams as DtoEntryPointWithTracingParams,
         ProtocolComponent as DtoProtocolComponent, ResponseAccount, ResponseProtocolState,
         TracingResult as DtoTracingResult,
     },
@@ -53,7 +53,7 @@ pub struct Snapshot {
 pub struct StateSyncMessage<H = BlockHeader> {
     pub header: H,
     pub snapshots: Snapshot,
-    pub deltas: Option<BlockChanges>,
+    pub deltas: Option<BlockAggregatedChanges>,
     pub removed_components: HashMap<String, DtoProtocolComponent>,
 }
 

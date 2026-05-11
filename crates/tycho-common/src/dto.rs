@@ -21,8 +21,9 @@ use uuid::Uuid;
 
 use crate::{
     models::{
-        self, blockchain::BlockAggregatedChanges, Address, Balance, Code, ComponentId, StoreKey,
-        StoreVal,
+        self,
+        blockchain::BlockAggregatedChanges as ModelBlockAggregatedChanges,
+        Address, Balance, Code, ComponentId, StoreKey, StoreVal,
     },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
@@ -247,7 +248,7 @@ pub enum Response {
 #[derive(Serialize, Deserialize, Debug, Display, Clone)]
 #[serde(untagged)]
 pub enum WebSocketMessage {
-    BlockChanges { subscription_id: Uuid, deltas: BlockChanges },
+    BlockAggregatedChanges { subscription_id: Uuid, deltas: BlockAggregatedChanges },
     Response(Response),
 }
 
@@ -314,7 +315,7 @@ impl Transaction {
 
 /// A container for updates grouped by account/component.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Default)]
-pub struct BlockChanges {
+pub struct BlockAggregatedChanges {
     pub extractor: String,
     pub chain: Chain,
     pub block: Block,
@@ -337,7 +338,7 @@ pub struct BlockChanges {
     pub partial_block_index: Option<u32>,
 }
 
-impl BlockChanges {
+impl BlockAggregatedChanges {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         extractor: &str,
@@ -353,7 +354,7 @@ impl BlockChanges {
         account_balances: HashMap<Bytes, HashMap<Bytes, AccountBalance>>,
         dci_update: DCIUpdate,
     ) -> Self {
-        BlockChanges {
+        BlockAggregatedChanges {
             extractor: extractor.to_owned(),
             chain,
             block,
@@ -520,8 +521,8 @@ impl From<models::contract::AccountBalance> for AccountBalance {
     }
 }
 
-impl From<BlockAggregatedChanges> for BlockChanges {
-    fn from(value: BlockAggregatedChanges) -> Self {
+impl From<ModelBlockAggregatedChanges> for BlockAggregatedChanges {
+    fn from(value: ModelBlockAggregatedChanges) -> Self {
         Self {
             extractor: value.extractor,
             chain: value.chain.into(),
@@ -2264,8 +2265,8 @@ mod test {
             json_value["partial_block_index"] = json!(partial_value);
         }
 
-        let block_changes: BlockChanges =
-            serde_json::from_value(json_value).expect("Failed to deserialize BlockChanges");
+        let block_changes: BlockAggregatedChanges =
+            serde_json::from_value(json_value).expect("Failed to deserialize BlockAggregatedChanges");
 
         assert_eq!(block_changes.partial_block_index, expected);
     }
@@ -2645,7 +2646,7 @@ mod test {
     #[test]
     fn test_serialize_deserialize_block_changes() {
         // Test that models::BlockAggregatedChanges serialized as json can be deserialized as
-        // dto::BlockChanges.
+        // dto::BlockAggregatedChanges.
 
         // Create a models::BlockAggregatedChanges instance
         let block_entity_changes = create_models_block_changes();
@@ -2653,8 +2654,8 @@ mod test {
         // Serialize the struct into JSON
         let json_data = serde_json::to_string(&block_entity_changes).expect("Failed to serialize");
 
-        // Deserialize the JSON back into a dto::BlockChanges struct
-        serde_json::from_str::<BlockChanges>(&json_data).expect("parsing failed");
+        // Deserialize the JSON back into a dto::BlockAggregatedChanges struct
+        serde_json::from_str::<BlockAggregatedChanges>(&json_data).expect("parsing failed");
     }
 
     #[test]
@@ -2766,7 +2767,7 @@ mod test {
         }
         "#;
 
-        serde_json::from_str::<BlockChanges>(json_data).expect("parsing failed");
+        serde_json::from_str::<BlockAggregatedChanges>(json_data).expect("parsing failed");
     }
 
     #[test]
@@ -2775,7 +2776,7 @@ mod test {
         {
             "subscription_id": "5d23bfbe-89ad-4ea3-8672-dc9e973ac9dc",
             "deltas": {
-                "type": "BlockChanges",
+                "type": "BlockAggregatedChanges",
                 "extractor": "uniswap_v2",
                 "chain": "ethereum",
                 "block": {
@@ -3020,21 +3021,21 @@ mod test {
         .into_iter()
         .collect();
         // Create initial and new BlockAccountChanges instances
-        let block_account_changes_initial = BlockChanges {
+        let block_account_changes_initial = BlockAggregatedChanges {
             extractor: "extractor1".to_string(),
             revert: false,
             account_updates: old_account_updates,
             ..Default::default()
         };
 
-        let block_account_changes_new = BlockChanges {
+        let block_account_changes_new = BlockAggregatedChanges {
             extractor: "extractor2".to_string(),
             revert: true,
             account_updates: new_account_updates,
             ..Default::default()
         };
 
-        // Merge the new BlockChanges into the initial one
+        // Merge the new BlockAggregatedChanges into the initial one
         let res = block_account_changes_initial.merge(block_account_changes_new);
 
         // Create the expected result of the merge operation
@@ -3054,7 +3055,7 @@ mod test {
         )]
         .into_iter()
         .collect();
-        let block_account_changes_expected = BlockChanges {
+        let block_account_changes_expected = BlockAggregatedChanges {
             extractor: "extractor1".to_string(),
             revert: true,
             account_updates: expected_account_updates,
@@ -3065,8 +3066,8 @@ mod test {
 
     #[test]
     fn test_block_entity_changes_merge() {
-        // Initialize two BlockChanges instances with different details
-        let block_entity_changes_result1 = BlockChanges {
+        // Initialize two BlockAggregatedChanges instances with different details
+        let block_entity_changes_result1 = BlockAggregatedChanges {
             extractor: String::from("extractor1"),
             revert: false,
             state_updates: hashmap! { "state1".to_string() => ProtocolStateDelta::default() },
@@ -3094,7 +3095,7 @@ mod test {
             component_tvl: hashmap! { "tvl1".to_string() => 1000.0 },
             ..Default::default()
         };
-        let block_entity_changes_result2 = BlockChanges {
+        let block_entity_changes_result2 = BlockAggregatedChanges {
             extractor: String::from("extractor2"),
             revert: true,
             state_updates: hashmap! { "state2".to_string() => ProtocolStateDelta::default() },
@@ -3110,7 +3111,7 @@ mod test {
 
         let res = block_entity_changes_result1.merge(block_entity_changes_result2);
 
-        let expected_block_entity_changes_result = BlockChanges {
+        let expected_block_entity_changes_result = BlockAggregatedChanges {
             extractor: String::from("extractor1"),
             revert: true,
             state_updates: hashmap! {

@@ -28,7 +28,7 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         BlockHeader, HeaderLike,
     },
-    rpc::{RPCClient, RPCError, SnapshotParameters, RPC_CLIENT_CONCURRENCY},
+    rpc::{RPCClient, RPCError, SnapshotParameters, TracedEntryPointsPaginatedParams, RPC_CLIENT_CONCURRENCY},
     DeltasError,
 };
 
@@ -339,11 +339,12 @@ where
             let result = self
                 .rpc_client
                 .get_traced_entry_points_paginated(
-                    self.extractor_id.chain,
-                    &self.extractor_id.name,
-                    &component_ids,
-                    None,
-                    RPC_CLIENT_CONCURRENCY,
+                    TracedEntryPointsPaginatedParams::new(
+                        self.extractor_id.chain,
+                        self.extractor_id.name.as_str(),
+                        component_ids.clone(),
+                        RPC_CLIENT_CONCURRENCY,
+                    ),
                 )
                 .await?;
             self.component_tracker
@@ -859,9 +860,10 @@ mod test {
 
     use tycho_common::{
         dto::{
-            AddressStorageLocation, Block, BlockChanges, Chain, DCIUpdate, EntryPoint,
-            PaginationResponse, ProtocolStateRequestResponse, RPCTracerParams, ResponseAccount,
-            ResponseProtocolState, StateRequestResponse, TracingParams,
+            AddressStorageLocation, Block, BlockAggregatedChanges as DtoBlockAggregatedChanges,
+            Chain, DCIUpdate, EntryPoint, PaginationResponse, ProtocolStateRequestResponse,
+            RPCTracerParams, ResponseAccount, ResponseProtocolState, StateRequestResponse,
+            TracingParams,
         },
         models::{
             blockchain::{
@@ -876,7 +878,7 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::{deltas::MockDeltasClient, rpc::MockRPCClient, DeltasError, RPCError};
+    use crate::{deltas::MockDeltasClient, rpc::{MockRPCClient, Page}, DeltasError, RPCError};
 
     // Required for mock client to implement clone
     struct ArcRPCClient<T>(Arc<T>);
@@ -896,21 +898,21 @@ mod test {
         async fn get_tokens(
             &self,
             params: crate::rpc::TokensParams,
-        ) -> Result<Vec<Token>, RPCError> {
+        ) -> Result<crate::rpc::Page<Vec<Token>>, RPCError> {
             self.0.get_tokens(params).await
         }
 
         async fn get_contract_state(
             &self,
             params: crate::rpc::ContractStateParams,
-        ) -> Result<Vec<Account>, RPCError> {
+        ) -> Result<crate::rpc::Page<Vec<Account>>, RPCError> {
             self.0.get_contract_state(params).await
         }
 
         async fn get_protocol_components(
             &self,
             params: crate::rpc::ProtocolComponentsParams,
-        ) -> Result<Vec<ProtocolComponent>, RPCError> {
+        ) -> Result<crate::rpc::Page<Vec<ProtocolComponent>>, RPCError> {
             self.0
                 .get_protocol_components(params)
                 .await
@@ -919,14 +921,14 @@ mod test {
         async fn get_protocol_states(
             &self,
             params: crate::rpc::ProtocolStatesParams,
-        ) -> Result<Vec<ProtocolComponentState>, RPCError> {
+        ) -> Result<crate::rpc::Page<Vec<ProtocolComponentState>>, RPCError> {
             self.0.get_protocol_states(params).await
         }
 
         async fn get_protocol_systems(
             &self,
             params: crate::rpc::ProtocolSystemsParams,
-        ) -> Result<crate::rpc::ProtocolSystemsResponse, RPCError> {
+        ) -> Result<crate::rpc::Page<crate::rpc::ProtocolSystems>, RPCError> {
             self.0
                 .get_protocol_systems(params)
                 .await
@@ -935,14 +937,14 @@ mod test {
         async fn get_component_tvl(
             &self,
             params: crate::rpc::ComponentTvlParams,
-        ) -> Result<HashMap<String, f64>, RPCError> {
+        ) -> Result<crate::rpc::Page<HashMap<String, f64>>, RPCError> {
             self.0.get_component_tvl(params).await
         }
 
         async fn get_traced_entry_points(
             &self,
             params: crate::rpc::TracedEntryPointsParams,
-        ) -> Result<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>, RPCError>
+        ) -> Result<crate::rpc::Page<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>, RPCError>
         {
             self.0
                 .get_traced_entry_points(params)
@@ -1077,7 +1079,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
         state_sync
@@ -1147,7 +1149,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut state_sync = with_mocked_clients(true, true, Some(rpc), None);
         state_sync
@@ -1280,7 +1282,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(move |_| Ok(traced_entry_point_response()));
+            .returning(move |_| Ok(Page::new(traced_entry_point_response(), 1, 0, 100)));
 
         let mut state_sync = with_mocked_clients(false, false, Some(rpc), None);
         let component = ProtocolComponent {
@@ -1370,7 +1372,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut state_sync = with_mocked_clients(false, true, Some(rpc), None);
         state_sync
@@ -1465,7 +1467,7 @@ mod test {
             });
 
         rpc.expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None);
 
@@ -1521,10 +1523,15 @@ mod test {
             })
             .returning(|_| {
                 // return Component3
-                Ok(vec![
-                    // this component shall have a tvl update above threshold
-                    ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
-                ])
+                Ok(Page::new(
+                    vec![
+                        // this component shall have a tvl update above threshold
+                        ProtocolComponent { id: "Component3".to_string(), ..Default::default() },
+                    ],
+                    1,
+                    0,
+                    100,
+                ))
             });
         // Mock get_snapshots for Component3
         rpc_client
@@ -1567,13 +1574,18 @@ mod test {
             .expect_get_protocol_components()
             .returning(|_| {
                 // Initial sync of components
-                Ok(vec![
-                    // this component shall have a tvl update above threshold
-                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                    // this component shall have a tvl update below threshold.
-                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                    // a third component will have a tvl update above threshold
-                ])
+                Ok(Page::new(
+                    vec![
+                        // this component shall have a tvl update above threshold
+                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                        // this component shall have a tvl update below threshold.
+                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                        // a third component will have a tvl update above threshold
+                    ],
+                    2,
+                    0,
+                    100,
+                ))
             });
 
         rpc_client
@@ -1623,7 +1635,7 @@ mod test {
         // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         // Mock deltas client and messages
         let mut deltas_client = MockDeltasClient::new();
@@ -1653,7 +1665,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            BlockAggregatedChanges::from(BlockChanges {
+            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1701,7 +1713,7 @@ mod test {
                 },
                 ..Default::default()
             }),
-            BlockAggregatedChanges::from(BlockChanges {
+            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1835,7 +1847,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-common we don't have much to do here.
-            deltas: Some(BlockAggregatedChanges::from(BlockChanges {
+            deltas: Some(BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1884,7 +1896,12 @@ mod test {
                     .is_some_and(|ids| ids.contains(&"Component3".to_string()))
             })
             .returning(|_| {
-                Ok(vec![ProtocolComponent { id: "Component3".to_string(), ..Default::default() }])
+                Ok(Page::new(
+                    vec![ProtocolComponent { id: "Component3".to_string(), ..Default::default() }],
+                    1,
+                    0,
+                    100,
+                ))
             });
         // Mock get_snapshots for Component3
         rpc_client
@@ -1926,10 +1943,15 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(vec![
-                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                ])
+                Ok(Page::new(
+                    vec![
+                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                    ],
+                    2,
+                    0,
+                    100,
+                ))
             });
 
         // Mock get_snapshots for initial snapshot
@@ -1980,7 +2002,7 @@ mod test {
         // Mock get_traced_entry_points for Ethereum chain
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let (tx, rx) = channel(1);
         deltas_client
@@ -2010,9 +2032,9 @@ mod test {
             .await
             .expect("Init failed");
 
-        // Simulate the incoming BlockChanges
+        // Simulate the incoming BlockAggregatedChanges
         let deltas = [
-            BlockAggregatedChanges::from(BlockChanges {
+            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2025,7 +2047,7 @@ mod test {
                 revert: false,
                 ..Default::default()
             }),
-            BlockAggregatedChanges::from(BlockChanges {
+            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2104,7 +2126,7 @@ mod test {
                 .collect(),
                 vm_storage: HashMap::new(),
             },
-            deltas: Some(BlockAggregatedChanges::from(BlockChanges {
+            deltas: Some(BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2148,7 +2170,7 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         // Set up deltas client that will wait for messages (blocking in state_sync)
         let (_tx, rx) = channel(1);
@@ -2207,7 +2229,7 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         // Mock to fail during snapshot retrieval (this will cause an error during processing)
         rpc_client
@@ -2222,7 +2244,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send a delta message that will require a snapshot
-                let delta = BlockAggregatedChanges::from(BlockChanges {
+                let delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2318,7 +2340,7 @@ mod test {
 
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         let (_tx, rx) = channel(1);
         deltas_client
@@ -2386,20 +2408,20 @@ mod test {
         // Mock the initial components call
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         // Mock the snapshot retrieval that happens after first message
         rpc_client
             .expect_get_protocol_states()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         rpc_client
             .expect_get_component_tvl()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         // Set up deltas client to send one message, then keep channel open
         let (tx, rx) = channel(10);
@@ -2407,7 +2429,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send first message immediately
-                let first_delta = BlockAggregatedChanges::from(BlockChanges {
+                let first_delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2503,7 +2525,7 @@ mod test {
         // Mock the initial components call to succeed
         rpc_client
             .expect_get_protocol_components()
-            .returning(|_| Ok(vec![]));
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 0)));
 
         // Set up deltas client to consistently fail after subscription
         // This will cause connection errors and trigger retries
@@ -2635,7 +2657,12 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }])
+                Ok(Page::new(
+                    vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }],
+                    1,
+                    0,
+                    100,
+                ))
             });
 
         // Set up deltas client to send a message that is the next expected block
@@ -2643,7 +2670,7 @@ mod test {
         deltas_client
             .expect_subscribe()
             .return_once(move |_, _| {
-                let expected_next_delta = BlockAggregatedChanges::from(BlockChanges {
+                let expected_next_delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                     extractor: "uniswap-v2".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2765,31 +2792,46 @@ mod test {
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }])
+                Ok(Page::new(
+                    vec![ProtocolComponent { id: "Component1".to_string(), ..Default::default() }],
+                    1,
+                    0,
+                    100,
+                ))
             });
 
         // Mock snapshot calls for when we process the expected next block (block 6)
         rpc_client
             .expect_get_protocol_states()
             .returning(|_| {
-                Ok(vec![ProtocolComponentState::new(
-                    "Component1",
-                    Default::default(),
-                    Default::default(),
-                )])
+                Ok(Page::new(
+                    vec![ProtocolComponentState::new(
+                        "Component1",
+                        Default::default(),
+                        Default::default(),
+                    )],
+                    1,
+                    0,
+                    100,
+                ))
             });
 
         rpc_client
             .expect_get_component_tvl()
             .returning(|_| {
-                Ok([("Component1".to_string(), 100.0)]
-                    .into_iter()
-                    .collect())
+                Ok(Page::new(
+                    [("Component1".to_string(), 100.0)]
+                        .into_iter()
+                        .collect(),
+                    1,
+                    0,
+                    100,
+                ))
             });
 
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         // Set up deltas client to send old messages first, then the expected next block
         let (tx, rx) = channel(10);
@@ -2798,7 +2840,7 @@ mod test {
             .return_once(move |_, _| {
                 // Send messages for blocks 3, 4, 5 (already processed), then block 6 (expected)
                 let old_messages = vec![
-                    BlockAggregatedChanges::from(BlockChanges {
+                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2811,7 +2853,7 @@ mod test {
                         revert: false,
                         ..Default::default()
                     }),
-                    BlockAggregatedChanges::from(BlockChanges {
+                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2824,7 +2866,7 @@ mod test {
                         revert: false,
                         ..Default::default()
                     }),
-                    BlockAggregatedChanges::from(BlockChanges {
+                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2838,7 +2880,7 @@ mod test {
                         ..Default::default()
                     }),
                     // This is the expected next block (block 6)
-                    BlockAggregatedChanges::from(BlockChanges {
+                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2958,7 +3000,7 @@ mod test {
         // Use vec to create Bytes from block number
         let hash = Bytes::from(vec![block_num as u8; 32]);
         let parent_hash = Bytes::from(vec![block_num.saturating_sub(1) as u8; 32]);
-        BlockAggregatedChanges::from(BlockChanges {
+        BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
             extractor: "uniswap-v2".to_string(),
             chain: Chain::Ethereum,
             block: Block {
@@ -3201,7 +3243,7 @@ mod test {
         // get_traced_entry_points SHOULD be called for a DCI protocol
         rpc.expect_get_traced_entry_points()
             .times(1)
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut state_sync = with_mocked_clients(true, false, Some(rpc), None).with_dci(true);
         state_sync
@@ -3243,19 +3285,29 @@ mod test {
                     .is_some_and(|ids| ids.contains(&"BrandNew".to_string()))
             })
             .returning(|_| {
-                Ok(vec![
-                    ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
-                    ProtocolComponent { id: "Preexisting".to_string(), ..Default::default() },
-                ])
+                Ok(Page::new(
+                    vec![
+                        ProtocolComponent { id: "BrandNew".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Preexisting".to_string(), ..Default::default() },
+                    ],
+                    2,
+                    0,
+                    100,
+                ))
             });
         // get_protocol_components for initial sync (via get_protocol_components_paginated)
         rpc_client
             .expect_get_protocol_components()
             .returning(|_| {
-                Ok(vec![
-                    ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
-                    ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
-                ])
+                Ok(Page::new(
+                    vec![
+                        ProtocolComponent { id: "Component1".to_string(), ..Default::default() },
+                        ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
+                    ],
+                    2,
+                    0,
+                    100,
+                ))
             });
         // get_snapshots: more specific expectations first so init (block 0, all components)
         // does not match the block 1/2 ones.
@@ -3377,7 +3429,7 @@ mod test {
             });
         rpc_client
             .expect_get_traced_entry_points()
-            .returning(|_| Ok(HashMap::new()));
+            .returning(|_| Ok(Page::new(HashMap::new(), 0, 0, 0)));
 
         let mut deltas_client = MockDeltasClient::new();
         let (tx, rx) = channel(1);

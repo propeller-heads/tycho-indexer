@@ -326,8 +326,8 @@ impl From<dto::DCIUpdate> for DCIUpdate {
     }
 }
 
-impl From<dto::BlockChanges> for BlockAggregatedChanges {
-    fn from(value: dto::BlockChanges) -> Self {
+impl From<dto::BlockAggregatedChanges> for BlockAggregatedChanges {
+    fn from(value: dto::BlockAggregatedChanges) -> Self {
         use crate::models::{
             contract::{AccountBalance, AccountDelta},
             protocol::{ComponentBalance, ProtocolComponent, ProtocolComponentStateDelta},

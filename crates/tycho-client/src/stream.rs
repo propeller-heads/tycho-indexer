@@ -408,26 +408,30 @@ impl ProtocolSystemsInfo {
             return Self { dci_protocols: HashSet::new(), other_available: HashSet::new() };
         };
 
-        if response.total > page_size {
+        if response.total() > page_size {
             warn!(
                 "Server has {} protocol systems but only {} were fetched (page_size={page_size}). \
                  Availability info may be incomplete.",
-                response.total,
-                response.protocol_systems.len(),
+                response.total(),
+                response.data().protocol_systems().len(),
             );
         }
 
         let available: HashSet<_> = response
-            .protocol_systems
-            .into_iter()
+            .data()
+            .protocol_systems()
+            .iter()
+            .cloned()
             .collect();
         let other_available = available
             .difference(requested_exchanges)
             .cloned()
             .collect();
         let mut dci_protocols: HashSet<String> = response
-            .dci_protocols
-            .into_iter()
+            .data()
+            .dci_protocols()
+            .iter()
+            .cloned()
             .collect();
 
         // TODO(ENG-5302): Remove this fallback once all environments serve

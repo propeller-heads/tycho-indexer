@@ -8,7 +8,7 @@ use tycho_common::models::{
 };
 
 use crate::{
-    rpc::{RPCClient, RPC_CLIENT_CONCURRENCY},
+    rpc::{ProtocolComponentsPaginatedParams, RPCClient, RPC_CLIENT_CONCURRENCY},
     RPCError,
 };
 
@@ -179,16 +179,21 @@ where
                 (None, Some(*upper_tvl_threshold))
             }
         };
+        let mut paginated_params = ProtocolComponentsPaginatedParams::new(
+            self.chain,
+            self.protocol_system.as_str(),
+            RPC_CLIENT_CONCURRENCY,
+        );
+        if let Some(ids) = component_ids {
+            paginated_params = paginated_params.with_component_ids(ids);
+        }
+        if let Some(tvl) = tvl_gt {
+            paginated_params = paginated_params.with_tvl_gt(tvl);
+        }
+
         self.components = self
             .rpc_client
-            .get_protocol_components_paginated(
-                self.chain,
-                self.protocol_system.clone(),
-                component_ids,
-                tvl_gt,
-                None,
-                RPC_CLIENT_CONCURRENCY,
-            )
+            .get_protocol_components_paginated(paginated_params)
             .await?
             .into_iter()
             .map(|comp| (comp.id.clone(), comp))
@@ -406,7 +411,7 @@ where
             .collect()
     }
 
-    /// Given BlockChanges, filter out components that are no longer relevant and return the
+    /// Given BlockAggregatedChanges, filter out components that are no longer relevant and return the
     /// components that need to be added or removed.
     pub fn filter_updated_components(
         &self,
@@ -474,7 +479,7 @@ mod test {
         tracker
             .rpc_client
             .expect_get_protocol_components_paginated()
-            .returning(move |_, _, _, _, _, _| Ok(vec![model_for_mock.clone()]));
+            .returning(move |_| Ok(vec![model_for_mock.clone()]));
 
         tracker
             .initialise_components()
@@ -502,7 +507,7 @@ mod test {
         tracker
             .rpc_client
             .expect_get_protocol_components()
-            .returning(move |_| Ok(vec![model_for_mock.clone()]));
+            .returning(move |_| Ok(crate::rpc::Page::new(vec![model_for_mock.clone()], 1, 0, 100)));
 
         tracker
             .start_tracking(&components_arg)
@@ -579,7 +584,7 @@ mod test {
         tracker
             .rpc_client
             .expect_get_protocol_components_paginated()
-            .returning(move |_, _, _, _, _, _| Ok(vec![model_component.clone()]));
+            .returning(move |_| Ok(vec![model_component.clone()]));
 
         tracker
             .initialise_components()

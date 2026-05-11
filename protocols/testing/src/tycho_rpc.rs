@@ -5,7 +5,10 @@ use tracing::{debug, info, warn};
 use tycho_simulation::{
     tycho_client::{
         feed::synchronizer::Snapshot,
-        rpc::{HttpRPCClientOptions, RPCClient, TracedEntryPointsParams},
+        rpc::{
+            AllTokensParams, HttpRPCClientOptions, ProtocolComponentsPaginatedParams, RPCClient,
+            TracedEntryPointsParams,
+        },
         HttpRPCClient, SnapshotParameters,
     },
     tycho_common::{
@@ -71,12 +74,8 @@ impl TychoClient {
 
         self.http_client
             .get_protocol_components_paginated(
-                chain,
-                protocol_system.to_string(),
-                None,
-                None,
-                Some(chunk_size),
-                concurrency,
+                ProtocolComponentsPaginatedParams::new(chain, protocol_system, concurrency)
+                    .with_chunk_size(chunk_size),
             )
             .await
             .map_err(RpcError::from)
@@ -93,9 +92,16 @@ impl TychoClient {
         let concurrency = 1;
 
         #[allow(clippy::mutable_key_type)]
+        let mut params = AllTokensParams::new(chain, concurrency).with_chunk_size(3_000);
+        if let Some(q) = min_quality {
+            params = params.with_min_quality(q);
+        }
+        if let Some(d) = max_days_since_last_trade {
+            params = params.with_traded_n_days_ago(d);
+        }
         let res = self
             .http_client
-            .get_all_tokens(chain, min_quality, max_days_since_last_trade, Some(3_000), concurrency)
+            .get_all_tokens(params)
             .await?
             .into_iter()
             .map(|mut token| {
@@ -124,6 +130,7 @@ impl TychoClient {
                     .with_component_ids(component_ids),
             )
             .await
+            .map(|page| page.into_data())
             .map_err(RpcError::from)
     }
 

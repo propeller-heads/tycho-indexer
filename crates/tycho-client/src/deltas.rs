@@ -59,7 +59,7 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{BlockChanges, Command, Response, WebSocketMessage, WebsocketError},
+    dto::{BlockAggregatedChanges as DtoBlockAggregatedChanges, Command, Response, WebSocketMessage, WebsocketError},
     models::{blockchain::BlockAggregatedChanges, ExtractorIdentity},
 };
 use uuid::Uuid;
@@ -534,7 +534,7 @@ impl WsDeltasClient {
             {
                 Ok(value) => match serde_json::from_value::<WebSocketMessage>(value) {
                     Ok(ws_message) => match ws_message {
-                        WebSocketMessage::BlockChanges { subscription_id, deltas } => {
+                        WebSocketMessage::BlockAggregatedChanges { subscription_id, deltas } => {
                             Self::handle_block_changes_msg(&mut guard, subscription_id, deltas)
                                 .await?;
                         }
@@ -606,14 +606,14 @@ impl WsDeltasClient {
             },
             Ok(tungstenite::protocol::Message::Binary(data)) => {
                 // Decompress the zstd-compressed data,
-                // Note that we only support compressed BlockChanges messages for now.
+                // Note that we only support compressed BlockAggregatedChanges messages for now.
                 match zstd::decode_all(data.as_slice()) {
                     Ok(decompressed) => {
                         match serde_json::from_slice::<serde_json::Value>(decompressed.as_slice()) {
                             Ok(value) => {
                                 match serde_json::from_value::<WebSocketMessage>(value.clone()) {
                                     Ok(ws_message) => match ws_message {
-                                        WebSocketMessage::BlockChanges {
+                                        WebSocketMessage::BlockAggregatedChanges {
                                             subscription_id,
                                             deltas,
                                         } => {
@@ -695,7 +695,7 @@ impl WsDeltasClient {
     async fn handle_block_changes_msg(
         guard: &mut MutexGuard<'_, Option<Inner>>,
         subscription_id: Uuid,
-        deltas: BlockChanges,
+        deltas: DtoBlockAggregatedChanges,
     ) -> Result<(), DeltasError> {
         trace!(?deltas, "Received a block state change, sending to channel");
         let inner = guard
