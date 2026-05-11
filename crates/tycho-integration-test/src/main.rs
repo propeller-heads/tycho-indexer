@@ -152,9 +152,15 @@ struct Cli {
     #[arg(long)]
     max_days_since_last_trade: Option<u64>,
 
-    /// Enable partial block updates (flashblocks) on the tycho stream for lower latency
+    /// Enable partial block updates (flashblocks) on the tycho stream.
+    /// Be aware this significantly increases the frequency of simulations. You may need to
+    /// consider adjusting the max-simulations and max-simulations-stale values.
     #[arg(long, default_value_t = false)]
     partial_blocks: bool,
+
+    /// Seconds without a protocol update before marking all known protocols as stale in metrics.
+    #[arg(long, default_value_t = 30)]
+    stale_threshold_secs: u64,
 }
 
 impl Debug for Cli {
@@ -329,6 +335,15 @@ async fn run(cli: Cli) -> miette::Result<()> {
     let mut protocol_stream_open = true;
     let mut rfq_stream_open = !cli.disable_rfq;
 
+    // Staleness watchdog: if no protocol update arrives within stale_threshold_secs, mark all
+    // known protocols as Stale in metrics. This catches stream disconnections where the
+    // SynchronizerState gauge would otherwise remain frozen at its last known value.
+    let stale_threshold = Duration::from_secs(cli.stale_threshold_secs);
+    let stale_enabled = !cli.disable_onchain && cli.stale_threshold_secs > 0;
+    let mut known_protocols: HashSet<String> = HashSet::new();
+    let stale_sleep = tokio::time::sleep(stale_threshold);
+    tokio::pin!(stale_sleep);
+
     loop {
         if !protocol_stream_open && !rfq_stream_open {
             info!("All streams closed, exiting");
@@ -376,6 +391,16 @@ async fn run(cli: Cli) -> miette::Result<()> {
                 }
             }
 
+            // Staleness watchdog fires when no protocol update arrives within the threshold
+            _ = &mut stale_sleep, if stale_enabled => {
+                for protocol in &known_protocols {
+                    metrics::mark_protocol_stale(protocol);
+                }
+                stale_sleep
+                    .as_mut()
+                    .reset(tokio::time::Instant::now() + stale_threshold);
+            }
+
             // Process protocol updates
             update = protocol_rx.recv(), if protocol_stream_open => {
                 match update {
@@ -387,6 +412,14 @@ async fn run(cli: Cli) -> miette::Result<()> {
                                 continue;
                             }
                         };
+
+                        // Reset the staleness watchdog and register any newly-seen protocols.
+                        for protocol in update.update.sync_states.keys() {
+                            known_protocols.insert(protocol.clone());
+                        }
+                        stale_sleep
+                            .as_mut()
+                            .reset(tokio::time::Instant::now() + stale_threshold);
 
                         if cli.max_blocks > 0 {
                             if let Some(stats) = statistics.as_ref() {

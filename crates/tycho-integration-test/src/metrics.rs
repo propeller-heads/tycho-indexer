@@ -181,6 +181,18 @@ pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState
     .set(state_value);
 }
 
+/// Explicitly mark a protocol as stale when no update has been received within the expected window.
+///
+/// Unlike `record_protocol_sync_state`, this is called by the staleness watchdog when the stream
+/// has gone silent — the SynchronizerState itself cannot be queried in that case.
+pub fn mark_protocol_stale(protocol: &str) {
+    gauge!(
+        "tycho_integration_protocol_sync_state",
+        "protocol" => protocol.to_string()
+    )
+    .set(4.0); // 4 = Stale
+}
+
 /// Record when a protocol update is skipped because it's behind the current block
 pub fn record_protocol_update_skipped() {
     counter!("tycho_integration_protocol_updates_skipped_total").increment(1);
