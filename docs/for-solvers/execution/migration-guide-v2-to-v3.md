@@ -18,7 +18,7 @@ Router V3.
 
 **Removed fields:**
 
-<table><thead><tr><th width="280">Field</th><th width="420">Replacement</th></tr></thead><tbody><tr><td><code>native_action: Option&#x3C;NativeAction></code></td><td>The encoder now inserts WETH wrap/unwrap swaps automatically (see <a href="encoding/native-token-handling-wrapping-and-unwrapping.md">Wrapping and Unwrapping</a>).</td></tr><tr><td><code>exact_out: bool</code></td><td>Only exact-in was ever supported. Removed for simplicity.</td></tr></tbody></table>
+<table><thead><tr><th width="280">Field</th><th width="420">Replacement</th></tr></thead><tbody><tr><td><code>native_action: Option&#x3C;NativeAction></code></td><td>The encoder now inserts WETH wrap/unwrap swaps automatically (see <a href="encoding/#native-tokens">Native Tokens</a>).</td></tr><tr><td><code>exact_out: bool</code></td><td>Only exact-in was ever supported. Removed for simplicity.</td></tr></tbody></table>
 
 **New fields:**
 
@@ -183,7 +183,7 @@ vec![weth_to_dai_swap],  // first swap expects WETH — encoder bridges the gap
 ```
 
 This also works for mid-path bridging (e.g., if one swap outputs ETH and the next expects WETH) and at the end of a
-path. See more in [Wrapping & Unwrapping](encoding/native-token-handling-wrapping-and-unwrapping.md).
+path. See more in [Native Tokens](encoding/#native-tokens).
 
 #### Encoder Builder
 
@@ -261,7 +261,7 @@ For more see [Vault](vault.md).
 
 The router no longer accepts `wrap` or `unwrap` boolean flags. If your calldata construction includes these parameters,
 remove them. The WETH executor handles wrapping and unwrapping as part of the swap path.
-See [native-token-handling-wrapping-and-unwrapping.md](encoding/native-token-handling-wrapping-and-unwrapping.md "mention").
+See [Native Tokens](encoding/#native-tokens "mention").
 
 #### Method Variants
 

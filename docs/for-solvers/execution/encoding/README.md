@@ -189,6 +189,10 @@ security.
 Refer to the [quickstart](../../../) for an example of converting an `EncodedSolution` into full calldata. Tailor the
 example to your use case. See the `TychoRouter` contract functions for reference.
 
+#### Native Tokens <a href="#native-tokens" id="native-tokens"></a>
+
+The encoder automatically bridges ETH↔WETH gaps anywhere in the swap path — at the start, end, or between swaps — using a dedicated WETH executor. Set `token_in` and `token_out` to the tokens the user actually holds and expects to receive, and the encoder inserts wrap/unwrap steps as needed. This works with protocols like Uniswap V4 that accept native ETH directly, with no extra configuration required.
+
 #### Client Fee Signature
 
 If you don't want fees, pass all-zero

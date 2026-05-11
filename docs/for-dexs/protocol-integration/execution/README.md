@@ -192,7 +192,7 @@ If your protocol uses `address(0)` (e.g., UniswapV4, Ekubo) or another sentinel 
 
 ## Fee Tokens
 
-Balance checks before and after token transfers mean fee-on-transfer tokens and rebasing tokens work on most protocols. The exception is Uniswap V3-like protocols, because they require the exact input amount to be declared upfront but only transfer it inside a callback.
+Balance checks before and after token transfers mean fee-on-transfer tokens and rebasing tokens work on most protocols. The exception is Uniswap V3-like protocols, which require declaring the exact input amount upfront but only transfer it inside a callback.
 
 ## Testing
 

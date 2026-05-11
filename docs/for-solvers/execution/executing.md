@@ -4,11 +4,11 @@ Once you have calldata from [Encoding](encoding/), you can execute your trade vi
 
 ## Tycho Router
 
-Send the encoded calldata to the TychoRouter <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/TychoRouter.sol" target="_blank" rel="noopener noreferrer">contract</a> (see contract addresses [here](contract-addresses.md)). The required preparation depends on the `user_transfer_type` in your `Solution`:
+Send the encoded calldata to the TychoRouter <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/TychoRouter.sol" target="_blank" rel="noopener noreferrer">contract</a> (see contract addresses [here](contract-addresses.md)). Preparation depends on the `user_transfer_type` in your `Solution`:
 
 * `TransferFrom`: Call `approve()` on your input token to allow the TychoRouter to spend it.
-* `TransferFromPermit2`: Approve the Permit2 contract - use the `Permit2` utility from the encoding crate to build and sign the `PermitSingle`. The encoder does not produce the permit.
-* `UseVaultsFunds`: No approval needed — the router draws from your vault balance. Ensure sufficient funds are deposited.
+* `TransferFromPermit2`: Approve the Permit2 contract - use the `Permit2` utility from the encoding crate to build and sign the `PermitSingle`. You must handle the permit; the encoder does not.
+* `UseVaultsFunds`: No approval needed — the router draws from your vault balance. Deposit sufficient funds into the vault before swapping.
 
 For an example of how to execute trades using the Tycho Router, refer to the [Quickstart](../../#id-5.-simulate-or-execute-the-best-swap).
 
@@ -21,4 +21,4 @@ The TychoRouter V3 supports a dual fee system:
 
 ### Client Contribution (Slippage Subsidy)
 
-If the swap output falls below `min_amount_out`, the router covers the shortfall from the client's vault balance, up to `max_client_contribution`. Beyond that, the transaction reverts. This lets clients absorb minor slippage without a separate transaction — but set `max_client_contribution` conservatively, as a high value can expose you to sandwich attacks.
+If the swap output falls below `min_amount_out`, the router covers the shortfall from the client's vault balance, up to `max_client_contribution`. Beyond that, the transaction reverts. This lets clients absorb minor slippage without a separate transaction — but set `max_client_contribution` conservatively, as a high value can expose you to MEV attacks.
