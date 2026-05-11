@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    time::Duration,
-};
+use std::{collections::HashMap, time::Duration};
 
 use async_trait::async_trait;
 use thiserror::Error;
@@ -17,10 +14,7 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
-        blockchain::{
-            BlockAggregatedChanges, DCIUpdate, EntryPoint, EntryPointWithTracingParams,
-            TracingParams, TracingResult,
-        },
+        blockchain::{BlockAggregatedChanges, DCIUpdate, EntryPointWithTracingParams, TracingResult},
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
         ExtractorIdentity,
@@ -352,48 +346,8 @@ where
                     RPC_CLIENT_CONCURRENCY,
                 )
                 .await?;
-            let mut new_entrypoints: HashMap<String, HashSet<EntryPoint>> = HashMap::new();
-            let mut new_entrypoint_params: HashMap<String, HashSet<(TracingParams, String)>> =
-                HashMap::new();
-            let mut trace_results: HashMap<String, TracingResult> = HashMap::new();
-            for (component, traces) in &result {
-                let mut eps: HashSet<EntryPoint> = HashSet::new();
-                for (ep_with_params, trace) in traces {
-                    let ep_id = ep_with_params
-                        .entry_point
-                        .external_id
-                        .clone();
-                    eps.insert(ep_with_params.entry_point.clone());
-                    new_entrypoint_params
-                        .entry(ep_id.clone())
-                        .or_default()
-                        .insert((ep_with_params.params.clone(), component.clone()));
-                    trace_results
-                        .entry(ep_id)
-                        .and_modify(|existing| {
-                            existing
-                                .retriggers
-                                .extend(trace.retriggers.clone());
-                            for (address, slots) in trace.accessed_slots.clone() {
-                                existing
-                                    .accessed_slots
-                                    .entry(address)
-                                    .or_default()
-                                    .extend(slots);
-                            }
-                        })
-                        .or_insert_with(|| trace.clone());
-                }
-                if !eps.is_empty() {
-                    new_entrypoints.insert(component.clone(), eps);
-                }
-            }
             self.component_tracker
-                .process_entrypoints(&DCIUpdate {
-                    new_entrypoints,
-                    new_entrypoint_params,
-                    trace_results,
-                });
+                .process_entrypoints(&DCIUpdate::from(result.clone()));
             result
         } else {
             HashMap::new()

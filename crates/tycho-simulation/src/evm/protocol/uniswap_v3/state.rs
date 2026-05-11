@@ -869,14 +869,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_limits() {
-        use tycho_client::feed::dto::ComponentWithStateDto;
+        use tycho_client::feed::dto::ComponentWithState as DtoComponentWithState;
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
             Path::new(project_root).join("tests/assets/decoder/uniswap_v3_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
         let state: ComponentWithState =
-            serde_json::from_value::<ComponentWithStateDto>(data)
+            serde_json::from_value::<DtoComponentWithState>(data)
                 .expect("Expected json to match ComponentWithState structure")
                 .into();
 
@@ -1444,14 +1444,14 @@ mod tests_forks {
     async fn test_pancakeswap_get_amount_out() {
         use std::{fs, path::Path};
         use serde_json::Value;
-        use tycho_client::feed::dto::ComponentWithStateDto;
+        use tycho_client::feed::dto::ComponentWithState as DtoComponentWithState;
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path =
             Path::new(project_root).join("tests/assets/decoder/pancakeswap_v3_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
         let state: ComponentWithState =
-            serde_json::from_value::<ComponentWithStateDto>(data)
+            serde_json::from_value::<DtoComponentWithState>(data)
                 .expect("Expected json to match ComponentWithState structure")
                 .into();
 

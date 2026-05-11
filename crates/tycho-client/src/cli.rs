@@ -6,7 +6,7 @@ use tracing_appender::rolling;
 use tycho_common::{dto::TvlThresholdTier, models::Chain};
 
 use crate::{
-    feed::{component_tracker::ComponentFilter, dto::FeedMessageDto},
+    feed::{component_tracker::ComponentFilter, dto::FeedMessage as FeedMessageDto},
     stream::TychoStreamBuilder,
 };
 

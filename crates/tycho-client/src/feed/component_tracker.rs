@@ -272,11 +272,6 @@ where
             return Ok(());
         }
 
-        // Fetch the components
-        let ids_as_component_ids: Vec<ComponentId> = new_components
-            .iter()
-            .map(|&id| id.to_string())
-            .collect();
         let components = self
             .rpc_client
             .get_protocol_components(
@@ -284,7 +279,12 @@ where
                     self.chain,
                     self.protocol_system.as_str(),
                 )
-                .with_component_ids(ids_as_component_ids),
+                .with_component_ids(
+                    new_components
+                        .into_iter()
+                        .cloned()
+                        .collect(),
+                ),
             )
             .await?
             .into_iter()
