@@ -1,3 +1,11 @@
+## [0.288.2](https://github.com/propeller-heads/tycho-indexer/compare/0.288.1...0.288.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* **integration-test:** add staleness watchdog for protocol sync metrics ([988ee88](https://github.com/propeller-heads/tycho-indexer/commit/988ee88aac8877b6f7f9447f8464d92b87fd5279))
+* **integration-test:** add staleness watchdog for protocol sync metrics ([#978](https://github.com/propeller-heads/tycho-indexer/issues/978)) ([e74b576](https://github.com/propeller-heads/tycho-indexer/commit/e74b576972c18e401345c890408bb5da6594945f))
+
 ## [0.288.1](https://github.com/propeller-heads/tycho-indexer/compare/0.288.0...0.288.1) (2026-05-08)
 
 
