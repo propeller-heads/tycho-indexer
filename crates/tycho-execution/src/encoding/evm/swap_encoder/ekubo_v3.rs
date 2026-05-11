@@ -8,7 +8,7 @@ use tycho_common::{models::Chain, Bytes};
 
 use crate::encoding::{
     errors::EncodingError,
-    evm::utils::{bytes_to_address, get_static_attribute, native_to_router_eth},
+    evm::utils::{bytes_to_address, convert_to_router_token, get_static_attribute},
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
 };
@@ -55,11 +55,11 @@ impl SwapEncoder for EkuboV3SwapEncoder {
         let mut encoded = vec![];
 
         if encoding_context.group_token_in == *swap.token_in().address {
-            let token_in = native_to_router_eth(bytes_to_address(&swap.token_in().address)?);
+            let token_in = convert_to_router_token(bytes_to_address(&swap.token_in().address)?);
             encoded.extend(token_in);
         }
 
-        let token_out = native_to_router_eth(bytes_to_address(&swap.token_out().address)?);
+        let token_out = convert_to_router_token(bytes_to_address(&swap.token_out().address)?);
         encoded.extend(token_out);
         encoded.extend((extension, fee, pool_type_config).abi_encode_packed());
 

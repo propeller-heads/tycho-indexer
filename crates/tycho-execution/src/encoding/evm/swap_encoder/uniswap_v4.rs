@@ -12,7 +12,8 @@ use crate::encoding::{
     evm::{
         constants::ANGSTROM_DEFAULT_BLOCKS_IN_FUTURE,
         utils::{
-            bytes_to_address, get_static_attribute, native_to_router_eth, pad_or_truncate_to_size,
+            bytes_to_address, convert_to_router_token, get_static_attribute,
+            pad_or_truncate_to_size,
         },
     },
     models::{EncodingContext, Swap},
@@ -181,7 +182,7 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         // Early check if this is not the first swap
         if encoding_context.group_token_in != *swap.token_in().address {
-            let token_out = native_to_router_eth(bytes_to_address(&swap.token_out().address)?);
+            let token_out = convert_to_router_token(bytes_to_address(&swap.token_out().address)?);
             return Ok((
                 token_out,
                 pool_fee_u24,
@@ -203,10 +204,10 @@ impl SwapEncoder for UniswapV4SwapEncoder {
 
         // Translate for encoding: Tycho uses ETH_ADDRESS
         let group_token_in_encoded =
-            native_to_router_eth(bytes_to_address(&encoding_context.group_token_in)?);
+            convert_to_router_token(bytes_to_address(&encoding_context.group_token_in)?);
         let group_token_out_encoded =
-            native_to_router_eth(bytes_to_address(&encoding_context.group_token_out)?);
-        let token_out_encoded = native_to_router_eth(token_out_address);
+            convert_to_router_token(bytes_to_address(&encoding_context.group_token_out)?);
+        let token_out_encoded = convert_to_router_token(token_out_address);
 
         let pool_params = (
             token_out_encoded,

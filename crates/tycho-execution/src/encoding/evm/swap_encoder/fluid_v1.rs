@@ -7,7 +7,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::{
         constants::ROUTER_ETH_ADDRESS,
-        utils::{bytes_to_address, native_to_router_eth},
+        utils::{bytes_to_address, convert_to_router_token},
     },
     models::{EncodingContext, Swap},
     swap_encoder::SwapEncoder,
@@ -44,8 +44,8 @@ impl SwapEncoder for FluidV1SwapEncoder {
             dex_address,
             self.coerce_native_address(&swap.token_in().address) <
                 self.coerce_native_address(&swap.token_out().address),
-            native_to_router_eth(bytes_to_address(&swap.token_in().address)?),
-            native_to_router_eth(bytes_to_address(&swap.token_out().address)?),
+            convert_to_router_token(bytes_to_address(&swap.token_in().address)?),
+            convert_to_router_token(bytes_to_address(&swap.token_out().address)?),
             swap.token_in().address == self.chain.native_token().address,
         );
         Ok(args.abi_encode_packed())

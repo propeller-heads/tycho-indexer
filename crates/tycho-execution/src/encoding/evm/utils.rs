@@ -23,7 +23,7 @@ use crate::encoding::{errors::EncodingError, evm::constants::ROUTER_ETH_ADDRESS,
 /// Converts `Address::ZERO` (protocol-native ETH marker) to the
 /// `ETH_ADDRESS` marker (0xEeee…) used by the TychoRouter. Non-zero
 /// addresses pass through unchanged.
-pub fn native_to_router_eth(addr: Address) -> Address {
+pub fn convert_to_router_token(addr: Address) -> Address {
     if addr == Address::ZERO {
         Address::from_slice(&ROUTER_ETH_ADDRESS)
     } else {
