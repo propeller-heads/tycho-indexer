@@ -220,9 +220,10 @@ from `config/executor_addresses.json`. Protocol name prefixes: `vm:` (simulation
 e.g. `vm:balancer_v2`, `vm:curve`), `rfq:` (request-for-quote, e.g. `rfq:bebop`), bare (on-chain,
 e.g. `uniswap_v2`, `fluid_v1`).
 
-There is no `ClientFeeParams` struct on the Rust side. The Solidity struct is encoded as a raw ABI
-tuple `(uint16,address,uint256,uint256,bytes)` embedded in the function signature strings within each strategy encoder.
-The caller provides the pre-signed bytes; the Rust encoder just passes them through.
+`ClientFeeParams` is a Rust struct in `tycho-execution::encoding::models` that mirrors the Solidity struct. Call
+`.into_abi_params()` to convert it to the ABI-encodable tuple for use in calldata construction. The encoder does not
+use it internally — callers are responsible for constructing and signing it. The default value (all zeros) represents
+no fee.
 
 ### Gas estimation
 
