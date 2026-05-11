@@ -1,3 +1,17 @@
+## [0.289.0](https://github.com/propeller-heads/tycho-indexer/compare/0.288.3...0.289.0) (2026-05-11)
+
+
+### Features
+
+* **router v3:** use native ETH marker instead of address(0) ([6395eda](https://github.com/propeller-heads/tycho-indexer/commit/6395eda1eeb14b9ad41c9afd49a234a67ae74012))
+* **router v3:** use native ETH marker instead of address(0) ([#984](https://github.com/propeller-heads/tycho-indexer/issues/984)) ([db076f6](https://github.com/propeller-heads/tycho-indexer/commit/db076f6d0c5173f2045efea68f33f6ad0266441c))
+
+
+### Bug Fixes
+
+* Helper method to fix slither's cyclomatic-complexity warning ([365a09b](https://github.com/propeller-heads/tycho-indexer/commit/365a09b55698989a1939d7925b419274592f3755))
+* **maximodel:** Native sell address for FluidV1 ([62b2a53](https://github.com/propeller-heads/tycho-indexer/commit/62b2a53c9c695f4b62a0d97a209d12986817c43c))
+
 ## [0.288.3](https://github.com/propeller-heads/tycho-indexer/compare/0.288.2...0.288.3) (2026-05-11)
 
 
