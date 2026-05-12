@@ -2806,3 +2806,60 @@ fn test_single_encoding_strategy_uniswap_v3_arbitrum() {
         hex_calldata.as_str(),
     );
 }
+
+#[test]
+fn test_single_encoding_strategy_uniswap_v3_polygon() {
+    // WETH -> (UniswapV3 0.05% WETH/USDC) -> USDC on Polygon
+    let usv3_pool = ProtocolComponent {
+        id: String::from("0xA4D8c89f0c20efbe54cBa9e7e7a7E509056228D9"),
+        protocol_system: String::from("uniswap_v3"),
+        static_attributes: HashMap::from([(
+            "fee".to_string(),
+            Bytes::from(BigInt::from(500).to_signed_bytes_be()),
+        )]),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619"); // WETH
+    let token_out = Bytes::from("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"); // USDC
+    let swap = Swap::new(
+        usv3_pool,
+        default_token(token_in.clone()),
+        default_token(token_out.clone()),
+        BigUint::ZERO,
+    );
+
+    let encoder = get_tycho_router_encoder(Chain::Polygon);
+
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        token_in,
+        token_out,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("1000").unwrap(),
+        vec![swap],
+    );
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_uniswap_v3_polygon",
+        hex_calldata.as_str(),
+    );
+}

@@ -2,6 +2,11 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+contract PolygonConstants {
+    address constant POLYGON_WETH = 0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619;
+    address constant POLYGON_USDC = 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359;
+}
+
 contract ArbitrumConstants {
     address constant ARBITRUM_WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
     address constant ARBITRUM_USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
@@ -37,7 +42,7 @@ contract BaseConstants {
         0x1b7088833548A8C4Ab12a900a2f4bdFA49221081;
 }
 
-contract Constants is Test, ArbitrumConstants, BaseConstants {
+contract Constants is Test, PolygonConstants, ArbitrumConstants, BaseConstants {
     address ADMIN = makeAddr("unique-admin"); //admin=us
     // Changed this since someone deployed a drainer contract to makeAddr("bob")
     address BOB = makeAddr("bob*"); //bob=someone!=us

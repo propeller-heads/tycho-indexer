@@ -27,5 +27,8 @@
   },
   "arbitrum": {
     "uniswap_v3": "0x2e234DAe75C793f67A35089C9d99245E1C58470b"
+  },
+  "polygon": {
+    "uniswap_v3": "0x2e234DAe75C793f67A35089C9d99245E1C58470b"
   }
 }
