@@ -1,3 +1,10 @@
+## [0.289.1](https://github.com/propeller-heads/tycho-indexer/compare/0.289.0...0.289.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* **tycho-execution:** add missing alloy sol-types dependency feature ([f121a91](https://github.com/propeller-heads/tycho-indexer/commit/f121a91af9ee120a353b84a08880d9ce34f79833))
+
 ## [0.289.0](https://github.com/propeller-heads/tycho-indexer/compare/0.288.3...0.289.0) (2026-05-11)
 
 
