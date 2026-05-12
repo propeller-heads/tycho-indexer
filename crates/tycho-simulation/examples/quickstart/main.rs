@@ -81,6 +81,9 @@ struct Cli {
     tvl_threshold: f64,
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
+    /// Disable TLS (for local/self-hosted Tycho instances)
+    #[arg(long, default_value_t = false)]
+    no_tls: bool,
     /// Path to blocklist TOML config file
     #[arg(long)]
     blocklist_file: Option<std::path::PathBuf>,
@@ -133,9 +136,9 @@ async fn main() {
     });
 
     let tycho_api_key: Option<String> = env::var("TYCHO_API_KEY").ok();
-    let no_tls = tycho_api_key.is_none();
+    let no_tls = cli.no_tls;
     if no_tls {
-        eprintln!("Warning: TYCHO_API_KEY not set. Using plain HTTP/WS (no TLS).");
+        eprintln!("Warning: TLS is disabled. Only use this for local/self-hosted Tycho instances.");
     }
 
     let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);

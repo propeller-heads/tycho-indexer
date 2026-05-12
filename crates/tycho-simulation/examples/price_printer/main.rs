@@ -37,6 +37,9 @@ struct Cli {
     /// The target blockchain
     #[clap(long, default_value = "ethereum")]
     pub chain: String,
+    /// Disable TLS (for local/self-hosted Tycho instances)
+    #[arg(long, default_value_t = false)]
+    no_tls: bool,
 }
 
 fn register_exchanges(
@@ -113,9 +116,9 @@ async fn main() {
     });
 
     let tycho_api_key: Option<String> = env::var("TYCHO_API_KEY").ok();
-    let no_tls = tycho_api_key.is_none();
+    let no_tls = cli.no_tls;
     if no_tls {
-        eprintln!("Warning: TYCHO_API_KEY not set. Using plain HTTP/WS (no TLS).");
+        eprintln!("Warning: TLS is disabled. Only use this for local/self-hosted Tycho instances.");
     }
 
     if chain == Chain::Ethereum {
