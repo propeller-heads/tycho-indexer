@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::hex::encode;
 use num_bigint::{BigInt, BigUint};
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{models::{protocol::ProtocolComponent, Chain}, Bytes};
 use tycho_execution::encoding::{
     evm::utils::write_calldata_to_file,
     models::{default_token, Solution, Swap, UserTransferType},
@@ -58,7 +58,7 @@ fn test_uniswap_v3_uniswap_v2() {
         default_token(usdc.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -143,7 +143,7 @@ fn test_uniswap_v3_uniswap_v3() {
         default_token(usdc.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -237,7 +237,7 @@ fn test_uniswap_v3_curve() {
         default_token(usdt.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -306,7 +306,7 @@ fn test_balancer_v2_uniswap_v2() {
         default_token(usdc.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -450,7 +450,7 @@ fn test_evm_multi_protocol() {
         BigUint::ZERO,
     );
 
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     // Put all components together
     let solution = Solution::new(
@@ -531,7 +531,7 @@ fn test_uniswap_v3_balancer_v3() {
         default_token(qnt.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
