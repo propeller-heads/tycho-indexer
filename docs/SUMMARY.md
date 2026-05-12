@@ -19,7 +19,6 @@
 * [Simulation](for-solvers/simulation.md)
 * [Execution](for-solvers/execution/README.md)
   * [Encoding](for-solvers/execution/encoding/README.md)
-    * [Native Token Handling (Wrapping & Unwrapping)](for-solvers/execution/encoding/native-token-handling-wrapping-and-unwrapping.md)
   * [Executing](for-solvers/execution/executing.md)
   * [Contract Addresses](for-solvers/execution/contract-addresses.md)
   * [Execution Venues](for-solvers/execution/execution-venues.md)
