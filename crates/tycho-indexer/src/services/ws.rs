@@ -580,7 +580,7 @@ mod tests {
     };
     use tracing::{debug, info_span, Instrument};
     use tycho_common::{
-        dto::{BlockAggregatedChanges, Response},
+        dto::Response,
         models::{
             blockchain::{Block, BlockAggregatedChanges},
             Chain,

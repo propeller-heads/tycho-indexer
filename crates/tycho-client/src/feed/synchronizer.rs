@@ -14,7 +14,9 @@ use tokio::{
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
     models::{
-        blockchain::{BlockAggregatedChanges, DCIUpdate, EntryPointWithTracingParams, TracingResult},
+        blockchain::{
+            BlockAggregatedChanges, DCIUpdate, EntryPointWithTracingParams, TracingResult,
+        },
         contract::Account,
         protocol::{ProtocolComponent, ProtocolComponentState},
         ExtractorIdentity,
@@ -28,7 +30,10 @@ use crate::{
         component_tracker::{ComponentFilter, ComponentTracker},
         BlockHeader, HeaderLike,
     },
-    rpc::{RPCClient, RPCError, SnapshotParameters, TracedEntryPointsPaginatedParams, RPC_CLIENT_CONCURRENCY},
+    rpc::{
+        RPCClient, RPCError, SnapshotParameters, TracedEntryPointsPaginatedParams,
+        RPC_CLIENT_CONCURRENCY,
+    },
     DeltasError,
 };
 
@@ -338,14 +343,12 @@ where
         > = if self.uses_dci {
             let result = self
                 .rpc_client
-                .get_traced_entry_points_paginated(
-                    TracedEntryPointsPaginatedParams::new(
-                        self.extractor_id.chain,
-                        self.extractor_id.name.as_str(),
-                        component_ids.clone(),
-                        RPC_CLIENT_CONCURRENCY,
-                    ),
-                )
+                .get_traced_entry_points_paginated(TracedEntryPointsPaginatedParams::new(
+                    self.extractor_id.chain,
+                    self.extractor_id.name.as_str(),
+                    component_ids.clone(),
+                    RPC_CLIENT_CONCURRENCY,
+                ))
                 .await?;
             self.component_tracker
                 .process_entrypoints(&DCIUpdate::from(result.clone()));
@@ -878,7 +881,11 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::{deltas::MockDeltasClient, rpc::{MockRPCClient, Page}, DeltasError, RPCError};
+    use crate::{
+        deltas::MockDeltasClient,
+        rpc::{MockRPCClient, Page},
+        DeltasError, RPCError,
+    };
 
     // Required for mock client to implement clone
     struct ArcRPCClient<T>(Arc<T>);
@@ -944,8 +951,10 @@ mod test {
         async fn get_traced_entry_points(
             &self,
             params: crate::rpc::TracedEntryPointsParams,
-        ) -> Result<crate::rpc::Page<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>, RPCError>
-        {
+        ) -> Result<
+            crate::rpc::Page<HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>>>,
+            RPCError,
+        > {
             self.0
                 .get_traced_entry_points(params)
                 .await

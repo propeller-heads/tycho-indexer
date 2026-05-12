@@ -59,7 +59,10 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{BlockAggregatedChanges as DtoBlockAggregatedChanges, Command, Response, WebSocketMessage, WebsocketError},
+    dto::{
+        BlockAggregatedChanges as DtoBlockAggregatedChanges, Command, Response, WebSocketMessage,
+        WebsocketError,
+    },
     models::{blockchain::BlockAggregatedChanges, ExtractorIdentity},
 };
 use uuid::Uuid;
@@ -666,7 +669,9 @@ impl WsDeltasClient {
             }
             Ok(tungstenite::protocol::Message::Close(frame)) => {
                 match &frame {
-                    Some(f) => warn!(code = ?f.code, reason = %f.reason, "WebSocket closed by server"),
+                    Some(f) => {
+                        warn!(code = ?f.code, reason = %f.reason, "WebSocket closed by server")
+                    }
                     None => warn!("WebSocket closed by server (no close frame)"),
                 }
                 return Err(DeltasError::ConnectionClosed);

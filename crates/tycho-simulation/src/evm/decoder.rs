@@ -1162,10 +1162,10 @@ mod tests {
 
     fn load_test_msg(name: &str) -> FeedMessage<BlockHeader> {
         use std::{fs, path::Path};
+
         use tycho_client::feed::dto::FeedMessage as DtoFeedMessage;
         let project_root = env!("CARGO_MANIFEST_DIR");
-        let asset_path =
-            Path::new(project_root).join(format!("tests/assets/decoder/{name}.json"));
+        let asset_path = Path::new(project_root).join(format!("tests/assets/decoder/{name}.json"));
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let dto: DtoFeedMessage<BlockHeader> =
             serde_json::from_str(&json_data).expect("Failed to deserialize FeedMsg json!");

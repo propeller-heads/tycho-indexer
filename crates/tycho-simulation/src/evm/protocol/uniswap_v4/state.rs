@@ -1130,10 +1130,9 @@ mod tests {
             .join("tests/assets/decoder/uniswap_v4_snapshot_sepolia_block_7239119.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-        let state: ComponentWithState =
-            serde_json::from_value::<DtoComponentWithState>(data)
-                .expect("Expected json to match ComponentWithState structure")
-                .into();
+        let state: ComponentWithState = serde_json::from_value::<DtoComponentWithState>(data)
+            .expect("Expected json to match ComponentWithState structure")
+            .into();
 
         let block = BlockHeader {
             number: 7239119,
@@ -1205,10 +1204,9 @@ mod tests {
             Path::new(project_root).join("tests/assets/decoder/uniswap_v4_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-        let state: ComponentWithState =
-            serde_json::from_value::<DtoComponentWithState>(data)
-                .expect("Expected json to match ComponentWithState structure")
-                .into();
+        let state: ComponentWithState = serde_json::from_value::<DtoComponentWithState>(data)
+            .expect("Expected json to match ComponentWithState structure")
+            .into();
 
         let t0 = Token::new(
             &Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap(),

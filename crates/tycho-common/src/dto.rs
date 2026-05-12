@@ -21,9 +21,8 @@ use uuid::Uuid;
 
 use crate::{
     models::{
-        self,
-        blockchain::BlockAggregatedChanges as ModelBlockAggregatedChanges,
-        Address, Balance, Code, ComponentId, StoreKey, StoreVal,
+        self, blockchain::BlockAggregatedChanges as ModelBlockAggregatedChanges, Address, Balance,
+        Code, ComponentId, StoreKey, StoreVal,
     },
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
@@ -2265,8 +2264,8 @@ mod test {
             json_value["partial_block_index"] = json!(partial_value);
         }
 
-        let block_changes: BlockAggregatedChanges =
-            serde_json::from_value(json_value).expect("Failed to deserialize BlockAggregatedChanges");
+        let block_changes: BlockAggregatedChanges = serde_json::from_value(json_value)
+            .expect("Failed to deserialize BlockAggregatedChanges");
 
         assert_eq!(block_changes.partial_block_index, expected);
     }

@@ -411,8 +411,8 @@ where
             .collect()
     }
 
-    /// Given BlockAggregatedChanges, filter out components that are no longer relevant and return the
-    /// components that need to be added or removed.
+    /// Given BlockAggregatedChanges, filter out components that are no longer relevant and return
+    /// the components that need to be added or removed.
     pub fn filter_updated_components(
         &self,
         deltas: &BlockAggregatedChanges,
