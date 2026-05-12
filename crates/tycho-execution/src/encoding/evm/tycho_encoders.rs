@@ -911,6 +911,8 @@ mod tests {
                     "6982508145454ce325ddbe47a25d4ec3d2311933",
                     // zero for one
                     "00",
+                    // skip unlock
+                    "00",
                     // first pool intermediary token (ETH)
                     "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                     // fee

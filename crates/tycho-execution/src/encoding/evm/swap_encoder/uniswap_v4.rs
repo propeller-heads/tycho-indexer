@@ -219,7 +219,22 @@ impl SwapEncoder for UniswapV4SwapEncoder {
         )
             .abi_encode_packed();
 
-        let args = (group_token_in_encoded, group_token_out_encoded, zero_to_one, pool_params);
+        // user_data convention: first byte is "skip_unlock" (0x01 = true).
+        // Defaults to false if user_data is empty or absent.
+        // TODO properly encode this as a string?
+        let skip_unlock = swap
+            .user_data()
+            .as_ref()
+            .and_then(|d| d.first().copied())
+            == Some(1);
+
+        let args = (
+            group_token_in_encoded,
+            group_token_out_encoded,
+            zero_to_one,
+            skip_unlock,
+            pool_params,
+        );
 
         Ok(args.abi_encode_packed())
     }
@@ -316,6 +331,8 @@ mod tests {
                 "dac17f958d2ee523a2206206994597c13d831ec7",
                 // zero for one
                 "01",
+                // skip unlock
+                "00",
                 // pool params:
                 // - intermediary token
                 "dac17f958d2ee523a2206206994597c13d831ec7",
@@ -485,6 +502,8 @@ mod tests {
                 "2260fac5e5542a773aa44fbcfedf7c193bc2c599",
                 // zero for one
                 "01",
+                // skip unlock
+                "00",
                 // pool params:
                 // - intermediary token USDT
                 "dac17f958d2ee523a2206206994597c13d831ec7",

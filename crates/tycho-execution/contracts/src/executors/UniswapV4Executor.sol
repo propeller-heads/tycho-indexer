@@ -106,8 +106,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
         address tokenIn;
         address tokenOut;
         bool zeroForOne;
+        bool skipUnlock;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
-        (tokenIn, tokenOut, zeroForOne, pools) = _decodeData(data);
+        (tokenIn, tokenOut, zeroForOne, skipUnlock, pools) = _decodeData(data);
         bytes memory swapData;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
@@ -148,9 +149,30 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 path
             );
         }
-        poolManager.sync(Currency.wrap(tokenIn));
-        // slither-disable-next-line unused-return
-        poolManager.unlock(swapData);
+        if (skipUnlock) {
+            // Caller must have called poolManager.sync(tokenIn)
+            // and the Dispatcher transferred tokens to PM already.
+            // slither-disable-next-line low-level-calls
+            // TODO remove this general delegatecall - it's dangerous.
+            // Carefully verify the function signature.
+            (bool success, bytes memory returnData) =
+                _self.delegatecall(swapData);
+            if (!success) {
+                revert(
+                    string(
+                        returnData.length > 0
+                            ? returnData
+                            : abi.encodePacked(
+                                "Uniswap v4 swap without unlock failed"
+                            )
+                    )
+                );
+            }
+        } else {
+            poolManager.sync(Currency.wrap(tokenIn));
+            // slither-disable-next-line unused-return
+            poolManager.unlock(swapData);
+        }
     }
 
     /// @dev Swap data uses ETH_ADDRESS for native ETH; translate to address(0) for V4 protocol interaction.
@@ -167,18 +189,20 @@ contract UniswapV4Executor is IExecutor, ICallback {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            bool skipUnlock,
             UniswapV4Pool[] memory pools
         )
     {
-        if (data.length < 89) {
+        if (data.length < 90) {
             revert UniswapV4Executor__InvalidDataLength();
         }
 
         tokenIn = _toV4Token(address(bytes20(data[0:20])));
         tokenOut = _toV4Token(address(bytes20(data[20:40])));
         zeroForOne = data[40] != 0;
+        skipUnlock = data[41] != 0;
 
-        bytes calldata remaining = data[41:];
+        bytes calldata remaining = data[42:];
 
         // Decode first pool with hook data
         if (remaining.length < 48) {
@@ -528,7 +552,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
 
     function getTransferData(bytes calldata data)
         external
-        pure
+        view
         returns (
             TransferManager.TransferType transferType,
             address receiver,
@@ -539,13 +563,36 @@ contract UniswapV4Executor is IExecutor, ICallback {
     {
         tokenIn = address(bytes20(data[0:20]));
         tokenOut = address(bytes20(data[20:40]));
-        return (
-            TransferManager.TransferType.None,
-            address(0),
-            tokenIn,
-            tokenOut,
-            false
-        );
+        bool skipUnlock = data[41] != 0;
+
+        // In the case where the unlock is skipped - the callback is not performed.
+        if (skipUnlock) {
+            if (tokenIn == ETH_ADDRESS) {
+                return (
+                    TransferManager.TransferType.TransferNativeInExecutor,
+                    address(0),
+                    tokenIn,
+                    tokenOut,
+                    false
+                );
+            } else {
+                return (
+                    TransferManager.TransferType.Transfer,
+                    address(poolManager),
+                    tokenIn,
+                    tokenOut,
+                    false
+                );
+            }
+        } else {
+            return (
+                TransferManager.TransferType.None,
+                address(0),
+                tokenIn,
+                tokenOut,
+                false
+            );
+        }
     }
 
     function getCallbackTransferData(

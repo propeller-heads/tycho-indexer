@@ -23,6 +23,7 @@ contract UniswapV4ExecutorExposed is UniswapV4Executor {
             address tokenIn,
             address tokenOut,
             bool zeroForOne,
+            bool skipUnlock,
             UniswapV4Pool[] memory pools
         )
     {
@@ -112,19 +113,21 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
         });
 
         bytes memory data = UniswapV4Utils.encodeExactInput(
-            USDE_ADDR, USDT_ADDR, zeroForOne, pools
+            USDE_ADDR, USDT_ADDR, zeroForOne, false, pools
         );
 
         (
             address tokenIn,
             address tokenOut,
             bool zeroForOneDecoded,
+            bool skipUnlockDecoded,
             UniswapV4Executor.UniswapV4Pool[] memory decodedPools
         ) = uniswapV4Exposed.decodeData(data);
 
         assertEq(tokenIn, USDE_ADDR);
         assertEq(tokenOut, USDT_ADDR);
         assertEq(zeroForOneDecoded, zeroForOne);
+        assertEq(skipUnlockDecoded, false);
         assertEq(decodedPools[0].hook, address(0));
         assertEq(decodedPools.length, 2);
         assertEq(decodedPools[0].intermediaryToken, USDT_ADDR);
@@ -153,8 +156,9 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(USDE_ADDR, USDT_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, USDT_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
@@ -208,8 +212,9 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(USDE_ADDR, WBTC_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, WBTC_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDE.balanceOf(POOL_MANAGER), usdeBalanceBeforePool + amountIn);
@@ -259,8 +264,9 @@ contract UniswapV4ExecutorTest is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(USDC_ADDR, WETH_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR, WETH_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         uint256 amountOut = IERC20(WETH_ADDR).balanceOf(ALICE);
@@ -315,8 +321,9 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(RLUSD_ADDR, USDT_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            RLUSD_ADDR, USDT_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(
@@ -349,8 +356,9 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(RLUSD_ADDR, WBTC_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            RLUSD_ADDR, WBTC_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(
@@ -388,8 +396,9 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(USDC_ADDR, USDT_ADDR, true, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR, USDT_ADDR, true, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertEq(USDC.balanceOf(eulerProxy), usdcEulerBalanceBefore + amountIn);
@@ -419,8 +428,9 @@ contract UniswapV4ExecutorTestForEuler is Constants, TestUtils {
             hookData: bytes("")
         });
 
-        bytes memory data =
-            UniswapV4Utils.encodeExactInput(USDC_ADDR, USDT_ADDR, false, pools);
+        bytes memory data = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR, USDT_ADDR, false, false, pools
+        );
 
         uniswapV4Exposed.swap(amountIn, data, ALICE);
         assertTrue(USDT.balanceOf(ALICE) > 0);
@@ -447,8 +457,9 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             hookData: bytes("")
         });
 
-        bytes memory protocolData =
-            UniswapV4Utils.encodeExactInput(USDE_ADDR, USDT_ADDR, true, pools);
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, USDT_ADDR, true, false, pools
+        );
 
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);
@@ -492,8 +503,9 @@ contract TychoRouterForUniswapV4Test is TychoRouterTestSetup {
             hookData: bytes("")
         });
 
-        bytes memory protocolData =
-            UniswapV4Utils.encodeExactInput(USDE_ADDR, WBTC_ADDR, true, pools);
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, WBTC_ADDR, true, false, pools
+        );
 
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);
@@ -714,3 +726,152 @@ contract TychoRouterUSV4FeeTokenTest is TychoRouterTestSetup {
         );
     }
 }
+
+struct Loan {
+    address token;
+    uint256 amount;
+}
+
+/// @title Example filler that takes PM loans and routes swaps
+///   through TychoRouter with skipUnlock=true.
+contract ExternalSettlerMock {
+    using SafeERC20 for IERC20;
+
+    IPoolManager public immutable poolManager;
+    address public immutable tychoRouter;
+
+    constructor(IPoolManager poolManager_, address tychoRouter_) {
+        poolManager = poolManager_;
+        tychoRouter = tychoRouter_;
+    }
+
+    function settle(
+        Loan[] calldata loans,
+        address tokenIn,
+        uint256 amountIn,
+        bytes calldata tychoCalldata
+    ) external {
+        IERC20(tokenIn).forceApprove(tychoRouter, amountIn);
+        // slither-disable-next-line unused-return
+        poolManager.unlock(abi.encode(loans, tokenIn, tychoCalldata));
+    }
+
+    function unlockCallback(bytes calldata data)
+        external
+        returns (bytes memory)
+    {
+        require(msg.sender == address(poolManager));
+        (Loan[] memory loans, address tokenIn, bytes memory tychoCalldata) =
+            abi.decode(data, (Loan[], address, bytes));
+
+        // 1. Take loans
+        for (uint256 i = 0; i < loans.length; i++) {
+            poolManager.take(
+                Currency.wrap(loans[i].token), address(this), loans[i].amount
+            );
+        }
+
+        // 2. Sync input token (required for skipUnlock=true)
+        poolManager.sync(Currency.wrap(tokenIn));
+
+        // 3. Route through TychoRouter (replaces the old
+        //    direct executor call + safeTransfer pattern)
+        // slither-disable-next-line low-level-calls
+        (bool success, bytes memory result) = tychoRouter.call(tychoCalldata);
+        if (!success) {
+            revert(
+                string(
+                    result.length > 0 ? result : abi.encodePacked("Fill failed")
+                )
+            );
+        }
+
+        // 4. Repay loans
+        for (uint256 i = 0; i < loans.length; i++) {
+            Currency currency = Currency.wrap(loans[i].token);
+            poolManager.sync(currency);
+            IERC20(loans[i].token)
+                .safeTransfer(address(poolManager), loans[i].amount);
+            // slither-disable-next-line unused-return
+            poolManager.settle();
+        }
+
+        return result;
+    }
+}
+
+contract ExternalSettlerNoUnlockTest is TychoRouterTestSetup {
+    ExternalSettlerMock settler;
+
+    function getForkBlock() public view virtual override returns (uint256) {
+        return 22689128;
+    }
+
+    function setUp() public override {
+        super.setUp();
+        settler = new ExternalSettlerMock(
+            IPoolManager(POOL_MANAGER), tychoRouterAddr
+        );
+    }
+
+    function testSettlementWithLoanViaTychoRouter() public {
+        // External settler with loan + skipUnlock:
+        //   1. Take USDE loan from PM
+        //   2. Sync USDE (required for skipUnlock)
+        //   3. Swap loaned USDE → USDT via TychoRouter
+        //      (Dispatcher transfers from settler to PM)
+        //   4. Repay USDE loan from settler's own capital
+
+        uint256 swapAmount = 100 ether;
+        uint256 loanAmount = 100 ether;
+
+        // Settler needs own capital to repay the loan
+        deal(USDE_ADDR, address(settler), loanAmount);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
+        });
+
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDE_ADDR, USDT_ADDR, true, true, pools
+        );
+        bytes memory swap =
+            encodeSingleSwap(address(usv4Executor), protocolData);
+
+        bytes memory tychoCalldata = abi.encodeCall(
+            tychoRouter.singleSwap,
+            (
+                swapAmount,
+                USDE_ADDR,
+                USDT_ADDR,
+                1,
+                address(settler),
+                noClientFee(),
+                swap
+            )
+        );
+
+        Loan[] memory loans = new Loan[](1);
+        loans[0] = Loan({token: USDE_ADDR, amount: loanAmount});
+
+        settler.settle(loans, USDE_ADDR, swapAmount, tychoCalldata);
+
+        assertGt(
+            IERC20(USDT_ADDR).balanceOf(address(settler)),
+            0,
+            "Settler should receive USDT"
+        );
+        assertEq(
+            IERC20(USDE_ADDR).balanceOf(address(settler)),
+            0,
+            "Settler USDE used for loan repayment"
+        );
+    }
+}
+
