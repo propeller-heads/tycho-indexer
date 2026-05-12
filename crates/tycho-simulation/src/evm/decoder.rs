@@ -327,10 +327,7 @@ where
                     .get_vm_storage()
                     .iter()
                 {
-                    let account: ResponseAccount = value
-                        .clone()
-                        .try_into()
-                        .map_err(|e| StreamDecodeError::Fatal(format!("{e}")))?;
+                    let account: ResponseAccount = value.clone().into();
 
                     if state_guard.tokens.contains_key(key) {
                         let original_address = account.address;
