@@ -2749,3 +2749,60 @@ fn test_single_encoding_strategy_liquorice_settle() {
     let hex_calldata = encode(&calldata);
     write_calldata_to_file("test_single_encoding_strategy_liquorice_settle", hex_calldata.as_str());
 }
+
+#[test]
+fn test_single_encoding_strategy_uniswap_v3_arbitrum() {
+    // WETH -> (UniswapV3 0.05% WETH/USDC) -> USDC on Arbitrum
+    let usv3_pool = ProtocolComponent {
+        id: String::from("0xC6962004f452bE9203591991D15f6b388e09E8D0"),
+        protocol_system: String::from("uniswap_v3"),
+        static_attributes: HashMap::from([(
+            "fee".to_string(),
+            Bytes::from(BigInt::from(500).to_signed_bytes_be()),
+        )]),
+        ..Default::default()
+    };
+    let token_in = Bytes::from("0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"); // WETH
+    let token_out = Bytes::from("0xaf88d065e77c8cC2239327C5EDb3A432268e5831"); // USDC
+    let swap = Swap::new(
+        usv3_pool,
+        default_token(token_in.clone()),
+        default_token(token_out.clone()),
+        BigUint::ZERO,
+    );
+
+    let encoder = get_tycho_router_encoder(Chain::Arbitrum);
+
+    let solution = Solution::new(
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+        token_in,
+        token_out,
+        BigUint::from_str("1_000000000000000000").unwrap(),
+        BigUint::from_str("1000").unwrap(),
+        vec![swap],
+    );
+
+    let encoded_solution = encoder
+        .encode_solutions(vec![solution.clone()])
+        .unwrap()[0]
+        .clone();
+
+    let calldata = encode_tycho_router_call(
+        eth_chain().id(),
+        encoded_solution,
+        &solution,
+        &eth(),
+        None,
+        0,
+        Bytes::zero(20),
+        BigUint::ZERO,
+    )
+    .unwrap()
+    .data;
+    let hex_calldata = encode(&calldata);
+    write_calldata_to_file(
+        "test_single_encoding_strategy_uniswap_v3_arbitrum",
+        hex_calldata.as_str(),
+    );
+}

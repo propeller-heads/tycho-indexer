@@ -251,3 +251,32 @@ contract TychoRouterForUniswapV3Test is TychoRouterTestSetup {
         assertEq(IERC20(BASE_cbBTC).balanceOf(BOB), 950567);
     }
 }
+
+contract TychoRouterForUniswapV3ArbitrumTest is TychoRouterTestSetup {
+    function getChain() public pure override returns (string memory) {
+        return "arbitrum";
+    }
+
+    function getForkBlock() public pure override returns (uint256) {
+        return 280000000;
+    }
+
+    function testSingleUniswapV3ArbitrumIntegration() public {
+        deal(ARBITRUM_WETH, ALICE, 1 ether);
+        uint256 balanceBefore = IERC20(ARBITRUM_USDC).balanceOf(ALICE);
+
+        vm.startPrank(ALICE);
+        IERC20(ARBITRUM_WETH).approve(tychoRouterAddr, type(uint256).max);
+
+        bytes memory callData = loadCallDataFromFile(
+            "test_single_encoding_strategy_uniswap_v3_arbitrum"
+        );
+        (bool success,) = tychoRouterAddr.call(callData);
+
+        uint256 balanceAfter = IERC20(ARBITRUM_USDC).balanceOf(ALICE);
+
+        assertTrue(success, "Call Failed");
+        assertEq(IERC20(ARBITRUM_WETH).balanceOf(tychoRouterAddr), 0);
+        assertGt(balanceAfter, balanceBefore);
+    }
+}
