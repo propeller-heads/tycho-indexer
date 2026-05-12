@@ -46,7 +46,7 @@ Endpoints enforce data filtering restrictions on API queries. When a restriction
 
 All Fynd endpoints share the same filtering restrictions:
 
-<table><thead><tr><th width="280">Restriction</th><th>Value</th></tr></thead><tbody><tr><td>Max version age</td><td>10 minutes</td></tr><tr><td><code>tvl_gt</code></td><td>10.0</td></tr><tr><td><code>min_quality</code></td><td>100</td></tr><tr><td><code>traded_n_days_ago</code></td><td>3</td></tr></tbody></table>
+<table><thead><tr><th width="280">Restriction</th><th>Value</th></tr></thead><tbody><tr><td>Max version age</td><td>10 minutes</td></tr><tr><td><code>tvl_gt</code></td><td>Chain-dependent. See <a href="indexer/tycho-client/README.md#tvl-filtering">TVL Filtering</a> for values per chain.</td></tr><tr><td><code>min_quality</code></td><td>100</td></tr><tr><td><code>traded_n_days_ago</code></td><td>3</td></tr></tbody></table>
 
 The available protocol systems vary by chain:
 

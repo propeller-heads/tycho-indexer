@@ -58,6 +58,19 @@ pub type ProtocolSystem = String;
 /// Entry point id literal type to uniquely identify an entry point.
 pub type EntryPointId = String;
 
+/// TVL threshold tiers for chain-aware filtering defaults.
+///
+/// TVL is denominated in each chain's native token. Since native tokens have different USD values,
+/// the same numeric threshold produces wildly different USD-equivalent filters across chains.
+/// These tiers provide sensible defaults targeting equivalent USD values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TvlThresholdTier {
+    /// Filters out dust pools (~$20K USD equivalent in native token).
+    Low,
+    /// Filters for pools with meaningful liquidity (~$200K USD equivalent in native token).
+    Medium,
+}
+
 #[derive(
     Debug,
     Clone,
@@ -160,6 +173,43 @@ impl Chain {
             Chain::Bsc => 56,
             Chain::Unichain => 130,
             Chain::Polygon => 137,
+        }
+    }
+
+    /// Returns a default TVL threshold in native token units for the given tier.
+    ///
+    /// Values are approximate and target a USD-equivalent range, not a precise conversion.
+    /// Native token prices used: ETH ~$2,000, POL ~$0.10, BNB ~$630.
+    pub fn default_tvl_threshold(&self, tier: TvlThresholdTier) -> f64 {
+        match (self, tier) {
+            // ETH-native chains: 10 ETH ≈ $20K, 100 ETH ≈ $200K.
+            // Starknet uses ETH-denominated TVL in Tycho (STRK tracked separately).
+            (
+                Chain::Ethereum |
+                Chain::Starknet |
+                Chain::ZkSync |
+                Chain::Arbitrum |
+                Chain::Base |
+                Chain::Unichain,
+                TvlThresholdTier::Low,
+            ) => 10.0,
+            (
+                Chain::Ethereum |
+                Chain::Starknet |
+                Chain::ZkSync |
+                Chain::Arbitrum |
+                Chain::Base |
+                Chain::Unichain,
+                TvlThresholdTier::Medium,
+            ) => 100.0,
+
+            // Polygon (POL ≈ $0.10): 200_000 POL ≈ $20K, 2_000_000 POL ≈ $200K
+            (Chain::Polygon, TvlThresholdTier::Low) => 200_000.0,
+            (Chain::Polygon, TvlThresholdTier::Medium) => 2_000_000.0,
+
+            // BSC (BNB ≈ $630): 32 BNB ≈ $20K, 320 BNB ≈ $200K
+            (Chain::Bsc, TvlThresholdTier::Low) => 32.0,
+            (Chain::Bsc, TvlThresholdTier::Medium) => 320.0,
         }
     }
 
