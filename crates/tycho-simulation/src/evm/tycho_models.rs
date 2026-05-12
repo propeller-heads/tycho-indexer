@@ -118,49 +118,6 @@ impl TryFrom<tycho_common::dto::ResponseAccount> for ResponseAccount {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use tycho_common::Bytes;
-
-    use super::*;
-
-    fn make_dto_response_account(address: Bytes) -> tycho_common::dto::ResponseAccount {
-        #[allow(deprecated)]
-        tycho_common::dto::ResponseAccount::new(
-            tycho_common::dto::Chain::Ethereum,
-            address,
-            "test".to_string(),
-            HashMap::new(),
-            Bytes::zero(32),
-            HashMap::new(),
-            Bytes::from(vec![0xDE, 0xAD]),
-            Bytes::from("0x00"),
-            Bytes::from("0x00"),
-            Bytes::from("0x00"),
-            None,
-        )
-    }
-
-    #[test]
-    fn test_response_account_conversion_succeeds() {
-        let dto = make_dto_response_account(Bytes::zero(20));
-
-        let result = ResponseAccount::try_from(dto).unwrap();
-
-        assert_eq!(result.address, Address::ZERO);
-        assert_eq!(result.code, vec![0xDE, 0xAD]);
-    }
-
-    #[test]
-    fn test_response_account_conversion_short_address_fails() {
-        let dto = make_dto_response_account(Bytes::from(vec![0x01]));
-
-        let result = ResponseAccount::try_from(dto);
-
-        assert!(result.is_err());
-    }
-}
-
 impl From<tycho_common::models::contract::Account> for ResponseAccount {
     fn from(value: tycho_common::models::contract::Account) -> Self {
         Self {
@@ -204,5 +161,48 @@ impl From<tycho_common::models::contract::AccountDelta> for AccountUpdate {
             code,
             change,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tycho_common::Bytes;
+
+    use super::*;
+
+    fn make_dto_response_account(address: Bytes) -> tycho_common::dto::ResponseAccount {
+        #[allow(deprecated)]
+        tycho_common::dto::ResponseAccount::new(
+            tycho_common::dto::Chain::Ethereum,
+            address,
+            "test".to_string(),
+            HashMap::new(),
+            Bytes::zero(32),
+            HashMap::new(),
+            Bytes::from(vec![0xDE, 0xAD]),
+            Bytes::from("0x00"),
+            Bytes::from("0x00"),
+            Bytes::from("0x00"),
+            None,
+        )
+    }
+
+    #[test]
+    fn test_response_account_conversion_succeeds() {
+        let dto = make_dto_response_account(Bytes::zero(20));
+
+        let result = ResponseAccount::try_from(dto).unwrap();
+
+        assert_eq!(result.address, Address::ZERO);
+        assert_eq!(result.code, vec![0xDE, 0xAD]);
+    }
+
+    #[test]
+    fn test_response_account_conversion_short_address_fails() {
+        let dto = make_dto_response_account(Bytes::from(vec![0x01]));
+
+        let result = ResponseAccount::try_from(dto);
+
+        assert!(result.is_err());
     }
 }
