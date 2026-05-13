@@ -43,18 +43,56 @@ pub enum UserTransferType {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ClientFeeParams {
     /// Fee in basis points charged by the client (0–10000).
-    pub client_fee_bps: u16,
-    /// Address to receive the client fee.
-    pub client_fee_receiver: Bytes,
+    client_fee_bps: u16,
+    /// Address that identifies the client and receives any client fee.
+    client_fee_receiver: Bytes,
     /// Maximum amount the client will contribute from their vault if slippage reduces the output
     /// below `min_amount_out`.
     #[serde(with = "biguint_string")]
-    pub max_client_contribution: BigUint,
+    max_client_contribution: BigUint,
     /// Deadline for the fee signature as a unix timestamp.
     #[serde(with = "biguint_string")]
-    pub deadline: BigUint,
+    deadline: BigUint,
     /// EIP-712 signature over the fee parameters and swap intent.
-    pub client_signature: Bytes,
+    client_signature: Bytes,
+}
+
+impl ClientFeeParams {
+    /// Creates params that identify the client and charge a fee in basis points.
+    pub fn new(
+        client_fee_receiver: Bytes,
+        client_signature: Bytes,
+        deadline: BigUint,
+        client_fee_bps: u16,
+    ) -> Self {
+        Self {
+            client_fee_bps,
+            client_fee_receiver,
+            max_client_contribution: BigUint::ZERO,
+            deadline,
+            client_signature,
+        }
+    }
+
+    /// Creates params that identify the client for router fee discounts without charging a fee.
+    pub fn new_without_fee(
+        client_fee_receiver: Bytes,
+        client_signature: Bytes,
+        deadline: BigUint,
+    ) -> Self {
+        Self {
+            client_fee_bps: 0,
+            client_fee_receiver,
+            max_client_contribution: BigUint::ZERO,
+            deadline,
+            client_signature,
+        }
+    }
+
+    pub fn with_max_client_contribution(mut self, max_client_contribution: BigUint) -> Self {
+        self.max_client_contribution = max_client_contribution;
+        self
+    }
 }
 
 #[cfg(feature = "evm")]

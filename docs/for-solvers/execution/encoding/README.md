@@ -165,29 +165,34 @@ Convert solutions into calldata:
 let encoded_solutions = encoder.encode_solutions(solutions);
 ```
 
-<<<<<<< HEAD
 This returns a `Vec<EncodedSolution>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
-=======
-This returns a `Vec<`[`EncodedSolution`](./#encoded-solution-struct)`>` containing only the encoded swaps. It does **not** build the full calldata. You must encode the full method call yourself. If you use Permit2, you must handle permit
->>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 creation and signing yourself using the public `Permit2` utility (see [Token transfers](../#permit2)).
 
 The full method call includes the following parameters, which act as **execution guardrails:**
 
-<<<<<<< HEAD
 * `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you. For native ETH, use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` — the router reverts on `address(0)`.
 * `minAmountOut` and `tokenOut` — the minimum amount you want to receive. Same ETH address rule applies. For maximum security, determine this from a **third-party source**.
-=======
-* `amountIn` and `tokenIn` — the amount and token to be transferred into the TychoRouter from you.
-* `minAmountOut` and `tokenOut` — the minimum amount you want to receive. For maximum security, determine this from a **third-party source**.
->>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 * `receiver` — who receives the final output. Set this to the TychoRouter address to credit output tokens to the vault.
 * `nTokens` — _(split swaps only)_ the number of distinct tokens in the split routing graph.
 * `clientFeeParams` — controls fee-taking and client contribution (see [Client Fee Signature](#client-fee-signature)). Pass all-zero values if you don't need fees.
 
 The `ClientFeeParams` struct is defined as:
 
-<table><thead><tr><th width="210">Field</th><th width="490">Description</th></tr></thead><tbody><tr><td><code>clientFeeBps</code></td><td>Fee percentage in basis points. <code>100</code> = 1%. Set to <code>0</code> to disable</td></tr><tr><td><code>clientFeeReceiver</code></td><td>Address that receives the client's portion of the fee (credited to their vault balance)</td></tr><tr><td><code>maxClientContribution</code></td><td>Maximum amount the client is willing to pay out of pocket if slippage causes the output to fall below <code>minAmountOut</code>. If the shortfall exceeds this value, the transaction reverts. Set to <code>0</code> if the client should not subsidize</td></tr><tr><td><code>deadline</code></td><td>Unix timestamp after which the signature is no longer valid</td></tr><tr><td><code>clientSignature</code></td><td>EIP-712 signature over all other fields, signed by <code>clientFeeReceiver</code></td></tr></tbody></table>
+<table><thead><tr><th width="210">Field</th><th width="490">Description</th></tr></thead><tbody><tr><td><code>clientFeeBps</code></td><td>Fee percentage in basis points. <code>100</code> = 1%. Set to <code>0</code> to take no fee</td></tr><tr><td><code>clientFeeReceiver</code></td><td>Address that receives the client fee (credited to their vault balance)</td></tr><tr><td><code>maxClientContribution</code></td><td>Maximum amount the client is willing to pay out of pocket if slippage causes the output to fall below <code>minAmountOut</code>. If the shortfall exceeds this value, the transaction reverts. Set to <code>0</code> if the client should not subsidize</td></tr><tr><td><code>deadline</code></td><td>Unix timestamp after which the signature is no longer valid</td></tr><tr><td><code>clientSignature</code></td><td>EIP-712 signature over all other fields, signed by <code>clientFeeReceiver</code></td></tr></tbody></table>
+
+The `tycho-execution` crate provides a `ClientFeeParams` Rust struct that mirrors this. Callers are responsible for
+constructing and signing it — the encoder does not use it internally. Call `.into_abi_params()` to convert it to the
+ABI-encodable tuple for calldata construction.
+
+```rust
+// No fee
+let params = ClientFeeParams::default().into_abi_params();
+
+// With a fee
+let params = ClientFeeParams::new(receiver, signature, deadline, fee_bps)
+    .with_max_client_contribution(max_contribution)
+    .into_abi_params();
+```
 
 These **execution guardrails** protect against MEV exploits. Setting them correctly gives you full control over swap
 security.
@@ -195,21 +200,14 @@ security.
 Refer to the [quickstart](../../../) for an example of converting an `EncodedSolution` into full calldata. Tailor the
 example to your use case. See the `TychoRouter` contract functions for reference.
 
-<<<<<<< HEAD
 #### Native Tokens <a href="#native-tokens" id="native-tokens"></a>
 
 The encoder automatically bridges ETH↔WETH gaps anywhere in the swap path — at the start, end, or between swaps — using a dedicated WETH executor. Set `token_in` and `token_out` to the tokens the user actually holds and expects to receive, and the encoder inserts wrap/unwrap steps as needed. This works with protocols like Uniswap V4 that accept native ETH directly, with no extra configuration required.
 
-=======
->>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 #### Client Fee Signature
 
-If you don't want fees, pass all-zero
-values: `clientFeeBps: 0`, `clientFeeReceiver: address(0)`, `maxClientContribution: 0`, `deadline: 0`, and an
-empty `clientSignature`.
-
-If you do want fees, the `clientFeeReceiver` must sign the fee parameters using EIP-712. This prevents third parties
-from spoofing fee configurations. The signature covers the following typed struct:
+Only required when charging a fee. The `clientFeeReceiver` must sign the fee parameters using EIP-712 — this prevents
+third parties from spoofing fee configurations. The signature covers the following typed struct:
 
 ```solidity
 ClientFee(uint16 clientFeeBps, address clientFeeReceiver, uint256 maxClientContribution, uint256 deadline)
@@ -302,12 +300,8 @@ The returned 65-byte signature is passed as the `clientSignature` field in `Clie
 The encoding crate ships a `tycho-encode` CLI that lets you encode swaps without writing Rust. Install it with:
 
 ```bash
-<<<<<<< HEAD
 cargo install --path crates/tycho-execution
 tycho-encode --version  # verify the install succeeded
-=======
-cargo install --path .
->>>>>>> 2f3ae5544 (docs: improve encoding page tables and copy)
 ```
 
 Pass a JSON-serialised `Solution` via stdin and specify the encoder as a subcommand:
