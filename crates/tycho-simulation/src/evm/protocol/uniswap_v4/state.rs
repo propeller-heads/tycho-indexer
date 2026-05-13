@@ -53,9 +53,13 @@ use crate::{
 
 // Gas limit constants for capping get_limits calculations
 // These prevent simulations from exceeding Ethereum's block gas limit
+// The names of the constants reflect the exact method from the tenderly log.
 const SWAP_BASE_GAS: u64 = 130_000;
-// This gas is estimated from UniswapV3Pool cross() calls on Tenderly
 const GAS_PER_TICK: u64 = 17_540;
+const GAS_PER_BITMAP_LOOKUP: u64 = 4_000;
+// Cost of taking the output amount from the Uniswap V4 PoolManager, corresponds to
+// PoolManager.take()
+const V4_CALLBACK_SETTLEMENT_GAS: u64 = 30_000;
 // Conservative max gas budget for a single swap (Ethereum transaction gas limit)
 const MAX_SWAP_GAS: u64 = 16_700_000;
 const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
@@ -209,14 +213,17 @@ impl UniswapV4State {
             tick: self.tick,
             liquidity: self.liquidity,
         };
-        let mut gas_used = U256::from(130_000);
+        let mut gas_used = U256::from(0);
 
         while state.amount_remaining != I256::ZERO && state.sqrt_price != price_limit {
             let (mut next_tick, initialized) = match self
                 .ticks
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
             {
-                Ok((tick, init)) => (tick, init),
+                Ok((tick, init)) => {
+                    gas_used = safe_add_u256(gas_used, U256::from(GAS_PER_BITMAP_LOOKUP))?;
+                    (tick, init)
+                }
                 Err(tick_err) => match tick_err.kind {
                     TickListErrorKind::TicksExeeded => {
                         let mut new_state = self.clone();
@@ -292,13 +299,14 @@ impl UniswapV4State {
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
+                    gas_used = safe_add_u256(gas_used, U256::from(GAS_PER_TICK))?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
-            gas_used = safe_add_u256(gas_used, U256::from(2000))?;
         }
+
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
             amount_specified,
@@ -306,7 +314,7 @@ impl UniswapV4State {
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,
-            gas_used,
+            gas_used: safe_add_u256(gas_used, U256::from(V4_CALLBACK_SETTLEMENT_GAS))?,
         })
     }
 

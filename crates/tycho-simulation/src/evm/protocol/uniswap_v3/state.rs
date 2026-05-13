@@ -41,12 +41,19 @@ use crate::evm::protocol::{
 
 // Gas limit constants for capping get_limits calculations
 // These prevent simulations from exceeding Ethereum's block gas limit
+// The names of the constants reflect the exact method from the tenderly log.
 const SWAP_BASE_GAS: u64 = 130_000;
-// This gas is estimated from UniswapV3Pool cross() calls on Tenderly
-const GAS_PER_TICK: u64 = 17_540;
+// Bitmap word scan
+const GAS_PER_BITMAP_WORD: u64 = 2_100;
+// swap math step: getSqrtRatioAtTick + computeSwapStep + amount accounting
+const GAS_PER_SWAP_MATH_STEP: u64 = 4_000;
+// Initialized tick crossing
+const GAS_PER_INITIALIZED_TICK_CROSS: u64 = 17_540;
+// Output transfer + balanceBefore + callback + balanceAfter.
+const V3_CALLBACK_SETTLEMENT_GAS: u64 = 70_000;
 // Conservative max gas budget for a single swap (Ethereum transaction gas limit)
 const MAX_SWAP_GAS: u64 = 16_700_000;
-const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_TICK;
+const MAX_TICKS_CROSSED: u64 = (MAX_SWAP_GAS - SWAP_BASE_GAS) / GAS_PER_INITIALIZED_TICK_CROSS;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniswapV3State {
@@ -127,7 +134,7 @@ impl UniswapV3State {
             tick: self.tick,
             liquidity: self.liquidity,
         };
-        let mut gas_used = U256::from(130_000);
+        let mut gas_used = U256::from(0);
 
         while state.amount_remaining != I256::from_raw(U256::from(0u64)) &&
             state.sqrt_price != price_limit
@@ -136,7 +143,10 @@ impl UniswapV3State {
                 .ticks
                 .next_initialized_tick_within_one_word(state.tick, zero_for_one)
             {
-                Ok((tick, init)) => (tick, init),
+                Ok((tick, init)) => {
+                    gas_used = safe_add_u256(gas_used, U256::from(GAS_PER_BITMAP_WORD))?;
+                    (tick, init)
+                }
                 Err(tick_err) => match tick_err.kind {
                     TickListErrorKind::TicksExeeded => {
                         let mut new_state = self.clone();
@@ -178,6 +188,9 @@ impl UniswapV3State {
                 amount_out,
                 fee_amount,
             };
+
+            gas_used = safe_add_u256(gas_used, U256::from(GAS_PER_SWAP_MATH_STEP))?;
+
             if exact_input {
                 state.amount_remaining -= I256::checked_from_sign_and_abs(
                     Sign::Positive,
@@ -205,12 +218,12 @@ impl UniswapV3State {
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
+                    gas_used = safe_add_u256(gas_used, U256::from(GAS_PER_INITIALIZED_TICK_CROSS))?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
-            gas_used = safe_add_u256(gas_used, U256::from(2000))?;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
@@ -219,7 +232,7 @@ impl UniswapV3State {
             sqrt_price: state.sqrt_price,
             liquidity: state.liquidity,
             tick: state.tick,
-            gas_used,
+            gas_used: safe_add_u256(gas_used, U256::from(V3_CALLBACK_SETTLEMENT_GAS))?,
         })
     }
 
