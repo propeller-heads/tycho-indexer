@@ -6,6 +6,67 @@
   },
   {
     "type": "function",
+    "name": "_quoteExternal",
+    "inputs": [
+      {
+        "name": "inputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lpAmountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "feePpm",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "lmsr",
+        "type": "tuple",
+        "internalType": "struct LMSRStabilized.State",
+        "components": [
+          {
+            "name": "kappa",
+            "type": "int128",
+            "internalType": "int128"
+          },
+          {
+            "name": "qInternal",
+            "type": "int128[]",
+            "internalType": "int128[]"
+          }
+        ]
+      },
+      {
+        "name": "bases_",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "supply",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountInUsed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
     "name": "burnAmounts",
     "inputs": [
       {
@@ -109,6 +170,45 @@
     "outputs": [
       {
         "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "maxLpForBudget",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "contract IPartyPool"
+      },
+      {
+        "name": "inputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxAmountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "lpAmountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountInUsed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inFee",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -238,6 +338,45 @@
   },
   {
     "type": "function",
+    "name": "swapAmountsForExactOutput",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "contract IPartyPool"
+      },
+      {
+        "name": "inputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "outputTokenIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "inFee",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "swapAmountsForExactPrice",
     "inputs": [
       {
@@ -295,7 +434,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "maxAmountIn",
+        "name": "lpAmountOut",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -303,11 +442,6 @@
     "outputs": [
       {
         "name": "amountInUsed",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "lpMinted",
         "type": "uint256",
         "internalType": "uint256"
       },

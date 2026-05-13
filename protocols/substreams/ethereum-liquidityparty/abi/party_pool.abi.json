@@ -610,12 +610,12 @@
         "internalType": "uint256"
       },
       {
-        "name": "maxAmountIn",
+        "name": "lpAmountOut",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "minLpOut",
+        "name": "maxAmountIn",
         "type": "uint256",
         "internalType": "uint256"
       },

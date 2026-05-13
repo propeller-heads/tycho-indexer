@@ -18,11 +18,6 @@
         "internalType": "contract PartyPoolInitCode"
       },
       {
-        "name": "balancedPairInitCodeStorage_",
-        "type": "address",
-        "internalType": "contract PartyPoolBalancedPairInitCode"
-      },
-      {
         "name": "protocolFeePpm_",
         "type": "uint256",
         "internalType": "uint256"
