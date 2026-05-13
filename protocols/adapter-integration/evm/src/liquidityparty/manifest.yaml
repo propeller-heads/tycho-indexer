@@ -3,8 +3,8 @@ author:
   email: tim@dexorder.com
 
 constants:
-  # This is our median gas cost for a 20-asset pool. Gas varies by pool size from 120k to 200k.
-  protocol_gas: 147238
+  # This is our median gas cost for a 10-asset pool. Gas varies by pool size from 120k to 200k.
+  protocol_gas: 139307
   capabilities:
     - SellSide
     - PriceFunction
