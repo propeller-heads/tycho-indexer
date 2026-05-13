@@ -56,7 +56,7 @@ use tycho_simulation::{
     },
     protocol::models::{ProtocolComponent, Update},
     tycho_client::feed::component_tracker::ComponentFilter,
-    tycho_common::models::Chain,
+    tycho_common::{dto::TvlThresholdTier, models::Chain},
     utils::{get_default_url, load_all_tokens, load_blocklist},
 };
 
@@ -76,9 +76,10 @@ struct Cli {
     buy_token: Option<String>,
     #[arg(long, default_value_t = 10.0)]
     sell_amount: f64,
-    /// The tvl threshold to filter the graph by
-    #[arg(long, default_value_t = 100.0)]
-    tvl_threshold: f64,
+    /// The tvl threshold to filter the graph by. Defaults to a chain-appropriate
+    /// value targeting ~$200K USD equivalent.
+    #[arg(long)]
+    tvl_threshold: Option<f64>,
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
     /// Path to blocklist TOML config file
@@ -131,7 +132,10 @@ async fn main() {
     let tycho_api_key: String =
         env::var("TYCHO_API_KEY").unwrap_or_else(|_| "sampletoken".to_string());
 
-    let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
+    let tvl_threshold = cli
+        .tvl_threshold
+        .unwrap_or_else(|| chain.default_tvl_threshold(TvlThresholdTier::Medium));
+    let tvl_filter = ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold);
 
     let swapper_pk = env::var("PRIVATE_KEY").ok();
 

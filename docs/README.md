@@ -82,7 +82,7 @@ cargo run --release --example quickstart -- --sell-token "0x833589fCD6eDb6E08f4c
 
 This example would seek the best swap for 10 USDC -> WETH on Base.
 
-The TVL filter means we will only look for snapshot data for pools with TVL greater than the specified threshold (in ETH). Its default is **1000 ETH** to limit the data you pull.
+The TVL filter means we will only look for snapshot data for pools with TVL greater than the specified threshold, denominated in the chain's native token. See [TVL Filtering](for-solvers/indexer/tycho-client/README.md#tvl-filtering) for default values per chain.
 
 #### Logs
 

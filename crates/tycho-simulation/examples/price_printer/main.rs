@@ -9,7 +9,7 @@ use clap::Parser;
 use futures::{future::select_all, StreamExt};
 use tokio::{sync::mpsc, task::JoinHandle};
 use tycho_client::feed::component_tracker::ComponentFilter;
-use tycho_common::models::Chain;
+use tycho_common::{dto::TvlThresholdTier, models::Chain};
 use tycho_simulation::{
     evm::{
         engine_db::tycho_db::PreCachedDB,
@@ -31,9 +31,10 @@ use tycho_simulation::{
 
 #[derive(Parser)]
 struct Cli {
-    /// The tvl threshold to filter the graph by
-    #[arg(long, default_value_t = 1000.0)]
-    tvl_threshold: f64,
+    /// The tvl threshold to filter the graph by. Defaults to a chain-appropriate
+    /// value targeting ~$200K USD equivalent.
+    #[arg(long)]
+    tvl_threshold: Option<f64>,
     /// The target blockchain
     #[clap(long, default_value = "ethereum")]
     pub chain: String,
@@ -122,7 +123,10 @@ async fn main() {
         )
         .await
         .expect("Failed loading tokens");
-        let tvl_filter = ComponentFilter::with_tvl_range(cli.tvl_threshold, cli.tvl_threshold);
+        let tvl_threshold = cli
+            .tvl_threshold
+            .unwrap_or_else(|| chain.default_tvl_threshold(TvlThresholdTier::Medium));
+        let tvl_filter = ComponentFilter::with_tvl_range(tvl_threshold, tvl_threshold);
         let mut protocol_stream =
             register_exchanges(ProtocolStreamBuilder::new(&tycho_url, chain), &chain, tvl_filter)
                 .auth_key(Some(tycho_api_key.clone()))

@@ -2,35 +2,47 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+contract PolygonConstants {
+    address constant POLYGON_WETH = 0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619;
+    address constant POLYGON_USDC = 0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359;
+}
+
+contract ArbitrumConstants {
+    address constant ARBITRUM_WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
+    address constant ARBITRUM_USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
+}
+
 contract BaseConstants {
-    address BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
-    address BASE_WETH = 0x4200000000000000000000000000000000000006;
-    address BASE_cbBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
-    address BASE_BMI = 0x2F16386bB37709016023232523FF6d9DAF444BE3;
+    address constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    address constant BASE_MAG7 = 0x9E6A46f294bB67c20F1D1E7AfB0bBEf614403B55;
+    address constant BASE_WETH = 0x4200000000000000000000000000000000000006;
+    address constant BASE_cbBTC = 0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf;
+    address constant BASE_BMI = 0x2F16386bB37709016023232523FF6d9DAF444BE3;
     // Uniswap v2
-    address USDC_MAG7_POOL = 0x739c2431670A12E2cF8e11E3603eB96e6728a789;
+    address constant USDC_MAG7_POOL =
+        0x739c2431670A12E2cF8e11E3603eB96e6728a789;
 
     //Pancakeswap v3
-    address PANCAKESWAPV3_cbBTC_USDC_POOL =
+    address constant PANCAKESWAPV3_cbBTC_USDC_POOL =
         0xb94b22332ABf5f89877A14Cc88f2aBC48c34B3Df;
 
-    address PANCAKESWAPV3_DEPLOYER = 0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
+    address constant PANCAKESWAPV3_DEPLOYER =
+        0x41ff9AA7e16B8B1a8a8dc4f0eFacd93D02d071c9;
 
     // Aerodrome Slipstreams Factory
-    address SLIPSTREAMS_FACTORY_BASE =
+    address constant SLIPSTREAMS_FACTORY_BASE =
         0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A;
-    address SLIPSTREAMS_NEW_FACTORY_BASE =
+    address constant SLIPSTREAMS_NEW_FACTORY_BASE =
         0xaDe65c38CD4849aDBA595a4323a8C7DdfE89716a;
     // Aerodrome Slipstreams
-    address SLIPSTREAMS_WETH_USDC_POOL =
+    address constant SLIPSTREAMS_WETH_USDC_POOL =
         0xb2cc224c1c9feE385f8ad6a55b4d94E92359DC59;
     // Pool that uses the new factory
-    address SLIPSTREAMS_WETH_BMI_POOL =
+    address constant SLIPSTREAMS_WETH_BMI_POOL =
         0x1b7088833548A8C4Ab12a900a2f4bdFA49221081;
 }
 
-contract Constants is Test, BaseConstants {
+contract Constants is Test, PolygonConstants, ArbitrumConstants, BaseConstants {
     address ADMIN = makeAddr("unique-admin"); //admin=us
     // Changed this since someone deployed a drainer contract to makeAddr("bob")
     address BOB = makeAddr("bob*"); //bob=someone!=us

@@ -12,5 +12,7 @@
     }
   },
   "base": {},
+  "arbitrum": {},
+  "polygon": {},
   "unichain": {}
 }

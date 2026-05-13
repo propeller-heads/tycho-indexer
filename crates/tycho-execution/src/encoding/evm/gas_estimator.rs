@@ -4,10 +4,10 @@ use crate::encoding::models::{Solution, Strategy};
 
 /// Default gas cost for an ERC-20 `transferFrom` or `transfer`. Used as fallback when the token
 /// has no measured gas cost.
-pub const DEFAULT_TOKEN_TRANSFER_GAS: u64 = 60_000;
+pub const DEFAULT_TOKEN_TRANSFER_GAS: u64 = 40_000;
 
 /// Gas cost for an ERC-20 `approve`.
-pub const TOKEN_APPROVAL_GAS: u64 = 45_000;
+pub const TOKEN_APPROVAL_GAS: u64 = 25_000;
 
 /// Callback-based protocols: the input `transferFrom` happens inside the callback, which is
 /// inside `swap()`. The gas is thus already included in `get_amount_out`.

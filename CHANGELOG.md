@@ -1,3 +1,38 @@
+## [0.291.1](https://github.com/propeller-heads/tycho-indexer/compare/0.291.0...0.291.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **deps:** upgrade diesel to 2.3.9 to resolve RUSTSEC-2026-0136 and RUSTSEC-2026-0137 ([a280cb5](https://github.com/propeller-heads/tycho-indexer/commit/a280cb5dbbb45d21e8c6c12373f2b94b062efe62))
+* **deps:** upgrade diesel to 2.3.9 to resolve RUSTSEC-2026-0136 and RUSTSEC-2026-0137 ([#1012](https://github.com/propeller-heads/tycho-indexer/issues/1012)) ([72e75fc](https://github.com/propeller-heads/tycho-indexer/commit/72e75fcf5ab3b1690b8c05b866228071d7c337f1))
+
+## [0.291.0](https://github.com/propeller-heads/tycho-indexer/compare/0.290.0...0.291.0) (2026-05-13)
+
+
+### Features
+
+* tune protocol gas estimates based on tenderly traces ([8f649db](https://github.com/propeller-heads/tycho-indexer/commit/8f649db02a5cd047065ac9bf6b66af30b2722ff6))
+
+
+### Bug Fixes
+
+* calibrate protocol specific gas costs ([#977](https://github.com/propeller-heads/tycho-indexer/issues/977)) ([f9c7c4f](https://github.com/propeller-heads/tycho-indexer/commit/f9c7c4fdd90064d28846c9013f57acb40eecce74))
+
+## [0.290.0](https://github.com/propeller-heads/tycho-indexer/compare/0.289.2...0.290.0) (2026-05-13)
+
+
+### Features
+
+* **common:** Add chain-aware TVL default thresholds ([3efe875](https://github.com/propeller-heads/tycho-indexer/commit/3efe87569cdab2639899e7e2a7f80de6ed938e2f))
+* **common:** Add chain-aware TVL default thresholds ([#1008](https://github.com/propeller-heads/tycho-indexer/issues/1008)) ([f956e3f](https://github.com/propeller-heads/tycho-indexer/commit/f956e3fd0c55058ba1022a8c776fa64cf389999b))
+
+
+### Performance Improvements
+
+* Check for cli TVL only if needed ([7987192](https://github.com/propeller-heads/tycho-indexer/commit/79871925d38a22566ae7a04dca83b2133f1206e5))
+
+## [0.289.2](https://github.com/propeller-heads/tycho-indexer/compare/0.289.1...0.289.2) (2026-05-13)
+
 ## [0.289.1](https://github.com/propeller-heads/tycho-indexer/compare/0.289.0...0.289.1) (2026-05-12)
 
 
