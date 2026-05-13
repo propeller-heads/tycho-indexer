@@ -4,7 +4,10 @@ use std::str::FromStr;
 
 use alloy::{hex::encode, primitives::U256, sol_types::SolValue};
 use num_bigint::BigUint;
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 use tycho_execution::encoding::{
     evm::utils::{biguint_to_u256, write_calldata_to_file},
     models::{default_token, Solution, Swap, UserTransferType},
@@ -34,7 +37,7 @@ fn test_evm_single_swap_strategy_encoder() {
         BigUint::ZERO,
     );
 
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -116,7 +119,7 @@ fn test_single_swap_strategy_encoder_transfer_from() {
         default_token(dai.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -200,7 +203,7 @@ fn test_single_swap_with_client_fees() {
         default_token(dai.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
@@ -256,7 +259,7 @@ fn test_single_swap_with_fees_and_client_contribution() {
         default_token(dai.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
