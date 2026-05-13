@@ -18,5 +18,5 @@ instances:
       name: mainnet
       id: 1
     arguments:
-      - "0xdDda7Fa3AC71197309FEf368E366183f9d0365E8"  # PartyPlanner
-      - "0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97"  # PartyInfo
+      - "0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071"  # PartyPlanner
+      - "0x5f1B901f2955CAD0B28978eF6f0D3054C102F244"  # PartyInfo

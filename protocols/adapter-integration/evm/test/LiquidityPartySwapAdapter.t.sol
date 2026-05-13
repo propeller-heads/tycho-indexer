@@ -20,23 +20,23 @@ contract LiquidityPartyFunctionTest is AdapterTest {
     using FractionMath for Fraction;
 
     IPartyPlanner internal constant PLANNER =
-        IPartyPlanner(0xdDda7Fa3AC71197309FEf368E366183f9d0365E8);
+        IPartyPlanner(0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071);
     IPartyInfo internal constant INFO =
-        IPartyInfo(0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97);
+        IPartyInfo(0x5f1B901f2955CAD0B28978eF6f0D3054C102F244);
     address internal constant MINT_IMPL =
-        0x04c6108A5b6a3a193F7548F22809900337b6fe56;
+        0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5;
     address internal constant EXTRA_IMPL =
-        0x9072Eb97454b33b311CF50d3cc42dc6E627a48Bc;
+        0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7;
     IPartyPool internal constant POOL =
-        IPartyPool(0x256C87d6793B5507eA08d392529C6ed2d680a163);
+        IPartyPool(0x353D535b9febe7C0Ff261c9e55aD941f712F54ae);
     bytes32 internal constant POOL_ID = bytes32(bytes20(address(POOL)));
-    uint256 internal constant FORK_BLOCK = 25067949;
+    uint256 internal constant FORK_BLOCK = 25088884;
 
     LiquidityPartySwapAdapter internal adapter;
     uint256 internal constant TEST_ITERATIONS = 10;
 
     address[] internal tokens;
-    address internal constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
+    address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address internal constant AAVE = 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9;
 
@@ -47,7 +47,7 @@ contract LiquidityPartyFunctionTest is AdapterTest {
 
     function setUp() public {
         tokens = new address[](3);
-        tokens[0] = USDT;
+        tokens[0] = USDC;
         tokens[1] = WETH;
         tokens[2] = AAVE;
 
@@ -194,7 +194,7 @@ contract LiquidityPartyFunctionTest is AdapterTest {
         }
     }
 
-    // Use WETH/AAVE pair — USDT's 6 decimals cause precision failures at tiny
+    // Use WETH/AAVE pair — USDC's 6 decimals cause precision failures at tiny
     // pool sizes (~$1) with large relative trade sizes.
     function testLiquidityPartyPoolBehaviour() public {
         IERC20(WETH).approve(address(adapter), type(uint256).max);

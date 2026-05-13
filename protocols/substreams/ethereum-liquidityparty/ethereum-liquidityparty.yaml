@@ -20,13 +20,13 @@ network: mainnet
 networks:
   mainnet:
     params:
-      map_protocol_components: planner=0xdDda7Fa3AC71197309FEf368E366183f9d0365E8&info=0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97&mint_impl=0x04c6108A5b6a3a193F7548F22809900337b6fe56&extra_impl=0x9072Eb97454b33b311CF50d3cc42dc6E627a48Bc
-      map_protocol_changes: planner=0xdDda7Fa3AC71197309FEf368E366183f9d0365E8&info=0x6191527e6F4ca976b31bA4a984Ff96B1ED6AaB97&mint_impl=0x04c6108A5b6a3a193F7548F22809900337b6fe56&extra_impl=0x9072Eb97454b33b311CF50d3cc42dc6E627a48Bc
+      map_protocol_components: planner=0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071&info=0x5f1B901f2955CAD0B28978eF6f0D3054C102F244&mint_impl=0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5&extra_impl=0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7
+      map_protocol_changes: planner=0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071&info=0x5f1B901f2955CAD0B28978eF6f0D3054C102F244&mint_impl=0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5&extra_impl=0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7
 
 modules:
   - name: map_protocol_components
     kind: map
-    initialBlock: 25067440
+    initialBlock: 25088849
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -35,7 +35,7 @@ modules:
 
   - name: store_protocol_components
     kind: store
-    initialBlock: 25067440
+    initialBlock: 25088849
     updatePolicy: set
     valueType: string
     inputs:
@@ -43,7 +43,7 @@ modules:
 
   - name: map_killed_components
     kind: map
-    initialBlock: 25067440
+    initialBlock: 25088849
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
@@ -52,7 +52,7 @@ modules:
 
   - name: store_killed_components
     kind: store
-    initialBlock: 25067440
+    initialBlock: 25088849
     updatePolicy: set
     valueType: int64
     inputs:
@@ -60,7 +60,7 @@ modules:
 
   - name: map_relative_component_balance
     kind: map
-    initialBlock: 25067440
+    initialBlock: 25088849
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
@@ -70,7 +70,7 @@ modules:
 
   - name: store_balances
     kind: store
-    initialBlock: 25067440
+    initialBlock: 25088849
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -78,7 +78,7 @@ modules:
 
   - name: map_protocol_changes
     kind: map
-    initialBlock: 25067440
+    initialBlock: 25088849
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
