@@ -61,7 +61,13 @@ You can request individual pools or use a minimum TVL threshold to filter the co
 Tycho indexes all the components in a Protocol. TVL filtering is highly encouraged to speed up data transfer and processing times by reducing the number of returned components.
 {% endhint %}
 
-**TVL is measured in the chain's native currency (e.g., 1 00 ETH on Ethereum Mainnet).**
+**TVL is measured in the chain's native currency.** Since native tokens have different USD values, the CLI default (`--min-tvl`) is chain-dependent:
+
+| Chain | Native Token | Default `--min-tvl` (~$20K USD) |
+| ----- | ------------ | ------------------------------- |
+| Ethereum, Arbitrum, Base, Unichain, Starknet, ZkSync | ETH | 10 |
+| Polygon | POL | 200,000 |
+| BSC | BNB | 32 |
 
 You can filter by TVL in 2 ways:
 

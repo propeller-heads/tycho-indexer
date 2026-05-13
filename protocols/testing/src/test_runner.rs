@@ -308,8 +308,12 @@ impl TestRunner {
         if let Some(vm_adapter_path) = adapter_contract_path_str {
             decoder_context = decoder_context.vm_adapter_path(vm_adapter_path);
         }
-        let protocol_stream_builder =
-            register_protocol(protocol_stream_builder, &config.protocol_system, decoder_context)?;
+        let protocol_stream_builder = register_protocol(
+            protocol_stream_builder,
+            &config.protocol_system,
+            chain,
+            decoder_context,
+        )?;
 
         let stream_builder = protocol_stream_builder
             .skip_state_decode_failures(true)
@@ -865,8 +869,12 @@ impl TestRunner {
                 decoder_context = decoder_context.vm_adapter_path(path_str);
             }
         }
-        let protocol_stream_builder =
-            register_protocol(protocol_stream_builder, protocol_system, decoder_context)?;
+        let protocol_stream_builder = register_protocol(
+            protocol_stream_builder,
+            protocol_system,
+            self.chain.into(),
+            decoder_context,
+        )?;
 
         let decoder = protocol_stream_builder.get_decoder();
         initialize_hook_handlers().into_diagnostic()?;
