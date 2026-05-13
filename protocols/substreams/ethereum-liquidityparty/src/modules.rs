@@ -42,20 +42,7 @@ fn map_protocol_components(
     })
 }
 
-/// Stores all protocol components in a store.
-///
-/// Stores information about components in a key value store. This is only necessary if
-/// you need to access the whole set of components within your indexing logic.
-///
-/// Popular use cases are:
-/// - Checking if a contract belongs to a component. In this case suggest to use an address as the
-///   store key so lookup operations are O(1).
-/// - Tallying up relative balances changes to calcualte absolute erc20 token balances per
-///   component.
-///
-/// Usually you can skip this step if:
-/// - You are interested in a static set of components only
-/// - Your protocol emits balance change events with absolute values
+/// Stores all protocol components.
 #[substreams::handlers::store]
 fn store_protocol_components(
     map_protocol_components: BlockTransactionProtocolComponents,
@@ -78,6 +65,26 @@ fn store_protocol_components(
         });
 }
 
+/// Records killed pool addresses so downstream modules can skip them.
+#[substreams::handlers::store]
+fn store_killed_components(
+    map_killed_components: BlockTransactionProtocolComponents,
+    store: StoreSetInt64,
+) {
+    map_killed_components
+        .tx_components
+        .into_iter()
+        .for_each(|tx_pc| {
+            tx_pc
+                .components
+                .into_iter()
+                .for_each(|pc| {
+                    store.set(0, pc.id, &1);
+                })
+        });
+}
+
+/// Tracks killed pools that can no longer swap
 #[substreams::handlers::map]
 fn map_killed_components(
     block: eth::v2::Block,
@@ -121,13 +128,21 @@ fn map_killed_components(
 fn map_relative_component_balance(
     block: eth::v2::Block,
     store: StoreGetString,
+    killed_store: StoreGetInt64,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
     let mut deltas: Vec<BalanceDelta> = Vec::new();
 
     for log in block.logs() {
         let pool_addr = encode_addr(log.address());
-        // Short circuit if the address doesn't match any of our pools.
+        // Short circuit if the address doesn't match any of our pools
         let Some(tokens_str) = store.get_last(&pool_addr) else { continue };
+        // Short circuit if the pool has been killed
+        if killed_store
+            .get_last(&pool_addr)
+            .is_some()
+        {
+            continue;
+        }
         let component_tokens = decode_addrs(&tokens_str)?;
         let component_id = pool_addr.as_bytes().to_vec();
         let tx = log.receipt.transaction;
@@ -237,7 +252,9 @@ fn map_protocol_changes(
                 });
         });
 
-    // Zero out balances for killed components so Tycho reports zero TVL.
+    // We mark killed components with a `killed` dynamic attribute, then
+    // tycho-simulation uses a stream filter to remove the pool. See
+    // `liquidityparty_killed_pools_filter` in protocol_stream_processor.rs
     killed_components
         .tx_components
         .iter()
@@ -251,19 +268,14 @@ fn map_protocol_changes(
                 .components
                 .iter()
                 .for_each(|component| {
-                    let Some(token_addrs) = components_store
-                        .get_last(&component.id)
-                        .and_then(|tokens_str| decode_addrs(&tokens_str).ok())
-                    else {
-                        return;
-                    };
-                    for token in token_addrs {
-                        builder.add_balance_change(&BalanceChange {
-                            token,
-                            balance: vec![0],
-                            component_id: component.id.as_bytes().to_vec(),
-                        });
-                    }
+                    builder.add_entity_change(&EntityChanges {
+                        component_id: component.id.clone(),
+                        attributes: vec![Attribute {
+                            name: "killed".to_string(),
+                            value: vec![1u8],
+                            change: ChangeType::Update.into(),
+                        }],
+                    });
                 });
         });
 

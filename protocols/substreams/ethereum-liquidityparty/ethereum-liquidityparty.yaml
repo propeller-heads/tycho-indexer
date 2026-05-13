@@ -50,12 +50,21 @@ modules:
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
+  - name: store_killed_components
+    kind: store
+    initialBlock: 25067440
+    updatePolicy: set
+    valueType: int64
+    inputs:
+      - map: map_killed_components
+
   - name: map_relative_component_balance
     kind: map
     initialBlock: 25067440
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
+      - store: store_killed_components
     output:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
 
