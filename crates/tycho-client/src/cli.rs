@@ -254,10 +254,6 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
     if let Some(n) = args.max_messages {
         builder = builder.max_messages(n);
     }
-
-    let default_min_tvl = chain.default_tvl_threshold(TvlThresholdTier::Low);
-    let min_tvl = args.min_tvl.unwrap_or(default_min_tvl);
-
     // Register exchanges
     let builder = exchanges
         .into_iter()
@@ -269,6 +265,8 @@ async fn run(exchanges: Vec<(String, Option<String>)>, args: CliArgs) -> Result<
             {
                 ComponentFilter::with_tvl_range(remove_tvl, add_tvl)
             } else {
+                let default_min_tvl = chain.default_tvl_threshold(TvlThresholdTier::Low);
+                let min_tvl = args.min_tvl.unwrap_or(default_min_tvl);
                 ComponentFilter::with_tvl_range(min_tvl, min_tvl)
             };
             b.exchange(&name, filter)

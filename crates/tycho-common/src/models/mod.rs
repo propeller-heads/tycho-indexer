@@ -180,6 +180,8 @@ impl Chain {
     ///
     /// Values are approximate and target a USD-equivalent range, not a precise conversion.
     /// Native token prices used: ETH ~$2,000, POL ~$0.10, BNB ~$630.
+    /// These prices are volatile, and used as a reference. They should not be updated often,
+    /// unless big price movements occour, making an update necessary.
     pub fn default_tvl_threshold(&self, tier: TvlThresholdTier) -> f64 {
         match (self, tier) {
             // ETH-native chains: 10 ETH ≈ $20K, 100 ETH ≈ $200K.
