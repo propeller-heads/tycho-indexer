@@ -8,8 +8,7 @@ use std::collections::HashMap;
 use substreams::{pb::substreams::StoreDeltas, prelude::*};
 use substreams_ethereum::{pb::eth, Event};
 use tycho_substreams::{
-    abi::erc20, balances::aggregate_balances_changes, contract::extract_contract_changes_builder,
-    prelude::*,
+    balances::aggregate_balances_changes, contract::extract_contract_changes_builder, prelude::*,
 };
 
 /// Find and create all relevant protocol components
@@ -114,61 +113,72 @@ fn map_killed_components(
     })
 }
 
-/// Extracts balance changes per component
+/// Tracks TVL changes per component using PartyPool events.
 ///
-/// This template function uses ERC20 transfer events to extract balance changes. It
-/// assumes that each component is deployed at a dedicated contract address. If a
-/// transfer to the component is detected, its balance is increased and if a transfer
-/// from the component is detected its balance is decreased.
-///
-/// ## Note:
-/// Changes are necessary if your protocol uses native ETH, uses a vault contract or if
-/// your component burn or mint tokens without emitting transfer events.
-///
-/// You may want to ignore LP tokens if your protocol emits transfer events for these
-/// here.
+/// Protocol fees sit in the pool until being collected but have separate accounting
+/// and do not contribute to TVL.
 #[substreams::handlers::map]
 fn map_relative_component_balance(
     block: eth::v2::Block,
     store: StoreGetString,
 ) -> Result<BlockBalanceDeltas, anyhow::Error> {
-    let res = block
-        .logs()
-        .filter_map(|log| {
-            erc20::events::Transfer::match_and_decode(log).map(|transfer| {
-                let to_addr = encode_addr(transfer.to.as_slice());
-                let from_addr = encode_addr(transfer.from.as_slice());
-                let tx = log.receipt.transaction;
-                if let Some(val) = store.get_last(&to_addr) {
-                    let component_tokens: Vec<Vec<u8>> = decode_addrs(&val).unwrap();
-                    if component_tokens.contains(&log.address().to_vec()) {
-                        return Some(BalanceDelta {
-                            ord: log.ordinal(),
-                            tx: Some(tx.into()),
-                            token: log.address().to_vec(),
-                            delta: transfer.value.to_signed_bytes_be(),
-                            component_id: to_addr.as_bytes().to_vec(),
-                        });
-                    }
-                } else if let Some(val) = store.get_last(&from_addr) {
-                    let component_tokens: Vec<Vec<u8>> = decode_addrs(&val).unwrap();
-                    if component_tokens.contains(&log.address().to_vec()) {
-                        return Some(BalanceDelta {
-                            ord: log.ordinal(),
-                            tx: Some(tx.into()),
-                            token: log.address().to_vec(),
-                            delta: (transfer.value.neg()).to_signed_bytes_be(),
-                            component_id: from_addr.as_bytes().to_vec(),
-                        });
-                    }
-                }
-                None
-            })
-        })
-        .flatten()
-        .collect::<Vec<_>>();
+    let mut deltas: Vec<BalanceDelta> = Vec::new();
 
-    Ok(BlockBalanceDeltas { balance_deltas: res })
+    for log in block.logs() {
+        let pool_addr = encode_addr(log.address());
+        // Short circuit if the address doesn't match any of our pools.
+        let Some(tokens_str) = store.get_last(&pool_addr) else { continue };
+        let component_tokens = decode_addrs(&tokens_str)?;
+        let component_id = pool_addr.as_bytes().to_vec();
+        let tx = log.receipt.transaction;
+        let ord = log.ordinal();
+
+        let mut push = |token: Vec<u8>, delta: substreams::scalar::BigInt| {
+            if !delta.is_zero() {
+                deltas.push(BalanceDelta {
+                    ord,
+                    tx: Some(tx.into()),
+                    token,
+                    delta: delta.to_signed_bytes_be(),
+                    component_id: component_id.clone(),
+                });
+            }
+        };
+
+        if let Some(ev) = party_pool::events::Mint::match_and_decode(log) {
+            // Basket mint deposits some of every token
+            for (token, amount) in component_tokens
+                .iter()
+                .zip(ev.amounts.into_iter())
+            {
+                push(token.clone(), amount);
+            }
+        } else if let Some(ev) = party_pool::events::Burn::match_and_decode(log) {
+            // Basket burn withdraws some of every token
+            for (token, amount) in component_tokens
+                .iter()
+                .zip(ev.amounts.into_iter())
+            {
+                push(token.clone(), amount.neg());
+            }
+        } else if let Some(ev) = party_pool::events::Swap::match_and_decode(log) {
+            // Excludes the protocol fee taken the from input amount
+            push(ev.token_in, ev.amount_in - ev.protocol_fee);
+            push(ev.token_out, ev.amount_out.neg());
+        } else if let Some(ev) = party_pool::events::SwapMint::match_and_decode(log) {
+            // Excludes the protocol fee taken the from input amount
+            push(ev.token_in, ev.amount_in - ev.protocol_fee);
+        } else if let Some(ev) = party_pool::events::BurnSwap::match_and_decode(log) {
+            // The output amount is what the user receives, but the pool TVL also
+            // loses the protocol fee.
+            push(ev.token_out, (ev.amount_out + ev.protocol_fee).neg());
+        } else if let Some(ev) = party_pool::events::Flash::match_and_decode(log) {
+            // Includes only the LP's share of the fee.
+            push(ev.token, ev.lp_fee);
+        }
+    }
+
+    Ok(BlockBalanceDeltas { balance_deltas: deltas })
 }
 
 /// Aggregates relative balances values into absolute values
@@ -240,31 +250,20 @@ fn map_protocol_changes(
             tx_component
                 .components
                 .iter()
-                .for_each(|component| match components_store.get_last(&component.id) {
-                    None => {
-                        substreams::log::info!(
-                            "killed component not found in store: {}",
-                            component.id
-                        );
+                .for_each(|component| {
+                    let Some(token_addrs) = components_store
+                        .get_last(&component.id)
+                        .and_then(|tokens_str| decode_addrs(&tokens_str).ok())
+                    else {
+                        return;
+                    };
+                    for token in token_addrs {
+                        builder.add_balance_change(&BalanceChange {
+                            token,
+                            balance: vec![0],
+                            component_id: component.id.as_bytes().to_vec(),
+                        });
                     }
-                    Some(tokens_str) => match decode_addrs(&tokens_str) {
-                        Err(e) => {
-                            substreams::log::info!(
-                                "failed to decode token addresses for killed component {}: {}",
-                                component.id,
-                                e
-                            );
-                        }
-                        Ok(token_addrs) => {
-                            for token in token_addrs {
-                                builder.add_balance_change(&BalanceChange {
-                                    token,
-                                    balance: vec![0],
-                                    component_id: component.id.as_bytes().to_vec(),
-                                });
-                            }
-                        }
-                    },
                 });
         });
 

@@ -13,16 +13,6 @@
         "internalType": "contract NativeWrapper"
       },
       {
-        "name": "swapImpl_",
-        "type": "address",
-        "internalType": "contract PartyPoolSwapImpl"
-      },
-      {
-        "name": "mintImpl_",
-        "type": "address",
-        "internalType": "contract PartyPoolMintImpl"
-      },
-      {
         "name": "poolInitCodeStorage_",
         "type": "address",
         "internalType": "contract PartyPoolInitCode"
@@ -41,8 +31,20 @@
         "name": "protocolFeeAddress_",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "permit2_",
+        "type": "address",
+        "internalType": "contract IPermit2"
       }
     ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "acceptOwnership",
+    "inputs": [],
+    "outputs": [],
     "stateMutability": "nonpayable"
   },
   {
@@ -137,19 +139,6 @@
         "name": "pools",
         "type": "address[]",
         "internalType": "contract IPartyPool[]"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "mintImpl",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "contract PartyPoolMintImpl"
       }
     ],
     "stateMutability": "view"
@@ -475,16 +464,37 @@
             "internalType": "contract NativeWrapper"
           },
           {
-            "name": "swapImpl",
+            "name": "permit2",
             "type": "address",
-            "internalType": "contract PartyPoolSwapImpl"
-          },
-          {
-            "name": "mintImpl",
-            "type": "address",
-            "internalType": "contract PartyPoolMintImpl"
+            "internalType": "contract IPermit2"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingOwner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "permit2",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IPermit2"
       }
     ],
     "stateMutability": "view"
@@ -549,13 +559,6 @@
   },
   {
     "type": "function",
-    "name": "renounceOwnership",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setProtocolFeeAddress",
     "inputs": [
       {
@@ -582,21 +585,32 @@
   },
   {
     "type": "function",
-    "name": "swapImpl",
+    "name": "tokenCount",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "contract PartyPoolSwapImpl"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
   },
   {
     "type": "function",
-    "name": "tokenCount",
-    "inputs": [],
+    "name": "tokenIndex",
+    "inputs": [
+      {
+        "name": "pool",
+        "type": "address",
+        "internalType": "contract IPartyPool"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "contract IERC20"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -631,6 +645,25 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferStarted",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
