@@ -1,3 +1,16 @@
+## [0.290.0](https://github.com/propeller-heads/tycho-indexer/compare/0.289.2...0.290.0) (2026-05-13)
+
+
+### Features
+
+* **common:** Add chain-aware TVL default thresholds ([3efe875](https://github.com/propeller-heads/tycho-indexer/commit/3efe87569cdab2639899e7e2a7f80de6ed938e2f))
+* **common:** Add chain-aware TVL default thresholds ([#1008](https://github.com/propeller-heads/tycho-indexer/issues/1008)) ([f956e3f](https://github.com/propeller-heads/tycho-indexer/commit/f956e3fd0c55058ba1022a8c776fa64cf389999b))
+
+
+### Performance Improvements
+
+* Check for cli TVL only if needed ([7987192](https://github.com/propeller-heads/tycho-indexer/commit/79871925d38a22566ae7a04dca83b2133f1206e5))
+
 ## [0.289.2](https://github.com/propeller-heads/tycho-indexer/compare/0.289.1...0.289.2) (2026-05-13)
 
 ## [0.289.1](https://github.com/propeller-heads/tycho-indexer/compare/0.289.0...0.289.1) (2026-05-12)
