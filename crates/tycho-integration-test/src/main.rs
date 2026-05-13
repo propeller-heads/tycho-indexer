@@ -1406,6 +1406,11 @@ fn process_execution_result(
                     estimated,
                     *gas_used as f64,
                 );
+                metrics::record_gas_signed_error_absolute(
+                    &execution_info.protocol_system,
+                    estimated,
+                    *gas_used as f64,
+                );
             }
 
             // Record slippage in statistics
