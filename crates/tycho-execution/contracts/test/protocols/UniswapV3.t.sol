@@ -277,7 +277,7 @@ contract TychoRouterForUniswapV3PolygonTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(POLYGON_WETH).balanceOf(tychoRouterAddr), 0);
-        assertGt(balanceAfter, balanceBefore);
+        assertEq(balanceAfter, 2694197373);
     }
 }
 
@@ -306,6 +306,6 @@ contract TychoRouterForUniswapV3ArbitrumTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(ARBITRUM_WETH).balanceOf(tychoRouterAddr), 0);
-        assertGt(balanceAfter, balanceBefore);
+        assertEq(balanceAfter, 3707959149);
     }
 }
