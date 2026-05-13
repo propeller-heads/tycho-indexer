@@ -2,7 +2,10 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::{hex::encode, primitives::Address, sol_types::SolValue};
 use num_bigint::{BigInt, BigUint};
-use tycho_common::{models::{protocol::ProtocolComponent, Chain}, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 use tycho_execution::encoding::{
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,

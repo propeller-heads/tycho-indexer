@@ -4,7 +4,10 @@ use std::str::FromStr;
 
 use alloy::{hex::encode, primitives::U256, sol_types::SolValue};
 use num_bigint::BigUint;
-use tycho_common::{models::{protocol::ProtocolComponent, Chain}, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 use tycho_execution::encoding::{
     evm::utils::{biguint_to_u256, write_calldata_to_file},
     models::{default_token, Solution, Swap, UserTransferType},
