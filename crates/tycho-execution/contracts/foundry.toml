@@ -21,6 +21,7 @@ via_ir = true
 mainnet = "${RPC_URL}"
 base = "${BASE_RPC_URL}"
 arbitrum = "${ARBITRUM_RPC_URL}"
+polygon = "${POLYGON_RPC_URL}"
 
 [fmt]
 line_length = 80
