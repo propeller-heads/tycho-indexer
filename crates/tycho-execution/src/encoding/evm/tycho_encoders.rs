@@ -912,7 +912,7 @@ mod tests {
                     // zero for one
                     "00",
                     // first pool intermediary token (ETH)
-                    "0000000000000000000000000000000000000000",
+                    "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
                     // fee
                     "000bb8",
                     // tick spacing

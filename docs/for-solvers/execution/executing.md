@@ -1,14 +1,14 @@
 # Executing
 
-Once you have calldata from [Encoding](executing.md#encoding-a-solution), you can execute your trade via the Tycho Router.
+Once you have calldata from [Encoding](encoding/), you can execute your trade via the Tycho Router.
 
 ## Tycho Router
 
-Send the encoded calldata to the TychoRouter [contract](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/TychoRouter.sol) (see contract addresses [here](contract-addresses.md)). Setup depends on the `user_transfer_type` in your `Solution`:
+Send the encoded calldata to the TychoRouter <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-execution/contracts/src/TychoRouter.sol" target="_blank" rel="noopener noreferrer">contract</a> (see contract addresses [here](contract-addresses.md)). Preparation depends on the `user_transfer_type` in your `Solution`:
 
-* `TransferFrom`: Approve the TychoRouter to spend your input token via `approve()` before submitting the transaction.
-* `TransferFromPermit2`: Approve the Permit2 contract, then create and sign the permit yourself. Use the public `Permit2` utility from the encoding crate to build the `PermitSingle`. The encoder does not produce the permit — you handle this externally.
-* `UseVaultsFunds`: No approval or transfer needed. The router draws from your pre-deposited vault balance. Ensure you have deposited sufficient funds.
+* `TransferFrom`: Call `approve()` on your input token to allow the TychoRouter to spend it.
+* `TransferFromPermit2`: Approve the Permit2 contract - use the `Permit2` utility from the encoding crate to build and sign the `PermitSingle`. You must handle the permit; the encoder does not.
+* `UseVaultsFunds`: No approval needed — the router draws from your vault balance. Deposit sufficient funds into the vault before swapping.
 
 For an example of how to execute trades using the Tycho Router, refer to the [Quickstart](../../#id-5.-simulate-or-execute-the-best-swap).
 
@@ -21,4 +21,4 @@ The TychoRouter V3 supports a dual fee system:
 
 ### Client Contribution (Slippage Subsidy)
 
-If the swap output falls below `min_amount_out`, the router can draw from the client's vault balance (up to `max_client_contribution`) to cover the difference. If the shortfall exceeds `max_client_contribution`, the transaction reverts. This lets solvers subsidize slippage-affected trades without a separate transaction. Be careful when setting `max_client_contribution`; a value exceeding the cost of a separate on-chain transaction may expose you to sandwich attacks.
+If the swap output falls below `min_amount_out`, the router covers the shortfall from the client's vault balance, up to `max_client_contribution`. Beyond that, the transaction reverts. This lets clients absorb minor slippage without a separate transaction — but set `max_client_contribution` conservatively, as a high value can expose you to MEV attacks.

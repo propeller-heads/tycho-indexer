@@ -7,6 +7,7 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 interface IWETH is IERC20 {
@@ -92,13 +93,13 @@ contract WethExecutor is IExecutor {
 
         if (isWrapping) {
             // ETH -> WETH: Wrap
-            tokenIn = address(0);
+            tokenIn = ETH_ADDRESS;
             tokenOut = address(weth);
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
         } else {
             // WETH -> ETH: Unwrap
             tokenIn = address(weth);
-            tokenOut = address(0);
+            tokenOut = ETH_ADDRESS;
             transferType = TransferManager.TransferType.ProtocolWillDebit;
         }
 

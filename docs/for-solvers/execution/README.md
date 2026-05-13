@@ -15,7 +15,7 @@ Tycho Execution provides tools for **encoding and executing swaps** against Tych
 * **Encoding**: A Rust crate that encodes swaps and generates calldata for execution.
 * **Executing**: Solidity contracts for executing trades on-chain.
 
-The source code for **Tycho Execution** lives at [`crates/tycho-execution`](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution) inside the [Tycho monorepo](https://github.com/propeller-heads/tycho-indexer). For a practical example of its usage, please refer to our [Quickstart](../../).
+The source code for **Tycho Execution** lives at <a href="https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-execution" target="_blank" rel="noopener noreferrer">`crates/tycho-execution`</a> inside the <a href="https://github.com/propeller-heads/tycho-indexer" target="_blank" rel="noopener noreferrer">Tycho monorepo</a>. For a practical example of its usage, please refer to our [Quickstart](../../).
 
 ## Token transfers
 
@@ -33,7 +33,7 @@ Tycho Execution supports **Permit2** for token approvals. Before executing a swa
 
 Permit2 handling is **not** part of the encoding step. You are responsible for creating and signing the permit yourself. The `Permit2` utility struct is publicly exported from the encoding crate, so you can use it to build the `PermitSingle` and obtain the data needed for signing.
 
-For more details on Permit2 and how to use it, see the [**Permit2 official documentation**](https://docs.uniswap.org/contracts/permit2/overview).
+For more details on Permit2 and how to use it, see the <a href="https://docs.uniswap.org/contracts/permit2/overview" target="_blank" rel="noopener noreferrer">**Permit2 official documentation**</a>.
 
 ### **Standard ERC20 Approvals**
 
@@ -41,7 +41,7 @@ Tycho also supports traditional ERC20 approvals. In this model, you explicitly c
 
 ### Using the Vault
 
-The TychoRouter includes a built-in vault ([ERC6909](https://eips.ethereum.org/EIPS/eip-6909)) that lets you deposit, hold, and withdraw tokens directly in the router contract. The vault tracks per-user balances, so your tokens are only accessible by you.
+The TychoRouter includes a built-in vault (<a href="https://eips.ethereum.org/EIPS/eip-6909" target="_blank" rel="noopener noreferrer">ERC6909</a>) that lets you deposit, hold, and withdraw tokens directly in the router contract. The vault tracks per-user balances, so your tokens are only accessible by you.
 
 The router draws from your deposited balance instead of performing a `transferFrom` on your wallet. This saves gas (no approval or external transfer needed) and lets you use fees, proceeds from previous trades, or pre-positioned liquidity directly.
 
@@ -51,7 +51,7 @@ More on the Vault [here](vault.md).
 
 ## Security and Audits
 
-The Tycho Router V2 has been audited by [Maximilian Krüger](https://snd.github.io/). Past audits are [here](https://github.com/propeller-heads/tycho-indexer/tree/main/docs/audits).
+The Tycho Router V2 has been audited by <a href="https://snd.github.io/" target="_blank" rel="noopener noreferrer">Maximilian Krüger</a>. Past audits are <a href="https://github.com/propeller-heads/tycho-indexer/tree/main/docs/audits" target="_blank" rel="noopener noreferrer">here</a>.
 
 {% hint style="danger" %}
 **Router V3 is still undergoing an audit.** Use at your own discretion. Funds stored in the router (including vault deposits) might be lost.

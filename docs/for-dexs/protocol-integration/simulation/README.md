@@ -1,29 +1,29 @@
 # Simulation
 
-To enable simulations for a newly added protocol, it must first be integrated into the Tycho monorepo. Please submit a pull request to the [repository](https://github.com/propeller-heads/tycho-indexer) targeting `crates/tycho-simulation`.
+To enable simulations for a newly added protocol, it must first be integrated into the Tycho monorepo. Please submit a pull request to the <a href="https://github.com/propeller-heads/tycho-indexer" target="_blank" rel="noopener noreferrer">repository</a> targeting `crates/tycho-simulation`.
 
 ## Native Integration
 
 In order to add a new native protocol, you will need to complete the following high-level steps:
 
-1. Create a protocol state struct that contains the state of the protocol, and implements the `ProtocolSim` trait (see [here](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/protocol/state.rs)).
+1. Create a protocol state struct that contains the state of the protocol, and implements the `ProtocolSim` trait (see <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/protocol/state.rs" target="_blank" rel="noopener noreferrer">here</a>).
 2. Create a tycho decoder for the protocol state: i.e. implement `TryFromWithBlock` for `ComponentWithState` to your new protocol state.
 
 Each native protocol should have its own module under `crates/tycho-simulation/src/evm/protocol`.
 
 ## VM Integration
 
-To create a VM integration, provide a manifest file and an implementation of the corresponding adapter interface. The [Tycho monorepo](https://github.com/propeller-heads/tycho-indexer) contains the tools to integrate DEXs and other onchain liquidity protocols into Tycho.
+To create a VM integration, provide a manifest file and an implementation of the corresponding adapter interface. The <a href="https://github.com/propeller-heads/tycho-indexer" target="_blank" rel="noopener noreferrer">Tycho monorepo</a> contains the tools to integrate DEXs and other onchain liquidity protocols into Tycho.
 
 ### Example Implementations <a href="#example-implementations" id="example-implementations"></a>
 
 The following exchanges are integrated with the VM approach:
 
-* Balancer V2 (see code [here](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/src/balancer-v2/BalancerV2SwapAdapter.sol))
+* Balancer V2 (see code <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/src/balancer-v2/BalancerV2SwapAdapter.sol" target="_blank" rel="noopener noreferrer">here</a>)
 
 ### Install prerequisites <a href="#install-prerequisites" id="install-prerequisites"></a>
 
-1.  Install [Foundry](https://book.getfoundry.sh/getting-started/installation#using-foundryup), start by downloading and installing the Foundry installer:
+1.  Install <a href="https://book.getfoundry.sh/getting-started/installation#using-foundryup" target="_blank" rel="noopener noreferrer">Foundry</a>, start by downloading and installing the Foundry installer:
 
     ```bash
     curl -L https://foundry.paradigm.xyz | bash
@@ -50,7 +50,7 @@ The following exchanges are integrated with the VM approach:
 
 Read the documentation of the [Ethereum Solidity](ethereum-solidity.md) interface. It describes the functions that need to be implemented and the manifest file.
 
-Additionally, read through the docstring of the [ISwapAdapter.sol](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/interfaces/ISwapAdapter.sol) interface and the [ISwapAdapterTypes.sol](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/interfaces/ISwapAdapterTypes.sol) interface, which defines the data types and errors the adapter interface uses. You can also generate the documentation locally and look at the generated documentation in the `./docs` folder:
+Additionally, read through the docstring of the <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/interfaces/ISwapAdapter.sol" target="_blank" rel="noopener noreferrer">ISwapAdapter.sol</a> interface and the <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/interfaces/ISwapAdapterTypes.sol" target="_blank" rel="noopener noreferrer">ISwapAdapterTypes.sol</a> interface, which defines the data types and errors the adapter interface uses. You can also generate the documentation locally and look at the generated documentation in the `./docs` folder:
 
 ```bash
 cd ./evm/
@@ -74,11 +74,11 @@ Implement the `ISwapAdapter` interface in the `./protocols/adapter-integration/e
    * Rename to `<your-adapter-name>.t.sol`
 2. Write comprehensive tests:
    * Test all implemented functions.
-   * Use fuzz testing (see [Foundry test guide](https://book.getfoundry.sh/forge/tests), especially the chapter for [Fuzz testing](https://book.getfoundry.sh/forge/fuzz-testing))
+   * Use fuzz testing (see <a href="https://book.getfoundry.sh/forge/tests" target="_blank" rel="noopener noreferrer">Foundry test guide</a>, especially the chapter for <a href="https://book.getfoundry.sh/forge/fuzz-testing" target="_blank" rel="noopener noreferrer">Fuzz testing</a>)
    * Reference existing test files: `BalancerV2SwapAdapter.t.sol`
 3. Configure fork testing (run a local mainnet fork against actual contracts and data):
    * Set `ETH_RPC_URL` environment variable
-   * Use your own Ethereum node or services like [Infura](https://infura.io/)
+   * Use your own Ethereum node or services like <a href="https://infura.io/" target="_blank" rel="noopener noreferrer">Infura</a>
 4.  Run the tests with
 
     ```bash
@@ -90,7 +90,7 @@ Implement the `ISwapAdapter` interface in the `./protocols/adapter-integration/e
 
 Once you have the swap adapter implemented for the new protocol, you will need to:
 
-1.  Generate the adapter runtime file by running the [`protocols/adapter-integration/evm/scripts/buildRuntime.sh`](https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/scripts/buildRuntime.sh) script with the proper input parameters.\
+1.  Generate the adapter runtime file by running the <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/protocols/adapter-integration/evm/scripts/buildRuntime.sh" target="_blank" rel="noopener noreferrer">`protocols/adapter-integration/evm/scripts/buildRuntime.sh`</a> script with the proper input parameters.\
     \
     For example, in order to build the `Balancer V2` runtime, the following command can be run:\
 
@@ -105,4 +105,4 @@ Once you have the swap adapter implemented for the new protocol, you will need t
 
 ### Filtering
 
-If your implementation does not support all pools indexed for a protocol, you can create a filter function to handle this. This filter can then be used when registering an exchange in the `ProtocolStreamBuilder`. See [here](https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/evm/protocol/filters.rs) for example implementations.
+If your implementation does not support all pools indexed for a protocol, you can create a filter function to handle this. This filter can then be used when registering an exchange in the `ProtocolStreamBuilder`. See <a href="https://github.com/propeller-heads/tycho-indexer/blob/main/crates/tycho-simulation/src/evm/protocol/filters.rs" target="_blank" rel="noopener noreferrer">here</a> for example implementations.
