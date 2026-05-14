@@ -306,7 +306,7 @@ contract TychoRouterForUniswapV3BscTest is TychoRouterTestSetup {
 
         assertTrue(success, "Call Failed");
         assertEq(IERC20(BSC_WBNB).balanceOf(tychoRouterAddr), 0);
-        assertGt(balanceAfter, balanceBefore);
+        assertEq(balanceAfter - balanceBefore, 167585949393846682);
     }
 }
 
