@@ -693,4 +693,78 @@ contract TychoRouterSingleSwapFeeTokenTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
     }
+
+    function testFinalFeeClientContributionBelowMinAmount() public {
+        // Swap USDC → TWIF (6% fee-on-transfer) via UniswapV4.
+        // There is no client fee so the final swap is optimized and sent straight
+        // to the user. However, the final amount is not enough, so a client
+        // contribution is sent. Unfortunately, the fee on the client contribution
+        // means this client contribution is not enough in the end - swap should still
+        // revert.
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        address CLIENT = vm.addr(CLIENT_FEE_RECEIVER_PK);
+
+        uint256 clientBalance = 200000000000000000000000000000;
+        deal(TWIF, CLIENT, clientBalance);
+        vm.startPrank(CLIENT);
+        IERC20(TWIF).approve(tychoRouterAddr, clientBalance);
+        tychoRouter.deposit(TWIF, clientBalance);
+        vm.stopPrank();
+
+        deal(USDC_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: TWIF,
+            fee: 10000,
+            tickSpacing: int24(200),
+            hook: address(0),
+            hookData: new bytes(0)
+        });
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDC_ADDR, TWIF, false, pools);
+        bytes memory swap =
+            encodeSingleSwap(address(usv4Executor), protocolData);
+
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            0, // no client fee
+            500000000000000000000000000, // max client contribution
+            amountIn,
+            USDC_ADDR,
+            TWIF,
+            108000000000000000000000000000, // min amount
+            ALICE,
+            swap,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
+        );
+
+        // Output after the UniswapV4 swap is 107508473722887877019425641400
+        // The user wants 108000000000000000000000000000. Client attempts to contribute,
+        // but since fees are taken on the contribution amount, this is not enough.
+        // Swap should revert.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector,
+                // 107508473722887877019425641400 + 0.94 * expected client contribution
+                107970508423373272621165538484,
+                108000000000000000000000000000
+            )
+        );
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            USDC_ADDR,
+            TWIF,
+            108000000000000000000000000000,
+            ALICE,
+            feeParams,
+            swap
+        );
+        vm.stopPrank();
+    }
 }
