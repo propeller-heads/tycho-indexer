@@ -59,10 +59,7 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error, info, instrument, trace, warn};
 use tycho_common::{
-    dto::{
-        BlockAggregatedChanges as DtoBlockAggregatedChanges, Command, Response, WebSocketMessage,
-        WebsocketError,
-    },
+    dto::{self, Command, Response, WebSocketMessage, WebsocketError},
     models::{blockchain::BlockAggregatedChanges, ExtractorIdentity},
 };
 use uuid::Uuid;
@@ -700,7 +697,7 @@ impl WsDeltasClient {
     async fn handle_block_changes_msg(
         guard: &mut MutexGuard<'_, Option<Inner>>,
         subscription_id: Uuid,
-        deltas: DtoBlockAggregatedChanges,
+        deltas: dto::BlockAggregatedChanges,
     ) -> Result<(), DeltasError> {
         trace!(?deltas, "Received a block state change, sending to channel");
         let inner = guard

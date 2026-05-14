@@ -864,8 +864,7 @@ mod test {
     use tycho_common::models::{
         blockchain::{
             AddressStorageLocation, Block, BlockAggregatedChanges, DCIUpdate, EntryPoint,
-            EntryPointWithTracingParams as ModelEntryPointWithTracingParams, RPCTracerParams,
-            TracingParams, TracingResult as ModelTracingResult,
+            EntryPointWithTracingParams, RPCTracerParams, TracingParams, TracingResult,
         },
         protocol::{ProtocolComponent, ProtocolComponentState},
         token::Token,
@@ -1217,31 +1216,27 @@ mod test {
     }
 
     fn traced_entry_point_response(
-    ) -> HashMap<String, Vec<(ModelEntryPointWithTracingParams, ModelTracingResult)>> {
-        use tycho_common::models::blockchain::{
-            AddressStorageLocation as ModelASL, EntryPoint as ModelEntryPoint,
-            RPCTracerParams as ModelRPCTP, TracingParams as ModelTP,
-        };
+    ) -> HashMap<String, Vec<(EntryPointWithTracingParams, TracingResult)>> {
         HashMap::from([(
             "Component1".to_string(),
             vec![(
-                ModelEntryPointWithTracingParams {
-                    entry_point: ModelEntryPoint {
+                EntryPointWithTracingParams {
+                    entry_point: EntryPoint {
                         external_id: "entrypoint_a".to_string(),
                         target: Bytes::from("0x0badc0ffee"),
                         signature: "sig()".to_string(),
                     },
-                    params: ModelTP::RPCTracer(ModelRPCTP {
+                    params: TracingParams::RPCTracer(RPCTracerParams {
                         caller: Some(Bytes::from("0x0badc0ffee")),
                         calldata: Bytes::from("0x0badc0ffee"),
                         state_overrides: None,
                         prune_addresses: None,
                     }),
                 },
-                ModelTracingResult {
+                TracingResult {
                     retriggers: HashSet::from([(
                         Bytes::from("0x0badc0ffee"),
-                        ModelASL::new(Bytes::from("0x0badc0ffee"), 12),
+                        AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
                     )]),
                     accessed_slots: HashMap::from([(
                         Bytes::from("0x0badc0ffee"),

@@ -86,7 +86,7 @@ mod tests {
 
     use tycho_common::models::{
         protocol::{ProtocolComponent, ProtocolComponentState},
-        Chain as ModelChain, ChangeType,
+        Chain, ChangeType,
     };
 
     use super::*;
@@ -100,7 +100,7 @@ mod tests {
             8,
             0,
             &[Some(10_000)],
-            ModelChain::Ethereum,
+            Chain::Ethereum,
             100,
         )
     }
@@ -114,7 +114,7 @@ mod tests {
             6,
             0,
             &[Some(10_000)],
-            ModelChain::Ethereum,
+            Chain::Ethereum,
             100,
         )
     }
@@ -158,7 +158,7 @@ mod tests {
                 id: "liquorice_wbtc_usdc".to_string(),
                 protocol_system: "liquorice".to_string(),
                 protocol_type_name: "liquorice".to_string(),
-                chain: ModelChain::Ethereum,
+                chain: Chain::Ethereum,
                 tokens: vec![wbtc_token.address.clone(), usdc_token.address.clone()],
                 contract_addresses: Vec::new(),
                 static_attributes: HashMap::new(),
@@ -267,7 +267,7 @@ mod tests {
             18,
             0,
             &[Some(10_000)],
-            ModelChain::Ethereum,
+            Chain::Ethereum,
             100,
         );
 

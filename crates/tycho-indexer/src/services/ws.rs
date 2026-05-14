@@ -580,7 +580,7 @@ mod tests {
     };
     use tracing::{debug, info_span, Instrument};
     use tycho_common::{
-        dto::{BlockAggregatedChanges as DtoBlockAggregatedChanges, Response},
+        dto::{self, Response},
         models::{
             blockchain::{Block, BlockAggregatedChanges},
             Chain,
@@ -742,7 +742,7 @@ mod tests {
     struct DummyDelta {
         #[allow(dead_code)]
         subscription_id: Uuid,
-        deltas: DtoBlockAggregatedChanges,
+        deltas: dto::BlockAggregatedChanges,
     }
 
     async fn wait_for_dummy_message(

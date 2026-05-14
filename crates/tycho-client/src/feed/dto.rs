@@ -15,29 +15,19 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use tycho_common::{
-    dto::{
-        BlockAggregatedChanges, EntryPointWithTracingParams as DtoEntryPointWithTracingParams,
-        ProtocolComponent as DtoProtocolComponent, ResponseAccount, ResponseProtocolState,
-        TracingResult as DtoTracingResult,
-    },
+    dto::{self, BlockAggregatedChanges, ResponseAccount, ResponseProtocolState},
     Bytes,
 };
 
-use crate::feed::{
-    synchronizer::{
-        ComponentWithState as ModelComponentWithState, Snapshot as ModelSnapshot,
-        StateSyncMessage as ModelStateSyncMessage,
-    },
-    BlockHeader, FeedMessage as ModelFeedMessage, HeaderLike, SynchronizerState,
-};
+use crate::feed::{self as feed_model, synchronizer, BlockHeader, HeaderLike, SynchronizerState};
 
 /// Serializable counterpart of [`crate::feed::synchronizer::ComponentWithState`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentWithState {
     pub state: ResponseProtocolState,
-    pub component: DtoProtocolComponent,
+    pub component: dto::ProtocolComponent,
     pub component_tvl: Option<f64>,
-    pub entrypoints: Vec<(DtoEntryPointWithTracingParams, DtoTracingResult)>,
+    pub entrypoints: Vec<(dto::EntryPointWithTracingParams, dto::TracingResult)>,
 }
 
 /// Serializable counterpart of [`crate::feed::synchronizer::Snapshot`].
@@ -54,7 +44,7 @@ pub struct StateSyncMessage<H = BlockHeader> {
     pub header: H,
     pub snapshots: Snapshot,
     pub deltas: Option<BlockAggregatedChanges>,
-    pub removed_components: HashMap<String, DtoProtocolComponent>,
+    pub removed_components: HashMap<String, dto::ProtocolComponent>,
 }
 
 /// Serializable counterpart of [`crate::feed::FeedMessage`].
@@ -66,7 +56,7 @@ pub struct FeedMessage<H = BlockHeader> {
 
 // ── dto types → model types ───────────────────────────────────────────────────
 
-impl From<ComponentWithState> for ModelComponentWithState {
+impl From<ComponentWithState> for synchronizer::ComponentWithState {
     fn from(value: ComponentWithState) -> Self {
         Self {
             state: value.state.into(),
@@ -81,7 +71,7 @@ impl From<ComponentWithState> for ModelComponentWithState {
     }
 }
 
-impl From<Snapshot> for ModelSnapshot {
+impl From<Snapshot> for synchronizer::Snapshot {
     fn from(value: Snapshot) -> Self {
         Self {
             states: value
@@ -98,7 +88,7 @@ impl From<Snapshot> for ModelSnapshot {
     }
 }
 
-impl<H: HeaderLike> From<StateSyncMessage<H>> for ModelStateSyncMessage<H> {
+impl<H: HeaderLike> From<StateSyncMessage<H>> for synchronizer::StateSyncMessage<H> {
     fn from(value: StateSyncMessage<H>) -> Self {
         Self {
             header: value.header,
@@ -113,7 +103,7 @@ impl<H: HeaderLike> From<StateSyncMessage<H>> for ModelStateSyncMessage<H> {
     }
 }
 
-impl<H: HeaderLike> From<FeedMessage<H>> for ModelFeedMessage<H> {
+impl<H: HeaderLike> From<FeedMessage<H>> for feed_model::FeedMessage<H> {
     fn from(value: FeedMessage<H>) -> Self {
         Self {
             state_msgs: value
@@ -128,8 +118,8 @@ impl<H: HeaderLike> From<FeedMessage<H>> for ModelFeedMessage<H> {
 
 // ── model types → dto types ───────────────────────────────────────────────────
 
-impl From<ModelComponentWithState> for ComponentWithState {
-    fn from(value: ModelComponentWithState) -> Self {
+impl From<synchronizer::ComponentWithState> for ComponentWithState {
+    fn from(value: synchronizer::ComponentWithState) -> Self {
         Self {
             state: value.state.into(),
             component: value.component.into(),
@@ -143,8 +133,8 @@ impl From<ModelComponentWithState> for ComponentWithState {
     }
 }
 
-impl From<ModelSnapshot> for Snapshot {
-    fn from(value: ModelSnapshot) -> Self {
+impl From<synchronizer::Snapshot> for Snapshot {
+    fn from(value: synchronizer::Snapshot) -> Self {
         Self {
             states: value
                 .states
@@ -160,8 +150,8 @@ impl From<ModelSnapshot> for Snapshot {
     }
 }
 
-impl<H: HeaderLike> From<ModelStateSyncMessage<H>> for StateSyncMessage<H> {
-    fn from(value: ModelStateSyncMessage<H>) -> Self {
+impl<H: HeaderLike> From<synchronizer::StateSyncMessage<H>> for StateSyncMessage<H> {
+    fn from(value: synchronizer::StateSyncMessage<H>) -> Self {
         Self {
             header: value.header,
             snapshots: value.snapshots.into(),
@@ -175,8 +165,8 @@ impl<H: HeaderLike> From<ModelStateSyncMessage<H>> for StateSyncMessage<H> {
     }
 }
 
-impl<H: HeaderLike> From<ModelFeedMessage<H>> for FeedMessage<H> {
-    fn from(value: ModelFeedMessage<H>) -> Self {
+impl<H: HeaderLike> From<feed_model::FeedMessage<H>> for FeedMessage<H> {
+    fn from(value: feed_model::FeedMessage<H>) -> Self {
         Self {
             state_msgs: value
                 .state_msgs

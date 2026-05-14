@@ -20,10 +20,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::{
-    models::{
-        self, blockchain::BlockAggregatedChanges as ModelBlockAggregatedChanges, Address, Balance,
-        Code, ComponentId, StoreKey, StoreVal,
-    },
+    models::{self, Address, Balance, Code, ComponentId, StoreKey, StoreVal},
     serde_primitives::{
         hex_bytes, hex_bytes_option, hex_hashmap_key, hex_hashmap_key_value, hex_hashmap_value,
     },
@@ -520,8 +517,8 @@ impl From<models::contract::AccountBalance> for AccountBalance {
     }
 }
 
-impl From<ModelBlockAggregatedChanges> for BlockAggregatedChanges {
-    fn from(value: ModelBlockAggregatedChanges) -> Self {
+impl From<models::blockchain::BlockAggregatedChanges> for BlockAggregatedChanges {
+    fn from(value: models::blockchain::BlockAggregatedChanges) -> Self {
         Self {
             extractor: value.extractor,
             chain: value.chain.into(),
@@ -3219,42 +3216,43 @@ mod test {
 
     #[test]
     fn test_websocket_error_conversion_from_models() {
-        use crate::models::error::WebsocketError as ModelsError;
+        use crate::models::error;
 
         let extractor_id =
             crate::models::ExtractorIdentity::new(crate::models::Chain::Ethereum, "test");
         let subscription_id = Uuid::new_v4();
 
         // Test ExtractorNotFound conversion
-        let models_error = ModelsError::ExtractorNotFound(extractor_id.clone());
+        let models_error = error::WebsocketError::ExtractorNotFound(extractor_id.clone());
         let dto_error: WebsocketError = models_error.into();
         assert_eq!(dto_error, WebsocketError::ExtractorNotFound(extractor_id.clone().into()));
 
         // Test SubscriptionNotFound conversion
-        let models_error = ModelsError::SubscriptionNotFound(subscription_id);
+        let models_error = error::WebsocketError::SubscriptionNotFound(subscription_id);
         let dto_error: WebsocketError = models_error.into();
         assert_eq!(dto_error, WebsocketError::SubscriptionNotFound(subscription_id));
 
         // Test ParseError conversion - create a real JSON parse error
         let json_result: Result<serde_json::Value, _> = serde_json::from_str("{invalid json");
         let json_error = json_result.unwrap_err();
-        let models_error = ModelsError::ParseError("{invalid json".to_string(), json_error);
+        let models_error =
+            error::WebsocketError::ParseError("{invalid json".to_string(), json_error);
         let dto_error: WebsocketError = models_error.into();
-        if let WebsocketError::ParseError(msg, error) = dto_error {
+        if let WebsocketError::ParseError(msg, error_msg) = dto_error {
             // Just check that we have a non-empty error message
-            assert!(!error.is_empty(), "Error message should not be empty, got: '{}'", msg);
+            assert!(!error_msg.is_empty(), "Error message should not be empty, got: '{}'", msg);
         } else {
             panic!("Expected ParseError variant");
         }
 
         // Test SubscribeError conversion
-        let models_error = ModelsError::SubscribeError(extractor_id.clone());
+        let models_error = error::WebsocketError::SubscribeError(extractor_id.clone());
         let dto_error: WebsocketError = models_error.into();
         assert_eq!(dto_error, WebsocketError::SubscribeError(extractor_id.into()));
 
         // Test CompressionError conversion
         let io_error = std::io::Error::other("Compression failed");
-        let models_error = ModelsError::CompressionError(subscription_id, io_error);
+        let models_error = error::WebsocketError::CompressionError(subscription_id, io_error);
         let dto_error: WebsocketError = models_error.into();
         if let WebsocketError::CompressionError(sub_id, msg) = &dto_error {
             assert_eq!(*sub_id, subscription_id);

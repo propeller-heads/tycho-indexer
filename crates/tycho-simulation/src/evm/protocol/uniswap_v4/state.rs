@@ -1124,13 +1124,13 @@ mod tests {
     #[tokio::test]
     /// Compares a quote from the UniswapV4 Quoter contract on Sepolia with a simulation.
     async fn test_swap_sim() {
-        use tycho_client::feed::dto::ComponentWithState as DtoComponentWithState;
+        use tycho_client::feed::dto;
         let project_root = env!("CARGO_MANIFEST_DIR");
         let asset_path = Path::new(project_root)
             .join("tests/assets/decoder/uniswap_v4_snapshot_sepolia_block_7239119.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-        let state: ComponentWithState = serde_json::from_value::<DtoComponentWithState>(data)
+        let state: ComponentWithState = serde_json::from_value::<dto::ComponentWithState>(data)
             .expect("Expected json to match ComponentWithState structure")
             .into();
 
@@ -1188,7 +1188,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_limits() {
-        use tycho_client::feed::dto::ComponentWithState as DtoComponentWithState;
+        use tycho_client::feed::dto;
         let block = BlockHeader {
             number: 22689129,
             hash: Bytes::from_str(
@@ -1204,7 +1204,7 @@ mod tests {
             Path::new(project_root).join("tests/assets/decoder/uniswap_v4_snapshot.json");
         let json_data = fs::read_to_string(asset_path).expect("Failed to read test asset");
         let data: Value = serde_json::from_str(&json_data).expect("Failed to parse JSON");
-        let state: ComponentWithState = serde_json::from_value::<DtoComponentWithState>(data)
+        let state: ComponentWithState = serde_json::from_value::<dto::ComponentWithState>(data)
             .expect("Expected json to match ComponentWithState structure")
             .into();
 
