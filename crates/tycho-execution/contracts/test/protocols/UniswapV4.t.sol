@@ -748,12 +748,13 @@ contract ExternalSettlerMock {
     function settle(
         Loan[] calldata loans,
         address tokenIn,
+        address v4SyncToken,
         uint256 amountIn,
         bytes calldata tychoCalldata
     ) external {
         IERC20(tokenIn).forceApprove(tychoRouter, amountIn);
         // slither-disable-next-line unused-return
-        poolManager.unlock(abi.encode(loans, tokenIn, tychoCalldata));
+        poolManager.unlock(abi.encode(loans, v4SyncToken, tychoCalldata));
     }
 
     function unlockCallback(bytes calldata data)
@@ -761,7 +762,7 @@ contract ExternalSettlerMock {
         returns (bytes memory)
     {
         require(msg.sender == address(poolManager));
-        (Loan[] memory loans, address tokenIn, bytes memory tychoCalldata) =
+        (Loan[] memory loans, address v4SyncToken, bytes memory tychoCalldata) =
             abi.decode(data, (Loan[], address, bytes));
 
         // 1. Take loans
@@ -771,8 +772,10 @@ contract ExternalSettlerMock {
             );
         }
 
-        // 2. Sync input token (required for skipUnlock=true)
-        poolManager.sync(Currency.wrap(tokenIn));
+        // 2. Sync the V4 hop input token (required for skipUnlock=true).
+        //    In a sequential route this is the V4 input, which may differ
+        //    from the router's input token.
+        poolManager.sync(Currency.wrap(v4SyncToken));
 
         // 3. Route through TychoRouter (replaces the old
         //    direct executor call + safeTransfer pattern)
@@ -814,7 +817,7 @@ contract ExternalSettlerNoUnlockTest is TychoRouterTestSetup {
         );
     }
 
-    function testSettlementWithLoanViaTychoRouter() public {
+    function testSettlementWithLoanSingleSwap() public {
         // External settler with loan + skipUnlock:
         //   1. Take USDE loan from PM
         //   2. Sync USDE (required for skipUnlock)
@@ -860,11 +863,11 @@ contract ExternalSettlerNoUnlockTest is TychoRouterTestSetup {
         Loan[] memory loans = new Loan[](1);
         loans[0] = Loan({token: USDE_ADDR, amount: loanAmount});
 
-        settler.settle(loans, USDE_ADDR, swapAmount, tychoCalldata);
+        settler.settle(loans, USDE_ADDR, USDE_ADDR, swapAmount, tychoCalldata);
 
-        assertGt(
+        assertEq(
             IERC20(USDT_ADDR).balanceOf(address(settler)),
-            0,
+            99970662,
             "Settler should receive USDT"
         );
         assertEq(
@@ -872,6 +875,282 @@ contract ExternalSettlerNoUnlockTest is TychoRouterTestSetup {
             0,
             "Settler USDE used for loan repayment"
         );
+    }
+
+    function testSettlementWithLoanSequentialV2ThenV4() public {
+        //        WETH ──(UniV2)──> WBTC ──(UniV4 skipUnlock)──> USDT
+        // External settler with loan + skipUnlock on a sequential route:
+        //   1. Take WETH loan from PM
+        //   2. Sync WBTC — the V4 hop's input, deposited into PM by the V2 hop
+        //   3. Sequential swap loaned WETH → USDT via TychoRouter
+        //   4. Repay WETH loan from settler's own capital
+
+        uint256 swapAmount = 1 ether;
+        uint256 loanAmount = 1 ether;
+
+        // Settler needs own capital to repay the loan
+        deal(WETH_ADDR, address(settler), loanAmount);
+
+        bytes[] memory swaps = new bytes[](2);
+
+        swaps[0] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WETH_ADDR, WBTC_ADDR)
+        );
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4Pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4Pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        bytes memory v4ProtocolData = UniswapV4Utils.encodeExactInput(
+            WBTC_ADDR, USDT_ADDR, true, true, v4Pools
+        );
+        swaps[1] = encodeSequentialSwap(address(usv4Executor), v4ProtocolData);
+
+        bytes memory tychoCalldata = abi.encodeCall(
+            tychoRouter.sequentialSwap,
+            (
+                swapAmount,
+                WETH_ADDR,
+                USDT_ADDR,
+                1,
+                address(settler),
+                noClientFee(),
+                pleEncode(swaps)
+            )
+        );
+
+        Loan[] memory loans = new Loan[](1);
+        loans[0] = Loan({token: WETH_ADDR, amount: loanAmount});
+
+        settler.settle(loans, WETH_ADDR, WBTC_ADDR, swapAmount, tychoCalldata);
+
+        assertEq(
+            IERC20(USDT_ADDR).balanceOf(address(settler)),
+            2734715627,
+            "Settler should receive USDT"
+        );
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(address(settler)),
+            0,
+            "Settler WETH used for loan repayment"
+        );
+    }
+
+    function testSettlementWithLoanSequentialV4ThenV2() public {
+        //   USDT ──(UniV4 skipUnlock)──> WBTC ──(UniV2)──> WETH
+        // The V4 hop's input == router input == loan token, so the existing
+        // sync(tokenIn) on the settler is correct (no extra sync needed).
+
+        uint256 swapAmount = 100 * 1e6; // 100 USDT
+        uint256 loanAmount = 100 * 1e6;
+
+        // Settler needs own capital to repay the loan
+        deal(USDT_ADDR, address(settler), loanAmount);
+
+        bytes[] memory swaps = new bytes[](2);
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4Pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4Pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        bytes memory v4ProtocolData = UniswapV4Utils.encodeExactInput(
+            USDT_ADDR, WBTC_ADDR, false, true, v4Pools
+        );
+        swaps[0] = encodeSequentialSwap(address(usv4Executor), v4ProtocolData);
+
+        swaps[1] = encodeSequentialSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(WETH_WBTC_POOL, WBTC_ADDR, WETH_ADDR)
+        );
+
+        bytes memory tychoCalldata = abi.encodeCall(
+            tychoRouter.sequentialSwap,
+            (
+                swapAmount,
+                USDT_ADDR,
+                WETH_ADDR,
+                1,
+                address(settler),
+                noClientFee(),
+                pleEncode(swaps)
+            )
+        );
+
+        Loan[] memory loans = new Loan[](1);
+        loans[0] = Loan({token: USDT_ADDR, amount: loanAmount});
+
+        settler.settle(loans, USDT_ADDR, USDT_ADDR, swapAmount, tychoCalldata);
+
+        assertEq(
+            IERC20(WETH_ADDR).balanceOf(address(settler)),
+            36114721806078051,
+            "Settler should receive WETH"
+        );
+        assertEq(
+            IERC20(USDT_ADDR).balanceOf(address(settler)),
+            0,
+            "Settler USDT used for loan repayment"
+        );
+    }
+
+    function testSettlementWithLoanSequentialV4ThenV4() public {
+        //   USDE ──(UniV4 skipUnlock)──> USDT ──(UniV4 skipUnlock)──> WBTC
+        // Hop 1's end-of-swap sync(tokenOut)=sync(USDT) primes the PM for
+        // hop 2's settle(USDT), so the settler only needs to sync USDE.
+
+        uint256 swapAmount = 100 ether;
+        uint256 loanAmount = 100 ether;
+
+        // Settler needs own capital to repay the loan
+        deal(USDE_ADDR, address(settler), loanAmount);
+
+        bytes[] memory swaps = new bytes[](2);
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4PoolsHop1 =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4PoolsHop1[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        swaps[0] = encodeSequentialSwap(
+            address(usv4Executor),
+            UniswapV4Utils.encodeExactInput(
+                USDE_ADDR, USDT_ADDR, true, true, v4PoolsHop1
+            )
+        );
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4PoolsHop2 =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4PoolsHop2[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: WBTC_ADDR,
+            fee: uint24(3000),
+            tickSpacing: int24(60),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        swaps[1] = encodeSequentialSwap(
+            address(usv4Executor),
+            UniswapV4Utils.encodeExactInput(
+                USDT_ADDR, WBTC_ADDR, false, true, v4PoolsHop2
+            )
+        );
+
+        bytes memory tychoCalldata = abi.encodeCall(
+            tychoRouter.sequentialSwap,
+            (
+                swapAmount,
+                USDE_ADDR,
+                WBTC_ADDR,
+                1,
+                address(settler),
+                noClientFee(),
+                pleEncode(swaps)
+            )
+        );
+
+        Loan[] memory loans = new Loan[](1);
+        loans[0] = Loan({token: USDE_ADDR, amount: loanAmount});
+
+        settler.settle(loans, USDE_ADDR, USDE_ADDR, swapAmount, tychoCalldata);
+
+        assertEq(
+            IERC20(WBTC_ADDR).balanceOf(address(settler)),
+            92926,
+            "Settler should receive WBTC"
+        );
+        assertEq(
+            IERC20(USDE_ADDR).balanceOf(address(settler)),
+            0,
+            "Settler USDE used for loan repayment"
+        );
+    }
+
+    function testSettlementWithLoanSequentialV4ThenV3ThenV4() public {
+        //   USDE ─(UniV4 skipUnlock)─> USDT ─(UniV3)─> DAI ─(UniV4 skipUnlock)─> USDC
+        // Documents the limitation of the current UniswapV4Executor.sol.
+        // Hop 1's end-of-swap sync(tokenOut)=sync(USDT) primes the
+        // PM only for a following V4 hop on USDT. The V3 hop in between
+        // deposits DAI into the PM without re-syncing, so by the time hop 3
+        // calls _settle the PM's synced currency is still USDT — the credit
+        // for DAI is zero and V4's swap attempts amountSpecified=0 and
+        // reverts. Wrapped in expectRevert until the sync-chaining issue
+        // is addressed in the V4 executor (future work).
+
+        uint256 swapAmount = 100 ether;
+        uint256 loanAmount = 100 ether;
+        deal(USDE_ADDR, address(settler), loanAmount);
+
+        bytes[] memory swaps = new bytes[](3);
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4PoolsHop1 =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4PoolsHop1[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDT_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        swaps[0] = encodeSequentialSwap(
+            address(usv4Executor),
+            UniswapV4Utils.encodeExactInput(
+                USDE_ADDR, USDT_ADDR, true, true, v4PoolsHop1
+            )
+        );
+
+        swaps[1] = encodeSequentialSwap(
+            address(usv3Executor),
+            encodeUniswapV3Swap(USDT_ADDR, DAI_ADDR, DAI_USDT_USV3, false)
+        );
+
+        UniswapV4Executor.UniswapV4Pool[] memory v4PoolsHop3 =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        v4PoolsHop3[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: USDC_ADDR,
+            fee: uint24(100),
+            tickSpacing: int24(1),
+            hook: address(0),
+            hookData: bytes("")
+        });
+        swaps[2] = encodeSequentialSwap(
+            address(usv4Executor),
+            UniswapV4Utils.encodeExactInput(
+                DAI_ADDR, USDC_ADDR, true, true, v4PoolsHop3
+            )
+        );
+
+        bytes memory tychoCalldata = abi.encodeCall(
+            tychoRouter.sequentialSwap,
+            (
+                swapAmount,
+                USDE_ADDR,
+                USDC_ADDR,
+                1,
+                address(settler),
+                noClientFee(),
+                pleEncode(swaps)
+            )
+        );
+
+        Loan[] memory loans = new Loan[](1);
+        loans[0] = Loan({token: USDE_ADDR, amount: loanAmount});
+
+        vm.expectRevert();
+        settler.settle(loans, USDE_ADDR, USDE_ADDR, swapAmount, tychoCalldata);
     }
 }
 

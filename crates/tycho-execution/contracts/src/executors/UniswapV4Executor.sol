@@ -179,10 +179,6 @@ contract UniswapV4Executor is IExecutor, ICallback {
             // Snapshot PM's tokenOut balance so the Dispatcher's _transferOut (which
             // forwards output to PM for the next sequential hop) is detected by the
             // next settle(). This is safe to do even if there is no next hop.
-            // TODO actually this won't work if there is a non-usv4 pool before
-            // this pool... like input -> (USV4) -> (USV2) -> (USV4) -> output
-            // Maybe we should do this when getting the transfer data? Or accept this
-            // sequential swap limitation...
             poolManager.sync(Currency.wrap(tokenOut));
         } else {
             poolManager.sync(Currency.wrap(tokenIn));
