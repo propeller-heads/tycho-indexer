@@ -875,7 +875,7 @@ impl TestRunner {
         let protocol_stream_builder = register_protocol(
             protocol_stream_builder,
             protocol_system,
-            self.chain.into(),
+            self.chain,
             decoder_context,
         )?;
 

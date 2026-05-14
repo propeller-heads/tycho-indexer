@@ -1704,7 +1704,7 @@ mod test {
                     )]),
                     trace_results: HashMap::from([(
                         "entrypoint_a".to_string(),
-                        ModelTracingResult {
+                        TracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
                                 AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),

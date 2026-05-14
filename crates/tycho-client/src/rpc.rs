@@ -25,12 +25,11 @@ use tokio::{
 use tracing::{debug, error, instrument, trace, warn};
 use tycho_common::{
     dto::{
-        BlockParam, ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationLimits,
-        PaginationParams, ProtocolComponentRequestResponse, ProtocolComponentsRequestBody,
-        ProtocolStateRequestBody, ProtocolStateRequestResponse, ProtocolSystemsRequestBody,
-        ProtocolSystemsRequestResponse, StateRequestBody, StateRequestResponse, TokensRequestBody,
-        TokensRequestResponse, TracedEntryPointRequestBody, TracedEntryPointRequestResponse,
-        VersionParam,
+        ComponentTvlRequestBody, ComponentTvlRequestResponse, PaginationLimits, PaginationParams,
+        ProtocolComponentRequestResponse, ProtocolComponentsRequestBody, ProtocolStateRequestBody,
+        ProtocolStateRequestResponse, ProtocolSystemsRequestBody, ProtocolSystemsRequestResponse,
+        StateRequestBody, StateRequestResponse, TokensRequestBody, TokensRequestResponse,
+        TracedEntryPointRequestBody, TracedEntryPointRequestResponse, VersionParam,
     },
     models::{
         blockchain::{EntryPointWithTracingParams, TracedEntryPoints, TracingResult},
