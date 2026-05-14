@@ -1,3 +1,11 @@
+## [0.291.2](https://github.com/propeller-heads/tycho-indexer/compare/0.291.1...0.291.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* **router v3:** Vault deposits for fee tokens ([d9efb9d](https://github.com/propeller-heads/tycho-indexer/commit/d9efb9da17aaa0fb22fd1deeb0caf01f140e7c5f))
+* **router v3:** Vault deposits for fee tokens ([#1014](https://github.com/propeller-heads/tycho-indexer/issues/1014)) ([b5b7873](https://github.com/propeller-heads/tycho-indexer/commit/b5b7873d203a8a342ea9c62b3d8010a39ccc942b))
+
 ## [0.291.1](https://github.com/propeller-heads/tycho-indexer/compare/0.291.0...0.291.1) (2026-05-13)
 
 
