@@ -4,6 +4,8 @@ import {TychoRouter, ClientFeeParams} from "@src/TychoRouter.sol";
 import {Dispatcher__UnsupportedSingleHopCycle} from "@src/Dispatcher.sol";
 import "./TychoRouterTestSetup.sol";
 import {Vault__InsufficientBalance} from "@src/Vault.sol";
+import {UniswapV4Executor} from "@src/executors/UniswapV4Executor.sol";
+import {UniswapV4Utils} from "./protocols/UniswapV4Utils.sol";
 
 contract LyingSwapOutputPool {
     // Fake UniswapV2 pool that reports reserves that would result in ~1000 USDC output
@@ -617,6 +619,77 @@ contract TychoRouterSingleSwapTest is TychoRouterTestSetup {
         );
         tychoRouter.singleSwap(
             amountIn, WETH_ADDR, WETH_ADDR, 1, ALICE, noClientFee(), swap
+        );
+        vm.stopPrank();
+    }
+}
+
+contract TychoRouterSingleSwapFeeTokenTest is TychoRouterTestSetup {
+    // TWIF/USDC V4 pool exists at this block
+    function getForkBlock() public view override returns (uint256) {
+        return 22689128;
+    }
+
+    function testFinalFeeBelowMinAmount() public {
+        // Swap USDC → TWIF (6% fee-on-transfer) via UniswapV4.
+        // A small client fee forces the output through the router instead of going
+        // directly to ALICE, causing an extra TWIF transfer (and an extra 6% tax).
+        // The minAmountOut check ensures the user is protected.
+        address TWIF = 0x2Dd636C514Bb4705c756D161585Ff9ec665f18A2;
+        uint256 amountIn = 100_000000; // 100 USDC
+
+        deal(USDC_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+
+        UniswapV4Executor.UniswapV4Pool[] memory pools =
+            new UniswapV4Executor.UniswapV4Pool[](1);
+        pools[0] = UniswapV4Executor.UniswapV4Pool({
+            intermediaryToken: TWIF,
+            fee: 10000,
+            tickSpacing: int24(200),
+            hook: address(0),
+            hookData: new bytes(0)
+        });
+        bytes memory protocolData =
+            UniswapV4Utils.encodeExactInput(USDC_ADDR, TWIF, false, pools);
+        bytes memory swap =
+            encodeSingleSwap(address(usv4Executor), protocolData);
+
+        ClientFeeParams memory feeParams = makeClientFeeParams(
+            1, // 1 bps (0.01%)
+            0,
+            amountIn,
+            USDC_ADDR,
+            TWIF,
+            106000000000000000000000000000, // min amount
+            ALICE,
+            swap,
+            tychoRouterAddr,
+            CLIENT_FEE_RECEIVER_PK
+        );
+
+        // Output after the UniswapV4 swap is 107508473722887877019425641400
+        // The user has correctly calculated this and set their min amount to be
+        // 106000000000000000000000000000, which is even enough to account for the
+        // client fee. They however forgot to account for the final transfer fee, so
+        // they only end up with 101057965299514598220586024960 in their wallet.
+        // TychoRouter reverts.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoRouter__NegativeSlippage.selector,
+                101047859502984652937820276907,
+                106000000000000000000000000000
+            )
+        );
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            USDC_ADDR,
+            TWIF,
+            106000000000000000000000000000,
+            ALICE,
+            feeParams,
+            swap
         );
         vm.stopPrank();
     }
