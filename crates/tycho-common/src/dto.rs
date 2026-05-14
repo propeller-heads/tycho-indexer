@@ -1120,6 +1120,16 @@ impl VersionParam {
     pub fn new(timestamp: Option<NaiveDateTime>, block: Option<BlockParam>) -> Self {
         Self { timestamp, block }
     }
+
+    pub fn at_block(chain: Chain, block_number: u64) -> Self {
+        Self::new(
+            None,
+            Some({
+                #[allow(deprecated)]
+                BlockParam { hash: None, chain: Some(chain), number: Some(block_number as i64) }
+            }),
+        )
+    }
 }
 
 impl Default for VersionParam {

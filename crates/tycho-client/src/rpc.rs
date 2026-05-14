@@ -72,22 +72,6 @@ pub struct Page<T> {
     page_size: i64,
 }
 
-pub(crate) trait CollectionLen {
-    fn len(&self) -> usize;
-}
-
-impl<T> CollectionLen for Vec<T> {
-    fn len(&self) -> usize {
-        Vec::len(self)
-    }
-}
-
-impl<K, V, S: std::hash::BuildHasher> CollectionLen for HashMap<K, V, S> {
-    fn len(&self) -> usize {
-        HashMap::len(self)
-    }
-}
-
 impl<T> Page<T> {
     pub fn new(data: T, total: i64, page: i64, page_size: i64) -> Self {
         Page { data, total, page, page_size }
@@ -114,14 +98,23 @@ impl<T> Page<T> {
     }
 }
 
-#[allow(private_bounds)]
-impl<T: CollectionLen> Page<T> {
+impl<T> Page<Vec<T>> {
     pub fn len(&self) -> usize {
         self.data.len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.data.len() == 0
+        self.data.is_empty()
+    }
+}
+
+impl<K, V, S: std::hash::BuildHasher> Page<HashMap<K, V, S>> {
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 }
 
@@ -188,17 +181,7 @@ impl ContractStateParams {
     }
 
     pub fn with_block_number(mut self, block_number: u64) -> Self {
-        self.version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(self.chain.into()),
-                    number: Some(block_number as i64),
-                }
-            }),
-        );
+        self.version = VersionParam::at_block(self.chain.into(), block_number);
         self
     }
 
@@ -295,17 +278,7 @@ impl ProtocolStatesParams {
     }
 
     pub fn with_block_number(mut self, block_number: u64) -> Self {
-        self.version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(self.chain.into()),
-                    number: Some(block_number as i64),
-                }
-            }),
-        );
+        self.version = VersionParam::at_block(self.chain.into(), block_number);
         self
     }
 
@@ -448,12 +421,12 @@ impl TracedEntryPointsParams {
 /// Parameters for [`RPCClient::get_protocol_components_paginated`].
 #[derive(Clone, PartialEq, Debug)]
 pub struct ProtocolComponentsPaginatedParams {
-    pub(crate) chain: Chain,
-    pub(crate) protocol_system: String,
-    pub(crate) component_ids: Option<Vec<ComponentId>>,
-    pub(crate) tvl_gt: Option<f64>,
-    pub(crate) chunk_size: Option<usize>,
-    pub(crate) concurrency: usize,
+    chain: Chain,
+    protocol_system: String,
+    component_ids: Option<Vec<ComponentId>>,
+    tvl_gt: Option<f64>,
+    chunk_size: Option<usize>,
+    concurrency: usize,
 }
 
 impl ProtocolComponentsPaginatedParams {
@@ -487,11 +460,11 @@ impl ProtocolComponentsPaginatedParams {
 /// Parameters for [`RPCClient::get_traced_entry_points_paginated`].
 #[derive(Clone, PartialEq, Debug)]
 pub struct TracedEntryPointsPaginatedParams {
-    pub(crate) chain: Chain,
-    pub(crate) protocol_system: String,
-    pub(crate) component_ids: Vec<String>,
-    pub(crate) chunk_size: Option<usize>,
-    pub(crate) concurrency: usize,
+    chain: Chain,
+    protocol_system: String,
+    component_ids: Vec<String>,
+    chunk_size: Option<usize>,
+    concurrency: usize,
 }
 
 impl TracedEntryPointsPaginatedParams {
@@ -557,17 +530,7 @@ impl ProtocolStatesPaginatedParams {
     }
 
     pub fn with_block_number(mut self, block_number: u64) -> Self {
-        self.version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(self.chain.into()),
-                    number: Some(block_number as i64),
-                }
-            }),
-        );
+        self.version = VersionParam::at_block(self.chain.into(), block_number);
         self
     }
 
@@ -673,17 +636,7 @@ impl ContractStatePaginatedParams {
     }
 
     pub fn with_block_number(mut self, block_number: u64) -> Self {
-        self.version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(self.chain.into()),
-                    number: Some(block_number as i64),
-                }
-            }),
-        );
+        self.version = VersionParam::at_block(self.chain.into(), block_number);
         self
     }
 
@@ -1199,7 +1152,7 @@ pub trait RPCClient: Send + Sync {
 
                     for resp in responses {
                         for (key, value) in resp {
-                            *merged_tvl.entry(key).or_insert(0.0) += value;
+                            *merged_tvl.entry(key).or_insert(0.0) = value;
                         }
                     }
 
@@ -1886,17 +1839,7 @@ impl RPCClient for HttpRPCClient {
             HashMap::new()
         };
 
-        let version = VersionParam::new(
-            None,
-            Some({
-                #[allow(deprecated)]
-                BlockParam {
-                    hash: None,
-                    chain: Some(request.chain.into()),
-                    number: Some(request.block_number as i64),
-                }
-            }),
-        );
+        let version = VersionParam::at_block(request.chain.into(), request.block_number);
 
         let mut protocol_states = if !component_ids.is_empty() {
             self.get_protocol_states_paginated(

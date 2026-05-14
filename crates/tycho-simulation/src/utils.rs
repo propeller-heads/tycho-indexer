@@ -105,10 +105,7 @@ pub async fn load_all_tokens(
 
     tokens
         .into_iter()
-        .map(|token| {
-            let converted = token;
-            Ok((converted.address.clone(), converted))
-        })
+        .map(|token| Ok((token.address.clone(), token)))
         .collect()
 }
 
