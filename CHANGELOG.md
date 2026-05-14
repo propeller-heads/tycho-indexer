@@ -1,3 +1,11 @@
+## [0.291.3](https://github.com/propeller-heads/tycho-indexer/compare/0.291.2...0.291.3) (2026-05-14)
+
+
+### Bug Fixes
+
+* **router v3:** Account for final transfer in slippage check ([0476e7f](https://github.com/propeller-heads/tycho-indexer/commit/0476e7f255a54c208d99f46e68df466de6337d00))
+* **router v3:** Account for final transfer in slippage check ([#1015](https://github.com/propeller-heads/tycho-indexer/issues/1015)) ([2b4bc93](https://github.com/propeller-heads/tycho-indexer/commit/2b4bc938a76f92a5f2514aa8eaaba514dda1045b))
+
 ## [0.291.2](https://github.com/propeller-heads/tycho-indexer/compare/0.291.1...0.291.2) (2026-05-14)
 
 
