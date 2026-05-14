@@ -110,6 +110,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
         UniswapV4Executor.UniswapV4Pool[] memory pools;
         (tokenIn, tokenOut, zeroForOne, skipUnlock, pools) = _decodeData(data);
         bytes memory swapData;
+        bytes4 selector;
         if (pools.length == 1) {
             PoolKey memory key = PoolKey({
                 currency0: Currency.wrap(zeroForOne ? tokenIn : tokenOut),
@@ -118,8 +119,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 tickSpacing: pools[0].tickSpacing,
                 hooks: IHooks(pools[0].hook)
             });
+            selector = _swapExactInputSingleSelector;
             swapData = abi.encodeWithSelector(
-                this.swapExactInputSingle.selector,
+                selector,
                 key,
                 zeroForOne,
                 amountIn,
@@ -152,9 +154,9 @@ contract UniswapV4Executor is IExecutor, ICallback {
         if (skipUnlock) {
             // Caller must have called poolManager.sync(tokenIn)
             // and the Dispatcher transferred tokens to PM already.
+            // This delegatecall is safe because the swapData signature is constructed
+            // in this method.
             // slither-disable-next-line low-level-calls
-            // TODO remove this general delegatecall - it's dangerous.
-            // Carefully verify the function signature.
             (bool success, bytes memory returnData) =
                 _self.delegatecall(swapData);
             if (!success) {
