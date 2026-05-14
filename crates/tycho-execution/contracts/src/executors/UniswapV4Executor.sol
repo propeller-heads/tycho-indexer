@@ -79,13 +79,15 @@ contract UniswapV4Executor is IExecutor, ICallback {
         _swapExactInputSingleSelector = this.swapExactInputSingle.selector;
     }
 
-    function fundsExpectedAddress(
-        bytes calldata /* data */
-    )
+    function fundsExpectedAddress(bytes calldata data)
         external
         view
         returns (address receiver)
     {
+        bool skipUnlock = data[41] != 0;
+        if (skipUnlock) {
+            return address(poolManager);
+        }
         return msg.sender;
     }
 
@@ -109,6 +111,10 @@ contract UniswapV4Executor is IExecutor, ICallback {
         bool skipUnlock;
         UniswapV4Executor.UniswapV4Pool[] memory pools;
         (tokenIn, tokenOut, zeroForOne, skipUnlock, pools) = _decodeData(data);
+        // When skipUnlock=true, output must land at the router so the
+        // Dispatcher can measure the balance diff and forward via
+        // _transferOut (outputToRouter=true in getTransferData).
+        address swapReceiver = skipUnlock ? address(this) : receiver;
         bytes memory swapData;
         bytes4 selector;
         if (pools.length == 1) {
@@ -125,7 +131,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 key,
                 zeroForOne,
                 amountIn,
-                receiver,
+                swapReceiver,
                 pools[0].hookData
             );
         } else {
@@ -147,7 +153,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                 this.swapExactInput.selector,
                 currencyIn,
                 amountIn,
-                receiver,
+                swapReceiver,
                 path
             );
         }
@@ -170,6 +176,14 @@ contract UniswapV4Executor is IExecutor, ICallback {
                     )
                 );
             }
+            // Snapshot PM's tokenOut balance so the Dispatcher's _transferOut (which
+            // forwards output to PM for the next sequential hop) is detected by the
+            // next settle(). This is safe to do even if there is no next hop.
+            // TODO actually this won't work if there is a non-usv4 pool before
+            // this pool... like input -> (USV4) -> (USV2) -> (USV4) -> output
+            // Maybe we should do this when getting the transfer data? Or accept this
+            // sequential swap limitation...
+            poolManager.sync(Currency.wrap(tokenOut));
         } else {
             poolManager.sync(Currency.wrap(tokenIn));
             // slither-disable-next-line unused-return
@@ -575,7 +589,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                     address(0),
                     tokenIn,
                     tokenOut,
-                    false
+                    true
                 );
             } else {
                 return (
@@ -583,7 +597,7 @@ contract UniswapV4Executor is IExecutor, ICallback {
                     address(poolManager),
                     tokenIn,
                     tokenOut,
-                    false
+                    true
                 );
             }
         } else {
