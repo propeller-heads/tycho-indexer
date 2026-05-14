@@ -161,7 +161,7 @@ pub fn state() -> CowAMMState {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use tycho_common::dto::ResponseProtocolState;
+    use tycho_common::models::protocol::ProtocolComponentState;
 
     use super::*;
     use crate::evm::protocol::test_utils::try_decode_snapshot_with_defaults;
@@ -169,7 +169,11 @@ mod tests {
     #[tokio::test]
     async fn test_cowamm_try_from_with_block() {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState { attributes: attributes(), ..Default::default() }.into(),
+            state: ProtocolComponentState {
+                component_id: String::new(),
+                attributes: attributes(),
+                balances: HashMap::new(),
+            },
             component: component(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -209,12 +213,11 @@ mod tests {
         };
 
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            }
-            .into(),
+            },
             component,
             component_tvl: None,
             entrypoints: Vec::new(),

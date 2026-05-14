@@ -196,9 +196,9 @@ mod tests {
     use chrono::DateTime;
     use revm::{primitives::KECCAK_EMPTY, state::AccountInfo};
     use serde_json::Value;
-    use tycho_common::{
-        dto::{Chain, ChangeType, ResponseProtocolState},
-        models::protocol::ProtocolComponent,
+    use tycho_common::models::{
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        Chain, ChangeType,
     };
 
     use super::*;
@@ -230,13 +230,13 @@ mod tests {
             id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011".to_string(),
             protocol_system: "vm:balancer_v2".to_string(),
             protocol_type_name: "balancer_v2_pool".to_string(),
-            chain: Chain::Ethereum.into(),
+            chain: Chain::Ethereum,
             tokens,
             contract_addresses: vec![
                 Bytes::from_str("0xBA12222222228d8Ba445958a75a0704d566BF2C8").unwrap()
             ],
             static_attributes,
-            change: ChangeType::Creation.into(),
+            change: ChangeType::Creation,
             creation_tx: Bytes::from_str("0x0000").unwrap(),
             created_at: creation_time,
         }
@@ -254,7 +254,6 @@ mod tests {
         accounts
     }
 
-    #[allow(deprecated)]
     #[tokio::test]
     async fn test_try_from_with_header() {
         let attributes: HashMap<String, Bytes> = vec![
@@ -290,13 +289,12 @@ mod tests {
         .map(|t| (t.address.clone(), t))
         .collect::<HashMap<_, _>>();
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
                 component_id: "0x4626d81b3a1711beb79f4cecff2413886d461677000200000000000000000011"
                     .to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            }
-            .into(),
+            },
             component: vm_component(),
             component_tvl: None,
             entrypoints: Vec::new(),

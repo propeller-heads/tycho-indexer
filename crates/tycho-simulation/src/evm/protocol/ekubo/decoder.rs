@@ -194,7 +194,7 @@ fn attribute<'a>(
 mod tests {
     use rstest::*;
     use rstest_reuse::apply;
-    use tycho_common::dto::ResponseProtocolState;
+    use tycho_common::models::protocol::ProtocolComponentState;
 
     use super::*;
     use crate::evm::protocol::{
@@ -205,12 +205,12 @@ mod tests {
     #[tokio::test]
     async fn test_try_from_with_header(case: TestCase) {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
+                component_id: String::new(),
                 attributes: case.state_attributes,
-                ..Default::default()
-            }
-            .into(),
-            component: case.component.into(),
+                balances: HashMap::new(),
+            },
+            component: case.component,
             component_tvl: None,
             entrypoints: Vec::new(),
         };
@@ -226,8 +226,7 @@ mod tests {
     #[tokio::test]
     async fn test_try_from_invalid(case: TestCase) {
         for missing_attribute in case.required_attributes {
-            let mut component: tycho_common::models::protocol::ProtocolComponent =
-                case.component.clone().into();
+            let mut component = case.component.clone();
             let mut attributes = case.state_attributes.clone();
 
             component
@@ -236,12 +235,11 @@ mod tests {
             attributes.remove(&missing_attribute);
 
             let snapshot = ComponentWithState {
-                state: ResponseProtocolState {
+                state: ProtocolComponentState {
                     attributes,
-                    component_id: Default::default(),
-                    balances: Default::default(),
-                }
-                .into(),
+                    component_id: String::new(),
+                    balances: HashMap::new(),
+                },
                 component,
                 component_tvl: None,
                 entrypoints: Vec::new(),

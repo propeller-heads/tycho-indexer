@@ -100,9 +100,9 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BebopState {
 mod tests {
     use std::env;
 
-    use tycho_common::{
-        dto::{Chain, ChangeType, ResponseProtocolState},
-        models::{protocol::ProtocolComponent, Chain as ModelChain},
+    use tycho_common::models::{
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        Chain as ModelChain, ChangeType,
     };
 
     use super::*;
@@ -160,21 +160,20 @@ mod tests {
         );
 
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
                 attributes: state_attributes,
                 component_id: "bebop_wbtc_usdc".to_string(),
                 balances: HashMap::new(),
-            }
-            .into(),
+            },
             component: ProtocolComponent {
                 id: "bebop_wbtc_usdc".to_string(),
                 protocol_system: "bebop".to_string(),
                 protocol_type_name: "bebop".to_string(),
-                chain: Chain::Ethereum.into(),
+                chain: ModelChain::Ethereum,
                 tokens: vec![wbtc_token.address.clone(), usdc_token.address.clone()],
                 contract_addresses: Vec::new(),
                 static_attributes: HashMap::new(),
-                change: ChangeType::Creation.into(),
+                change: ChangeType::Creation,
                 creation_tx: Bytes::default(),
                 created_at: chrono::NaiveDateTime::default(),
             },

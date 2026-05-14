@@ -861,22 +861,15 @@ mod test {
 
     use std::{collections::HashSet, sync::Arc};
 
-    use tycho_common::{
-        dto::{
-            AddressStorageLocation, Block, BlockAggregatedChanges as DtoBlockAggregatedChanges,
-            Chain, DCIUpdate, EntryPoint, PaginationResponse, ProtocolStateRequestResponse,
-            RPCTracerParams, ResponseAccount, ResponseProtocolState, StateRequestResponse,
-            TracingParams,
+    use tycho_common::models::{
+        blockchain::{
+            AddressStorageLocation, Block, BlockAggregatedChanges, DCIUpdate, EntryPoint,
+            EntryPointWithTracingParams as ModelEntryPointWithTracingParams, RPCTracerParams,
+            TracingParams, TracingResult as ModelTracingResult,
         },
-        models::{
-            blockchain::{
-                BlockAggregatedChanges,
-                EntryPointWithTracingParams as ModelEntryPointWithTracingParams,
-                TracingResult as ModelTracingResult,
-            },
-            protocol::{ProtocolComponent, ProtocolComponentState},
-            token::Token,
-        },
+        protocol::{ProtocolComponent, ProtocolComponentState},
+        token::Token,
+        Chain,
     };
     use uuid::Uuid;
 
@@ -1027,7 +1020,7 @@ mod test {
         let deltas_client = ArcDeltasClient(Arc::new(deltas_client.unwrap_or_default()));
 
         ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             native,
             ComponentFilter::with_tvl_range(50.0, 50.0),
             1,
@@ -1041,14 +1034,12 @@ mod test {
         )
     }
 
-    fn state_snapshot_native() -> ProtocolStateRequestResponse {
-        ProtocolStateRequestResponse {
-            states: vec![ResponseProtocolState {
-                component_id: "Component1".to_string(),
-                ..Default::default()
-            }],
-            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-        }
+    fn state_snapshot_native() -> Vec<ProtocolComponentState> {
+        vec![ProtocolComponentState {
+            component_id: "Component1".to_string(),
+            attributes: HashMap::new(),
+            balances: HashMap::new(),
+        }]
     }
 
     fn make_mock_client() -> MockRPCClient {
@@ -1069,13 +1060,12 @@ mod test {
             .returning(move |_request, _chunk_size, _concurrency| {
                 Ok(Snapshot {
                     states: state_snapshot_native()
-                        .states
                         .into_iter()
                         .map(|state| {
                             (
                                 state.component_id.clone(),
                                 ComponentWithState {
-                                    state: state.into(),
+                                    state,
                                     component: component_clone.clone(),
                                     entrypoints: vec![],
                                     component_tvl: None,
@@ -1100,13 +1090,12 @@ mod test {
             header: header.clone(),
             snapshots: Snapshot {
                 states: state_snapshot_native()
-                    .states
                     .into_iter()
                     .map(|state| {
                         (
                             state.component_id.clone(),
                             ComponentWithState {
-                                state: state.into(),
+                                state,
                                 component: component.clone(),
                                 entrypoints: vec![],
                                 component_tvl: None,
@@ -1139,13 +1128,12 @@ mod test {
             .returning(move |_request, _chunk_size, _concurrency| {
                 Ok(Snapshot {
                     states: state_snapshot_native()
-                        .states
                         .into_iter()
                         .map(|state| {
                             (
                                 state.component_id.clone(),
                                 ComponentWithState {
-                                    state: state.into(),
+                                    state,
                                     component: component_clone.clone(),
                                     component_tvl: Some(100.0),
                                     entrypoints: vec![],
@@ -1170,13 +1158,12 @@ mod test {
             header: header.clone(),
             snapshots: Snapshot {
                 states: state_snapshot_native()
-                    .states
                     .into_iter()
                     .map(|state| {
                         (
                             state.component_id.clone(),
                             ComponentWithState {
-                                state: state.into(),
+                                state,
                                 component: component.clone(),
                                 component_tvl: Some(100.0),
                                 entrypoints: vec![],
@@ -1198,14 +1185,35 @@ mod test {
         assert_eq!(snap, exp);
     }
 
-    fn state_snapshot_vm() -> StateRequestResponse {
-        StateRequestResponse {
-            accounts: vec![
-                ResponseAccount { address: Bytes::from("0x0badc0ffee"), ..Default::default() },
-                ResponseAccount { address: Bytes::from("0xbabe42"), ..Default::default() },
-            ],
-            pagination: PaginationResponse { page: 0, page_size: 20, total: 1 },
-        }
+    fn state_snapshot_vm() -> Vec<Account> {
+        vec![
+            Account::new(
+                Chain::default(),
+                Bytes::from("0x0badc0ffee"),
+                String::new(),
+                HashMap::new(),
+                Bytes::default(),
+                HashMap::new(),
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                None,
+            ),
+            Account::new(
+                Chain::default(),
+                Bytes::from("0xbabe42"),
+                String::new(),
+                HashMap::new(),
+                Bytes::default(),
+                HashMap::new(),
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                Bytes::default(),
+                None,
+            ),
+        ]
     }
 
     fn traced_entry_point_response(
@@ -1257,11 +1265,11 @@ mod test {
                     states: [(
                         "Component1".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
+                            state: ProtocolComponentState {
                                 component_id: "Component1".to_string(),
-                                ..Default::default()
-                            }
-                            .into(),
+                                attributes: HashMap::new(),
+                                balances: HashMap::new(),
+                            },
                             component: ProtocolComponent {
                                 id: "Component1".to_string(),
                                 contract_addresses: vec![
@@ -1280,12 +1288,8 @@ mod test {
                     .into_iter()
                     .collect(),
                     vm_storage: vm_storage_accounts
-                        .accounts
                         .into_iter()
-                        .map(|state| {
-                            let addr = state.address.clone();
-                            (addr, Account::from(state))
-                        })
+                        .map(|account| (account.address.clone(), account))
                         .collect(),
                 })
             });
@@ -1310,11 +1314,11 @@ mod test {
                 states: [(
                     component.id.clone(),
                     ComponentWithState {
-                        state: ResponseProtocolState {
+                        state: ProtocolComponentState {
                             component_id: "Component1".to_string(),
-                            ..Default::default()
-                        }
-                        .into(),
+                            attributes: HashMap::new(),
+                            balances: HashMap::new(),
+                        },
                         component: component.clone(),
                         component_tvl: None,
                         entrypoints: traced_entry_point_response()
@@ -1325,9 +1329,8 @@ mod test {
                 .into_iter()
                 .collect(),
                 vm_storage: state_snapshot_vm()
-                    .accounts
                     .into_iter()
-                    .map(|state| (state.address.clone(), Account::from(state)))
+                    .map(|account| (account.address.clone(), account))
                     .collect(),
             },
             deltas: None,
@@ -1360,11 +1363,11 @@ mod test {
                     states: [(
                         "Component1".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
+                            state: ProtocolComponentState {
                                 component_id: "Component1".to_string(),
-                                ..Default::default()
-                            }
-                            .into(),
+                                attributes: HashMap::new(),
+                                balances: HashMap::new(),
+                            },
                             component: component_clone.clone(),
                             component_tvl: Some(100.0),
                             entrypoints: vec![],
@@ -1373,9 +1376,8 @@ mod test {
                     .into_iter()
                     .collect(),
                     vm_storage: vm_storage_accounts
-                        .accounts
                         .into_iter()
-                        .map(|state| (state.address.clone(), Account::from(state)))
+                        .map(|account| (account.address.clone(), account))
                         .collect(),
                 })
             });
@@ -1395,11 +1397,11 @@ mod test {
                 states: [(
                     component.id.clone(),
                     ComponentWithState {
-                        state: ResponseProtocolState {
+                        state: ProtocolComponentState {
                             component_id: "Component1".to_string(),
-                            ..Default::default()
-                        }
-                        .into(),
+                            attributes: HashMap::new(),
+                            balances: HashMap::new(),
+                        },
                         component: component.clone(),
                         component_tvl: Some(100.0),
                         entrypoints: vec![],
@@ -1408,9 +1410,8 @@ mod test {
                 .into_iter()
                 .collect(),
                 vm_storage: state_snapshot_vm()
-                    .accounts
                     .into_iter()
-                    .map(|state| (state.address.clone(), Account::from(state)))
+                    .map(|account| (account.address.clone(), account))
                     .collect(),
             },
             deltas: None,
@@ -1459,11 +1460,11 @@ mod test {
                     states: [(
                         "Component2".to_string(),
                         ComponentWithState {
-                            state: ResponseProtocolState {
+                            state: ProtocolComponentState {
                                 component_id: "Component2".to_string(),
-                                ..Default::default()
-                            }
-                            .into(),
+                                attributes: HashMap::new(),
+                                balances: HashMap::new(),
+                            },
                             component: component2_clone.clone(),
                             entrypoints: vec![],
                             component_tvl: None,
@@ -1674,7 +1675,7 @@ mod test {
     async fn test_state_sync() {
         let (rpc_client, deltas_client, tx) = mock_clients_for_state_sync();
         let deltas = [
-            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1708,7 +1709,7 @@ mod test {
                     )]),
                     trace_results: HashMap::from([(
                         "entrypoint_a".to_string(),
-                        tycho_common::dto::TracingResult {
+                        ModelTracingResult {
                             retriggers: HashSet::from([(
                                 Bytes::from("0x0badc0ffee"),
                                 AddressStorageLocation::new(Bytes::from("0x0badc0ffee"), 12),
@@ -1721,8 +1722,8 @@ mod test {
                     )]),
                 },
                 ..Default::default()
-            }),
-            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            },
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1741,7 +1742,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            },
         ];
         let mut state_sync = with_mocked_clients(true, true, Some(rpc_client), Some(deltas_client));
         state_sync
@@ -1856,7 +1857,7 @@ mod test {
             },
             // Our deltas are empty and since merge methods are
             // tested in tycho-common we don't have much to do here.
-            deltas: Some(BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            deltas: Some(BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -1875,7 +1876,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            })),
+            }),
             // "Component2" was removed, because its tvl changed to 0.
             removed_components: [(
                 "Component2".to_string(),
@@ -2024,7 +2025,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(remove_tvl_threshold, add_tvl_threshold),
             1,
@@ -2043,7 +2044,7 @@ mod test {
 
         // Simulate the incoming BlockAggregatedChanges
         let deltas = [
-            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2055,8 +2056,8 @@ mod test {
                 },
                 revert: false,
                 ..Default::default()
-            }),
-            BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            },
+            BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2075,7 +2076,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            }),
+            },
         ];
 
         let (handle, mut rx) = state_sync.start().await;
@@ -2135,7 +2136,7 @@ mod test {
                 .collect(),
                 vm_storage: HashMap::new(),
             },
-            deltas: Some(BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+            deltas: Some(BlockAggregatedChanges {
                 extractor: "uniswap-v2".to_string(),
                 chain: Chain::Ethereum,
                 block: Block {
@@ -2153,7 +2154,7 @@ mod test {
                 .into_iter()
                 .collect(),
                 ..Default::default()
-            })),
+            }),
             removed_components: [(
                 "Component2".to_string(),
                 ProtocolComponent { id: "Component2".to_string(), ..Default::default() },
@@ -2193,7 +2194,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             5, // Enough retries
@@ -2253,7 +2254,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send a delta message that will require a snapshot
-                let delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                let delta = BlockAggregatedChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2269,10 +2270,7 @@ mod test {
                     // Add a new component to trigger snapshot request
                     new_protocol_components: [(
                         "new_component".to_string(),
-                        tycho_common::dto::ProtocolComponent {
-                            id: "new_component".to_string(),
-                            ..Default::default()
-                        },
+                        ProtocolComponent { id: "new_component".to_string(), ..Default::default() },
                     )]
                     .into_iter()
                     .collect(),
@@ -2280,7 +2278,7 @@ mod test {
                         .into_iter()
                         .collect(),
                     ..Default::default()
-                });
+                };
 
                 tokio::spawn(async move {
                     let _ = tx.send(delta).await;
@@ -2296,7 +2294,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0), // Include the component
             1,
@@ -2361,7 +2359,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 0.0),
             1,
@@ -2438,7 +2436,7 @@ mod test {
             .expect_subscribe()
             .return_once(move |_, _| {
                 // Send first message immediately
-                let first_delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                let first_delta = BlockAggregatedChanges {
                     extractor: "test".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2452,7 +2450,7 @@ mod test {
                     },
                     revert: false,
                     ..Default::default()
-                });
+                };
 
                 tokio::spawn(async move {
                     let _ = tx.send(first_delta).await;
@@ -2469,7 +2467,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -2553,7 +2551,7 @@ mod test {
 
         // Create synchronizer with only 2 retries and short cooldown
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "test-protocol"),
+            ExtractorIdentity::new(Chain::Ethereum, "test-protocol"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             2,                         // max_retries = 2
@@ -2679,7 +2677,7 @@ mod test {
         deltas_client
             .expect_subscribe()
             .return_once(move |_, _| {
-                let expected_next_delta = BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                let expected_next_delta = BlockAggregatedChanges {
                     extractor: "uniswap-v2".to_string(),
                     chain: Chain::Ethereum,
                     block: Block {
@@ -2697,7 +2695,7 @@ mod test {
                     },
                     revert: false,
                     ..Default::default()
-                });
+                };
 
                 tokio::spawn(async move {
                     let _ = tx.send(expected_next_delta).await;
@@ -2711,7 +2709,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -2849,7 +2847,7 @@ mod test {
             .return_once(move |_, _| {
                 // Send messages for blocks 3, 4, 5 (already processed), then block 6 (expected)
                 let old_messages = vec![
-                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                    BlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2861,8 +2859,8 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    }),
-                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                    },
+                    BlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2874,8 +2872,8 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    }),
-                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                    },
+                    BlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2887,9 +2885,9 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    }),
+                    },
                     // This is the expected next block (block 6)
-                    BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+                    BlockAggregatedChanges {
                         extractor: "uniswap-v2".to_string(),
                         chain: Chain::Ethereum,
                         block: Block {
@@ -2901,7 +2899,7 @@ mod test {
                         },
                         revert: false,
                         ..Default::default()
-                    }),
+                    },
                 ];
 
                 tokio::spawn(async move {
@@ -2919,7 +2917,7 @@ mod test {
             .return_once(|_| Ok(()));
 
         let mut state_sync = ProtocolStateSynchronizer::new(
-            ExtractorIdentity::new(Chain::Ethereum.into(), "uniswap-v2"),
+            ExtractorIdentity::new(Chain::Ethereum, "uniswap-v2"),
             true,
             ComponentFilter::with_tvl_range(0.0, 1000.0),
             1,
@@ -3009,7 +3007,7 @@ mod test {
         // Use vec to create Bytes from block number
         let hash = Bytes::from(vec![block_num as u8; 32]);
         let parent_hash = Bytes::from(vec![block_num.saturating_sub(1) as u8; 32]);
-        BlockAggregatedChanges::from(DtoBlockAggregatedChanges {
+        BlockAggregatedChanges {
             extractor: "uniswap-v2".to_string(),
             chain: Chain::Ethereum,
             block: Block {
@@ -3022,7 +3020,7 @@ mod test {
             revert: false,
             partial_block_index: partial_idx,
             ..Default::default()
-        })
+        }
     }
 
     /// Test that full block as first message in partial mode is accepted

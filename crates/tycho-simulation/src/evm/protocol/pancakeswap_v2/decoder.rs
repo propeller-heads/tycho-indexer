@@ -37,7 +37,7 @@ mod tests {
     use alloy::primitives::U256;
     use rstest::rstest;
     use tycho_client::feed::synchronizer::ComponentWithState;
-    use tycho_common::{dto::ResponseProtocolState, Bytes};
+    use tycho_common::{models::protocol::ProtocolComponentState, Bytes};
 
     use super::super::state::PancakeswapV2State;
     use crate::{
@@ -48,15 +48,14 @@ mod tests {
     #[tokio::test]
     async fn test_pancakeswap_v2_try_from() {
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
                 component_id: "State1".to_owned(),
                 attributes: HashMap::from([
                     ("reserve0".to_string(), Bytes::from(vec![0; 32])),
                     ("reserve1".to_string(), Bytes::from(vec![0; 32])),
                 ]),
                 balances: HashMap::new(),
-            }
-            .into(),
+            },
             component: Default::default(),
             component_tvl: None,
             entrypoints: Vec::new(),
@@ -80,12 +79,11 @@ mod tests {
         attributes.remove(missing_attribute);
 
         let snapshot = ComponentWithState {
-            state: ResponseProtocolState {
+            state: ProtocolComponentState {
                 component_id: "State1".to_owned(),
                 attributes,
                 balances: HashMap::new(),
-            }
-            .into(),
+            },
             component: Default::default(),
             component_tvl: None,
             entrypoints: Vec::new(),

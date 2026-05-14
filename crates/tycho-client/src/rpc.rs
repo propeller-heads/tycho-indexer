@@ -3136,26 +3136,23 @@ mod tests {
         let client = HttpRPCClient::new(server.url().as_str(), HttpRPCClientOptions::default())
             .expect("create client");
 
-        #[allow(deprecated)]
-        let component = tycho_common::models::protocol::ProtocolComponent::from(
-            tycho_common::dto::ProtocolComponent {
-                id: "component1".to_string(),
-                protocol_system: "test_protocol".to_string(),
-                protocol_type_name: "test_type".to_string(),
-                chain: Chain::Ethereum.into(),
-                tokens: vec![],
-                contract_ids: vec![
-                    Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
-                ],
-                static_attributes: HashMap::new(),
-                change: tycho_common::dto::ChangeType::Creation,
-                creation_tx: Bytes::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                created_at: chrono::Utc::now().naive_utc(),
-            },
-        );
+        let component = tycho_common::models::protocol::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_addresses: vec![
+                Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap()
+            ],
+            static_attributes: HashMap::new(),
+            change: tycho_common::models::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
@@ -3261,24 +3258,21 @@ mod tests {
             .expect("create client");
 
         // Create test component
-        #[allow(deprecated)]
-        let component = tycho_common::models::protocol::ProtocolComponent::from(
-            tycho_common::dto::ProtocolComponent {
-                id: "component1".to_string(),
-                protocol_system: "test_protocol".to_string(),
-                protocol_type_name: "test_type".to_string(),
-                chain: Chain::Ethereum.into(),
-                tokens: vec![],
-                contract_ids: vec![],
-                static_attributes: HashMap::new(),
-                change: tycho_common::dto::ChangeType::Creation,
-                creation_tx: Bytes::from_str(
-                    "0x0000000000000000000000000000000000000000000000000000000000000000",
-                )
-                .unwrap(),
-                created_at: chrono::Utc::now().naive_utc(),
-            },
-        );
+        let component = tycho_common::models::protocol::ProtocolComponent {
+            id: "component1".to_string(),
+            protocol_system: "test_protocol".to_string(),
+            protocol_type_name: "test_type".to_string(),
+            chain: Chain::Ethereum,
+            tokens: vec![],
+            contract_addresses: vec![],
+            static_attributes: HashMap::new(),
+            change: tycho_common::models::ChangeType::Creation,
+            creation_tx: Bytes::from_str(
+                "0x0000000000000000000000000000000000000000000000000000000000000000",
+            )
+            .unwrap(),
+            created_at: chrono::Utc::now().naive_utc(),
+        };
 
         let mut components = HashMap::new();
         components.insert("component1".to_string(), component);
