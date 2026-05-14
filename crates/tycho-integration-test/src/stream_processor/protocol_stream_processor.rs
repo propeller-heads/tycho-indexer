@@ -190,6 +190,13 @@ impl ProtocolStreamProcessor {
                 "pancakeswap_v3".to_string(),
                 "aerodrome_slipstreams".to_string(),
             ],
+            Chain::Bsc => vec![
+                "uniswap_v2".to_string(),
+                "uniswap_v3".to_string(),
+                "uniswap_v4".to_string(),
+                "pancakeswap_v2".to_string(),
+                "pancakeswap_v3".to_string(),
+            ],
             Chain::Unichain => {
                 vec![
                     "uniswap_v2".to_string(),
