@@ -729,13 +729,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             clientFeeParams.clientFeeReceiver
         );
 
-        amountOut =
-            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
-
-        // Check final amount to account for fee tokens or rebasing tokens
-        if (amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
+        amountOut = _settleOutput(
+            amountOut, minAmountOut, amountIn, tokenIn, tokenOut, receiver
+        );
     }
 
     /**
@@ -806,13 +802,9 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             client
         );
 
-        amountOut =
-            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
-
-        // Check final amount to account for fee tokens or rebasing tokens
-        if (amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
+        amountOut = _settleOutput(
+            amountOut, minAmountOut, amountIn, tokenIn, tokenOut, receiver
+        );
     }
 
     /**
@@ -882,21 +874,18 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
             client
         );
 
-        amountOut =
-            _settleOutput(amountOut, amountIn, tokenIn, tokenOut, receiver);
-
-        // Check final amount to account for fee tokens or rebasing tokens
-        if (amountOut < minAmountOut) {
-            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
-        }
+        amountOut = _settleOutput(
+            amountOut, minAmountOut, amountIn, tokenIn, tokenOut, receiver
+        );
     }
 
     /**
      * @dev Transfers output tokens to receiver (or credits vault),
-     *      and finalizes transient deltas.
+     *      finalizes transient deltas, and checks slippage.
      */
     function _settleOutput(
         uint256 amountOut,
+        uint256 minAmountOut,
         uint256 amountIn,
         address tokenIn,
         address tokenOut,
@@ -916,6 +905,11 @@ contract TychoRouter is AccessControl, Dispatcher, EIP712 {
         }
 
         _finalizeBalances(msg.sender, tokenIn, amountIn);
+
+        // Check final amount to account for fee tokens or rebasing tokens
+        if (amountOut < minAmountOut) {
+            revert TychoRouter__NegativeSlippage(amountOut, minAmountOut);
+        }
 
         return amountOut;
     }
