@@ -1,3 +1,18 @@
+## [0.293.0](https://github.com/propeller-heads/tycho-indexer/compare/0.292.0...0.293.0) (2026-05-15)
+
+
+### Features
+
+* (WIP) enable sequential unlocked USV4 swaps ([079ebf2](https://github.com/propeller-heads/tycho-indexer/commit/079ebf2a1674a52143bd52203b4f074290a2ba1b))
+* **UniV4 execution:** Allow swap when already unlocked ([5add52a](https://github.com/propeller-heads/tycho-indexer/commit/5add52ae49ced60a3d19183f5cc74e386a7cdfbb))
+* **UniV4 execution:** Allow swap when already unlocked ([#1009](https://github.com/propeller-heads/tycho-indexer/issues/1009)) ([339d1f4](https://github.com/propeller-heads/tycho-indexer/commit/339d1f42df1ae3857116e46b3784d0e277eebde8))
+
+
+### Bug Fixes
+
+* **UniV4:** Decode user_data as typed JSON struct ([be0ab7e](https://github.com/propeller-heads/tycho-indexer/commit/be0ab7e8bb528fea663e27e04d2120f6e112f7e7))
+* **univ4:** Fixes after merge with main ([47bf018](https://github.com/propeller-heads/tycho-indexer/commit/47bf018054b7eb26fe423a2ccb106c6640cfd018))
+
 ## [0.292.0](https://github.com/propeller-heads/tycho-indexer/compare/0.291.4...0.292.0) (2026-05-15)
 
 
