@@ -51,7 +51,7 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
 ### Deploy Router
 
 1. Define the accounts to grant roles to in `scripts/roles.json`. For each role, the first address
-   receives the role in the constructor; additional addresses are granted post-deployment via `set-roles.js`.
+   receives the role in the constructor.
 2. Set environment variables:
    ```
    export FEE_CALCULATOR=<fee-calculator-address-from-previous-step>
@@ -64,7 +64,6 @@ Via the safe wallet UI:
 5. Set the executors addresses
 6. Set fee amounts and router fee receiver in FeeCalculator
 7. Set the pauser wallets
-
 ### Revoke roles
 
 1. If you wish to revoke a role for a certain address, run: `npx hardhat run scripts/revoke-role.js --network NETWORK`

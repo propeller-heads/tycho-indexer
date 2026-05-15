@@ -50,5 +50,11 @@
     "uniswap_v3": "0x067fBaf88ee89DC2A4368c6DfF7237FF84522577",
     "pancake_v3": "0x067fBaf88ee89DC2A4368c6DfF7237FF84522577",
     "uniswap_v4": "0x925A1aE9494ec8d92C2900dCdd6ca9Ee621E10ed"
+  },
+  "polygon": {
+    "uniswap_v2": "0xb9f140F4f8d674c453b3Ee00646189452a74E10c",
+    "quickswap_v2": "0xb9f140F4f8d674c453b3Ee00646189452a74E10c",
+    "uniswap_v3": "0x4C409a96DE96E06f061cE55B15Cd318D3Dd2239c",
+    "uniswap_v4": "0x32bB33AfB193e16df121cdc2D87c44f015D325DA"
   }
 }
