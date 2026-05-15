@@ -1,7 +1,7 @@
 # How to deploy
 
 - Install dependencies `npm install`
-- `cd foundry`
+- `cd contracts`
 
 ## Deploy on a Tenderly fork
 
@@ -17,7 +17,7 @@ export PRIVATE_KEY=<private-key>
 
 3. Fund wallet: `npx hardhat run scripts/fund-wallet-tenderly-fork.js --network tenderly`
 
-## Deploy on Ethereum Mainnet or Base
+## Deploy on Ethereum Mainnet or other EVM chains
 
 Make sure to run `unset HISTFILE` in your terminal before setting the private key. This will prevent the private key
 from being stored in the shell history.
