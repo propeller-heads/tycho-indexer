@@ -414,6 +414,7 @@ pub struct EncodingContext {
     pub group_token_out: Bytes,
 }
 
+#[derive(PartialEq)]
 pub(crate) enum Strategy {
     Single,
     Sequential,
