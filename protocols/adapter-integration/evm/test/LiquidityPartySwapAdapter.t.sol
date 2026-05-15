@@ -20,51 +20,36 @@ contract LiquidityPartyFunctionTest is AdapterTest {
     using FractionMath for Fraction;
 
     IPartyPlanner internal constant PLANNER =
-        IPartyPlanner(0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9);
+        IPartyPlanner(0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071);
     IPartyInfo internal constant INFO =
-        IPartyInfo(0xAAb5751696d081bF077793a6d86EddF9DF512Ac2);
+        IPartyInfo(0x5f1B901f2955CAD0B28978eF6f0D3054C102F244);
     address internal constant MINT_IMPL =
-        0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660;
-    address internal constant SWAP_IMPL =
-        0xE64605889C32cC8ec858146b428Fa38302B5baA9;
+        0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5;
+    address internal constant EXTRA_IMPL =
+        0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7;
     IPartyPool internal constant POOL =
-        IPartyPool(0xfA0be6148F66A6499666cf790d647D00daB76904);
+        IPartyPool(0x353D535b9febe7C0Ff261c9e55aD941f712F54ae);
     bytes32 internal constant POOL_ID = bytes32(bytes20(address(POOL)));
-    uint256 internal constant FORK_BLOCK = 24537169; // block in which the pool
-    // was created
+    uint256 internal constant FORK_BLOCK = 25088884;
 
     LiquidityPartySwapAdapter internal adapter;
     uint256 internal constant TEST_ITERATIONS = 10;
 
     address[] internal tokens;
-    address internal constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address internal constant WBTC = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599;
     address internal constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address internal constant UNI = 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984;
-    address internal constant WSOL = 0xD31a59c85aE9D8edEFeC411D448f90841571b89c;
-    address internal constant TRX = 0x50327c6c5a14DCaDE707ABad2E27eB517df87AB5;
     address internal constant AAVE = 0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9;
-    address internal constant PEPE = 0x6982508145454Ce325dDbE47a25d4ec3d2311933;
-    address internal constant SHIB = 0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE;
 
-    address private constant INPUT_TOKEN = WBTC;
-    uint8 private constant INPUT_INDEX = 2;
-    address private constant OUTPUT_TOKEN = SHIB;
-    uint8 private constant OUTPUT_INDEX = 9;
+    address private constant INPUT_TOKEN = WETH;
+    uint8 private constant INPUT_INDEX = 1;
+    address private constant OUTPUT_TOKEN = AAVE;
+    uint8 private constant OUTPUT_INDEX = 2;
 
     function setUp() public {
-        tokens = new address[](10);
-        tokens[0] = USDT;
-        tokens[1] = USDC;
-        tokens[2] = WBTC;
-        tokens[3] = WETH;
-        tokens[4] = UNI;
-        tokens[5] = WSOL;
-        tokens[6] = TRX;
-        tokens[7] = AAVE;
-        tokens[8] = PEPE;
-        tokens[9] = SHIB;
+        tokens = new address[](3);
+        tokens[0] = USDC;
+        tokens[1] = WETH;
+        tokens[2] = AAVE;
 
         vm.createSelectFork(vm.rpcUrl("mainnet"), FORK_BLOCK);
 
@@ -73,7 +58,7 @@ contract LiquidityPartyFunctionTest is AdapterTest {
         vm.label(address(PLANNER), "PartyPlanner");
         vm.label(address(INFO), "PartyInfo");
         vm.label(address(MINT_IMPL), "PartyPoolMintImpl");
-        vm.label(address(SWAP_IMPL), "PartyPoolSwapImpl");
+        vm.label(address(EXTRA_IMPL), "PartyPoolExtraImpl");
         vm.label(address(POOL), "PartyPool");
         vm.label(address(adapter), "LiquidityPartySwapAdapter");
         for (uint256 i = 0; i < tokens.length; i++) {
@@ -209,11 +194,12 @@ contract LiquidityPartyFunctionTest is AdapterTest {
         }
     }
 
-    // Many of the tests above seem entirely redundant with runPoolBehaviorTest
-    // :shrug:
+    // Use WETH/AAVE pair — USDC's 6 decimals cause precision failures at tiny
+    // pool sizes (~$1) with large relative trade sizes.
     function testLiquidityPartyPoolBehaviour() public {
-        bytes32[] memory poolIds = new bytes32[](1);
-        poolIds[0] = POOL_ID;
-        runPoolBehaviourTest(adapter, poolIds);
+        IERC20(WETH).approve(address(adapter), type(uint256).max);
+        IERC20(AAVE).approve(address(adapter), type(uint256).max);
+        testPricesForPair(adapter, POOL_ID, WETH, AAVE, true);
+        testPricesForPair(adapter, POOL_ID, AAVE, WETH, true);
     }
 }

@@ -47,14 +47,16 @@ contract LiquidityPartySwapAdapter is ISwapAdapter {
                 // Marginal price support
                 prices[i] = _marginalPrice(pool, indexIn, indexOut);
             } else {
-                // Regular slippage calculation
+                // Regular slippage calculation.
                 // slither-disable-next-line unused-return calls-loop
                 (
-                    uint256 amountIn,
+                    /*uint256 amountIn*/,
                     uint256 amountOut, /*uint256 inFee*/
-                ) = pool.swapAmounts(indexIn, indexOut, amount, 0);
+                ) = INFO.swapAmounts(pool, indexIn, indexOut, amount);
                 prices[i].numerator = amountOut;
-                prices[i].denominator = amountIn;
+                // Use `amount` (not amountIn) as denominator, because excess
+                // dust from PREFUNDING is kept by the pool.
+                prices[i].denominator = amount;
             }
         }
     }
@@ -78,7 +80,7 @@ contract LiquidityPartySwapAdapter is ISwapAdapter {
             .safeTransferFrom(swapper, address(pool), specifiedAmount);
         // slither-disable-next-line unused-return
         try pool.swap(
-            address(0),
+            address(this), // pool requires msg.sender == payer for PREFUNDING
             Funding.PREFUNDING,
             swapper,
             indexIn,
@@ -110,8 +112,6 @@ contract LiquidityPartySwapAdapter is ISwapAdapter {
                 revert Unavailable("pool has been permanently killed");
             } else if (hash == keccak256("LMSR: size metric zero")) {
                 revert Unavailable("pool currently has no LP assets");
-            } else if (hash == keccak256("LMSR: limitPrice <= current price")) {
-                revert InvalidOrder("limit price is below current price");
             } else {
                 // re-raise
                 revert(string(abi.encodePacked("unhandled: ", reason)));
@@ -215,7 +215,8 @@ contract LiquidityPartySwapAdapter is ISwapAdapter {
         // Liquidity Party prices are Q128.128 fixed point format
         // slither-disable-next-line calls-loop
         uint256 price128x128 = INFO.price(pool, indexIn, indexOut);
-        uint256 feePpm = pool.fee(indexIn, indexOut);
+        uint256[] memory poolFees = pool.fees();
+        uint256 feePpm = poolFees[indexIn] + poolFees[indexOut];
         price128x128 *= 1_000_000 - feePpm;
         price128x128 /= 1_000_000;
         // forge-lint: disable-next-line(unsafe-typecast,named-struct-fields)

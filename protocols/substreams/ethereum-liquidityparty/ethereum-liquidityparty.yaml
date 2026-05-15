@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "ethereum_liquidityparty"
-  version: v0.1.1
+  version: v0.1.2
   url: "https://github.com/propeller-heads/tycho-protocol-sdk/tree/main/substreams/ethereum-liquidityparty"
 
 protobuf:
@@ -20,13 +20,13 @@ network: mainnet
 networks:
   mainnet:
     params:
-      map_protocol_components: planner=0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9&info=0xAAb5751696d081bF077793a6d86EddF9DF512Ac2&mint_impl=0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660&swap_impl=0xE64605889C32cC8ec858146b428Fa38302B5baA9
-      map_protocol_changes: planner=0x7692e502FB8cE1c13A97DbBE380Be05A545ee0a9&info=0xAAb5751696d081bF077793a6d86EddF9DF512Ac2&mint_impl=0x92bb4799Ef9e622Cb9C5bc7c8655ea43c18E7660&swap_impl=0xE64605889C32cC8ec858146b428Fa38302B5baA9
+      map_protocol_components: planner=0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071&info=0x5f1B901f2955CAD0B28978eF6f0D3054C102F244&mint_impl=0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5&extra_impl=0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7
+      map_protocol_changes: planner=0xe6C22aA3e1B3e11AA6C1C6E3086883b3C5071071&info=0x5f1B901f2955CAD0B28978eF6f0D3054C102F244&mint_impl=0xDF2535B88D97Bf52649D87D41986e4C5B7aB60f5&extra_impl=0x5f34B189ca58EeC3B6c1Ac432f3D5F85058ACbf7
 
 modules:
   - name: map_protocol_components
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25088849
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block
@@ -35,7 +35,7 @@ modules:
 
   - name: store_protocol_components
     kind: store
-    initialBlock: 24535797
+    initialBlock: 25088849
     updatePolicy: set
     valueType: string
     inputs:
@@ -43,25 +43,34 @@ modules:
 
   - name: map_killed_components
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25088849
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
     output:
       type: proto:tycho.evm.v1.BlockTransactionProtocolComponents
 
+  - name: store_killed_components
+    kind: store
+    initialBlock: 25088849
+    updatePolicy: set
+    valueType: int64
+    inputs:
+      - map: map_killed_components
+
   - name: map_relative_component_balance
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25088849
     inputs:
       - source: sf.ethereum.type.v2.Block
       - store: store_protocol_components
+      - store: store_killed_components
     output:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
 
   - name: store_balances
     kind: store
-    initialBlock: 24535797
+    initialBlock: 25088849
     updatePolicy: add
     valueType: bigint
     inputs:
@@ -69,7 +78,7 @@ modules:
 
   - name: map_protocol_changes
     kind: map
-    initialBlock: 24535797
+    initialBlock: 25088849
     inputs:
       - params: string
       - source: sf.ethereum.type.v2.Block

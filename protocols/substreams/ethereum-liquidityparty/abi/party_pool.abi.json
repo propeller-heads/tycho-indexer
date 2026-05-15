@@ -35,6 +35,13 @@
   },
   {
     "type": "function",
+    "name": "acceptOwnership",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "allProtocolFeesOwed",
     "inputs": [],
     "outputs": [
@@ -106,25 +113,6 @@
       }
     ],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
-    "name": "balance",
-    "inputs": [
-      {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -222,6 +210,11 @@
         "internalType": "uint256"
       },
       {
+        "name": "minAmountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
         "name": "deadline",
         "type": "uint256",
         "internalType": "uint256"
@@ -275,30 +268,6 @@
         "name": "",
         "type": "uint256[]",
         "internalType": "uint256[]"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "fee",
-    "inputs": [
-      {
-        "name": "i",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "j",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -389,19 +358,6 @@
   },
   {
     "type": "function",
-    "name": "kappa",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "int128",
-        "internalType": "int128"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "kill",
     "inputs": [],
     "outputs": [],
@@ -430,6 +386,11 @@
         "internalType": "address"
       },
       {
+        "name": "fundingSelector",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      },
+      {
         "name": "receiver",
         "type": "address",
         "internalType": "address"
@@ -443,6 +404,11 @@
         "name": "deadline",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "cbData",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [
@@ -453,19 +419,6 @@
       }
     ],
     "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "mintImpl",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -508,6 +461,19 @@
   },
   {
     "type": "function",
+    "name": "pendingOwner",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "protocolFeeAddress",
     "inputs": [],
     "outputs": [
@@ -531,13 +497,6 @@
       }
     ],
     "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "renounceOwnership",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -587,9 +546,9 @@
         "internalType": "uint256"
       },
       {
-        "name": "limitPrice",
-        "type": "int128",
-        "internalType": "int128"
+        "name": "minAmountOut",
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
         "name": "deadline",
@@ -628,113 +587,7 @@
   },
   {
     "type": "function",
-    "name": "swapAmounts",
-    "inputs": [
-      {
-        "name": "inputTokenIndex",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "outputTokenIndex",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxAmountIn",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "limitPrice",
-        "type": "int128",
-        "internalType": "int128"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "amountIn",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "amountOut",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "inFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "swapImpl",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "swapMint",
-    "inputs": [
-      {
-        "name": "payer",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "receiver",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "inputTokenIndex",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "maxAmountIn",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "deadline",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "amountInUsed",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "lpMinted",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "inFee",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "payable"
-  },
-  {
-    "type": "function",
-    "name": "swapToLimit",
     "inputs": [
       {
         "name": "payer",
@@ -757,24 +610,19 @@
         "internalType": "uint256"
       },
       {
-        "name": "outputTokenIndex",
+        "name": "lpAmountOut",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "limitPrice",
-        "type": "int128",
-        "internalType": "int128"
+        "name": "maxAmountIn",
+        "type": "uint256",
+        "internalType": "uint256"
       },
       {
         "name": "deadline",
         "type": "uint256",
         "internalType": "uint256"
-      },
-      {
-        "name": "unwrap",
-        "type": "bool",
-        "internalType": "bool"
       },
       {
         "name": "cbData",
@@ -789,7 +637,7 @@
         "internalType": "uint256"
       },
       {
-        "name": "amountOut",
+        "name": "lpMinted",
         "type": "uint256",
         "internalType": "uint256"
       },
@@ -1106,6 +954,25 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OwnershipTransferStarted",
+    "inputs": [
+      {
+        "name": "previousOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "newOwner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false

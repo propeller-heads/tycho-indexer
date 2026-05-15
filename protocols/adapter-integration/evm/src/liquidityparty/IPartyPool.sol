@@ -21,47 +21,20 @@ interface IPartyPool {
     /// @notice Returns the list of all token addresses in the pool (copy).
     function allTokens() external view returns (address[] memory);
 
-    /// @notice External view to quote exact-in swap amounts (gross input incl.
-    /// fee and output), matching swap() computations
-    /// @param inputTokenIndex index of input token
-    /// @param outputTokenIndex index of output token
-    /// @param maxAmountIn maximum gross input allowed (inclusive of fee)
-    /// @param limitPrice maximum acceptable marginal price (pass 0 to ignore)
-    /// @return amountIn gross input amount to transfer (includes fee),
-    /// amountOut output amount user would receive, inFee fee taken from input
-    /// amount
-    function swapAmounts(
-        uint256 inputTokenIndex,
-        uint256 outputTokenIndex,
-        uint256 maxAmountIn,
-        int128 limitPrice
-    ) external view returns (uint256 amountIn, uint256 amountOut, uint256 inFee);
-
     /// @notice Swap input token inputTokenIndex -> token outputTokenIndex.
-    /// Payer must approve token inputTokenIndex. @param payer address of the
-    /// account that pays for the swap
-    /// @param fundingSelector If set to USE_APPROVALS, then the payer must use
-    /// regular ERC20 approvals to authorize the pool to move the required input
-    /// amount. If this fundingSelector is USE_PREFUNDING, then all of the input
-    /// amount is expected to have already been sent to the pool and no
-    /// additional transfers are needed. Refunds of excess input amount are NOT
-    /// provided and it is illegal to use this funding method with a limit
-    /// price. Otherwise, for any other fundingSelector value, a callback style
-    /// funding mechanism is used where the given selector is invoked on the
-    /// payer, passing the arguments of (address inputToken, uint256
-    /// inputAmount). The callback function must send the given amount of input
-    /// coin to the pool in order to continue the swap transaction, otherwise
-    /// "Insufficient funds" is thrown. @param receiver address that will
-    /// receive the output tokens
+    /// @param payer address of the account that pays for the swap
+    /// @param fundingSelector USE_APPROVALS: payer pre-approves the pool.
+    /// USE_PREFUNDING: tokens already sent to the pool. Any other selector:
+    /// callback invoked on payer.
+    /// @param receiver address that will receive the output tokens
     /// @param inputTokenIndex index of input asset
     /// @param outputTokenIndex index of output asset
-    /// @param maxAmountIn maximum amount of token inputTokenIndex (uint256) to
-    /// transfer in (inclusive of fees) @param limitPrice maximum acceptable
-    /// marginal price (64.64 fixed point). Pass 0 to ignore.
-    /// @param deadline timestamp after which the transaction will revert. Pass
-    /// 0 to ignore. @param unwrap If true, then any output of wrapper token
-    /// will be unwrapped and native ETH sent to the receiver.
-    /// @param cbData callback data if fundingSelector is of the callback type.
+    /// @param maxAmountIn maximum gross input to transfer (inclusive of fees)
+    /// @param minAmountOut minimum output tokens to receive; reverts if not met
+    /// (0 = disabled)
+    /// @param deadline timestamp after which the call reverts; pass 0 to ignore
+    /// @param unwrap if true, native wrapper output is unwrapped
+    /// @param cbData callback data for callback-style fundingSelectors
     /// @return amountIn actual input used (uint256), amountOut actual output
     /// sent (uint256), inFee fee taken from the input (uint256)
     function swap(
@@ -71,7 +44,7 @@ interface IPartyPool {
         uint256 inputTokenIndex,
         uint256 outputTokenIndex,
         uint256 maxAmountIn,
-        int128 limitPrice,
+        uint256 minAmountOut,
         uint256 deadline,
         bool unwrap,
         bytes memory cbData
@@ -80,7 +53,7 @@ interface IPartyPool {
         payable
         returns (uint256 amountIn, uint256 amountOut, uint256 inFee);
 
-    /// @notice Effective combined fee in ppm for the given asset pair (i as
-    /// input, j as output).
-    function fee(uint256 i, uint256 j) external view returns (uint256);
+    /// @notice Per-asset swap fees in ppm. Effective pair fee for a swap
+    /// i→j is fees()[i] + fees()[j].
+    function fees() external view returns (uint256[] memory);
 }
