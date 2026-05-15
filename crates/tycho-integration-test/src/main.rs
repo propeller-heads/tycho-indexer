@@ -35,7 +35,7 @@ use tycho_simulation::{
         hashflow::{client::HashflowClient, state::HashflowState},
         liquorice::{client::LiquoriceClient, state::LiquoriceState},
     },
-    tycho_common::models::Chain,
+    tycho_common::models::{Chain, TvlThresholdTier},
     utils::load_all_tokens,
 };
 use tycho_test::{
@@ -57,9 +57,10 @@ use crate::{
 
 #[derive(Parser, Clone)]
 struct Cli {
-    /// The tvl threshold in ETH/native token units to filter the graph by
-    #[arg(long, default_value_t = 100.0)]
-    tvl_threshold: f64,
+    /// The TVL threshold in native token units to filter the graph by.
+    /// Defaults to a chain-appropriate value targeting ~$200K USD equivalent (Medium tier).
+    #[arg(long)]
+    tvl_threshold: Option<f64>,
 
     #[arg(long, default_value = "ethereum")]
     chain: Chain,
@@ -255,8 +256,11 @@ async fn main() -> miette::Result<()> {
 async fn run(cli: Cli) -> miette::Result<()> {
     info!("Starting integration test");
 
-    let cli = Arc::new(cli);
     let chain = cli.chain;
+    let tvl_threshold = cli
+        .tvl_threshold
+        .unwrap_or_else(|| chain.default_tvl_threshold(TvlThresholdTier::Medium));
+    let cli = Arc::new(cli);
 
     let rpc_tools = tycho_test::RPCTools::new(&cli.rpc_url, &chain).await?;
 
@@ -288,7 +292,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
             chain,
             cli.tycho_url.clone(),
             cli.tycho_api_key.clone(),
-            cli.tvl_threshold,
+            tvl_threshold,
             cli.tvl_buffer_ratio,
             cli.protocols.clone(),
             cli.partial_blocks,
@@ -303,7 +307,7 @@ async fn run(cli: Cli) -> miette::Result<()> {
     if !cli.disable_rfq {
         if let Ok(rfq_stream_processor) = RFQStreamProcessor::new(
             chain,
-            cli.tvl_threshold,
+            tvl_threshold,
             cli.max_simulations as usize,
             Duration::from_secs(cli.skip_messages_duration),
         ) {
