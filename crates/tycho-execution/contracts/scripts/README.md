@@ -47,6 +47,12 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
 
 `ROUTER_FEE_SETTER` receives `ROUTER_FEE_SETTER_ROLE` to manage fee configuration.
 
+### Deploy executors
+
+1. In `scripts/deploy-executors.js` define the executors to be deployed
+2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network NETWORK`
+3. Fill in the executor addresses in `config/executor_addresses.json`
+
 ### Deploy Router
 
 1. Define the accounts to grant roles to in `scripts/roles.json`. For each role, the first address
@@ -56,15 +62,11 @@ The FeeCalculator must be deployed **before** the TychoRouter, as the router req
    export FEE_CALCULATOR=<fee-calculator-address-from-previous-step>
    ```
 3. Deploy router: `npx hardhat run scripts/deploy-router.js --network NETWORK`
-4. Set executors: submit the transaction directly via the safe wallet UI.
+
+Via the safe wallet UI:
+4. Set the executors addresses
 5. Set fee amounts and router fee receiver in FeeCalculator
-
-### Deploy executors
-
-1. In `scripts/deploy-executors.js` define the executors to be deployed
-2. Deploy executors: `npx hardhat run scripts/deploy-executors.js --network NETWORK`
-3. Fill in the executor addresses in `config/executor_addresses.json`
-
+6. Set the pauser wallets
 
 ### Revoke roles
 

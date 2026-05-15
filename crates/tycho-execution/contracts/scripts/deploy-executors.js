@@ -72,7 +72,6 @@ const executors_to_deploy = {
         {
             exchange: "WethExecutor", args: ["0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"]
         },
-
         // Args: Liquorice settlement, Liquorice balance manager
         {
             exchange: "LiquoriceExecutor", args: [
