@@ -137,9 +137,13 @@ abstract contract Vault is ERC6909, ReentrancyGuard, Pausable {
             require(msg.value == amount, "Value mismatch");
             _mint(msg.sender, id, amount);
         } else {
-            // ERC20 deposit - transfer to this contract (router)
-            _mint(msg.sender, id, amount);
+            // ERC20 deposit - transfer to this contract and measure actual received
+            // amount to handle  fee-on-transfer and rebasing tokens
+            uint256 balanceBefore = IERC20(token).balanceOf(address(this));
             IERC20(token).safeTransferFrom(msg.sender, address(this), amount);
+            uint256 received =
+                IERC20(token).balanceOf(address(this)) - balanceBefore;
+            _mint(msg.sender, id, received);
         }
     }
 
