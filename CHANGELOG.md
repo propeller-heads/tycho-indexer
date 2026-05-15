@@ -1,3 +1,12 @@
+## [0.291.4](https://github.com/propeller-heads/tycho-indexer/compare/0.291.3...0.291.4) (2026-05-15)
+
+
+### Bug Fixes
+
+* **integration-test:** improve integration test stability and protocol state metrics ([#1017](https://github.com/propeller-heads/tycho-indexer/issues/1017)) ([fbe58b1](https://github.com/propeller-heads/tycho-indexer/commit/fbe58b12036d4e1003adfb4956c86144fa40572a))
+* **integration:** emit sync state 7 (Skipped) when RPC block is ahead of update block ([40fe540](https://github.com/propeller-heads/tycho-indexer/commit/40fe540ae81ef8f1101889dbf275bbd4805594ff))
+* **integration:** set infinite WebSocket reconnect retries on protocol stream ([8d8d5b9](https://github.com/propeller-heads/tycho-indexer/commit/8d8d5b96413beaaa90020325291fbf1aed15b70a))
+
 ## [0.291.3](https://github.com/propeller-heads/tycho-indexer/compare/0.291.2...0.291.3) (2026-05-14)
 
 
