@@ -162,6 +162,11 @@ struct Cli {
     /// Seconds without a protocol update before marking all known protocols as stale in metrics.
     #[arg(long, default_value_t = 30)]
     stale_threshold_secs: u64,
+
+    /// Disable on-chain swap execution via Tenderly (simulation only, no execution validation).
+    /// Useful for diagnosing stream latency without Tenderly congestion.
+    #[arg(long, default_value_t = false)]
+    disable_execution: bool,
 }
 
 impl Debug for Cli {
@@ -864,6 +869,10 @@ async fn process_update(
 
     if block_execution_info.is_empty() {
         warn!("No simulations were gathered for block {}", block.number());
+        return Ok(());
+    }
+
+    if cli.disable_execution {
         return Ok(());
     }
 
