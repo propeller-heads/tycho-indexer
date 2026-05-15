@@ -690,6 +690,9 @@ async fn process_update(
                     metrics::record_block_processing_duration(latency_seconds, block_type);
                 }
                 metrics::record_protocol_update_skipped();
+                for protocol in update.update.sync_states.keys() {
+                    metrics::record_protocol_sync_state_skipped(protocol);
+                }
                 return Ok(());
             }
             BlockPollResult::Timeout => {
@@ -1398,12 +1401,18 @@ fn process_execution_result(
 
             metrics::record_execution_slippage(&execution_info.protocol_system, slippage);
 
-            if let Some(estimated) = execution_info.estimated_gas.to_f64() {
-                let actual = *gas_used as f64;
+            let estimated_gas = execution_info.estimated_gas.clone();
+
+            if let Some(estimated) = estimated_gas.to_f64() {
                 metrics::record_gas_signed_error_ratio(
                     &execution_info.protocol_system,
                     estimated,
-                    actual,
+                    *gas_used as f64,
+                );
+                metrics::record_gas_signed_error_absolute(
+                    &execution_info.protocol_system,
+                    estimated,
+                    *gas_used as f64,
                 );
             }
 

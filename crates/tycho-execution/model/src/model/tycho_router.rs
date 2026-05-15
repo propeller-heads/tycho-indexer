@@ -88,7 +88,7 @@ pub fn split_swap_permit2(
     n_tokens: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    if token_in != Address::Zero {
+    if token_in != Address::NativeETH {
         state.permit2_permit(state.msg_sender());
     }
     _tstore_transfer_from_info(state, token_in, amount_in, true, false);
@@ -174,7 +174,7 @@ pub fn sequential_swap_permit2(
     min_amount_out: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    if token_in != Address::Zero {
+    if token_in != Address::NativeETH {
         state.permit2_permit(state.msg_sender());
     }
     _tstore_transfer_from_info(state, token_in, amount_in, true, false);
@@ -263,7 +263,7 @@ pub fn single_swap_permit2(
     min_amount_out: i64,
     receiver: Address,
 ) -> Result<(), Error> {
-    if token_in != Address::Zero {
+    if token_in != Address::NativeETH {
         state.permit2_permit(state.msg_sender());
     }
     _tstore_transfer_from_info(state, token_in, amount_in, true, false);
@@ -698,9 +698,9 @@ fn _update_native_delta_accounting(
             return Err(Error::revert("update_native_delta_accounting: msg_value != amount_in"));
         }
         state.eth_send_value(Address::Sender, Address::Router, msg_value)?;
-        vault._update_delta_accounting(Address::Zero, msg_value);
+        vault._update_delta_accounting(Address::NativeETH, msg_value);
         log.append(Event::UpdateDeltaAccounting {
-            token: Address::Zero,
+            token: Address::NativeETH,
             delta_change: msg_value,
             nonzero_delta_count_after: vault._get_nonzero_delta_count(),
             context_hint: "_update_native_delta_accounting: msg_value > 0",
@@ -757,7 +757,7 @@ fn _maybe_add_client_contribution(
                     amount: required_contribution,
                     context_hint: "_maybe_add_client_contribution: amount_out < min_amount_out && output_delta == 0 && receiver == Address::Router",
                 });
-            } else if token_out == Address::Zero {
+            } else if token_out == Address::NativeETH {
                 state.eth_send_value(Address::Router, receiver, required_contribution)?;
                 log.append(Event::EthSendValue {
                     sender: Address::Router,

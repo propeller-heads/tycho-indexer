@@ -2,7 +2,10 @@ use std::{collections::HashMap, str::FromStr};
 
 use alloy::{hex::encode, primitives::Address, sol_types::SolValue};
 use num_bigint::{BigInt, BigUint};
-use tycho_common::{models::protocol::ProtocolComponent, Bytes};
+use tycho_common::{
+    models::{protocol::ProtocolComponent, Chain},
+    Bytes,
+};
 use tycho_execution::encoding::{
     evm::{
         approvals::protocol_approvals_manager::ProtocolApprovalsManager,
@@ -67,7 +70,7 @@ fn test_evm_sequential_swap_usx() {
         default_token(usdt.clone()),
         BigUint::ZERO,
     );
-    let encoder = get_tycho_router_encoder();
+    let encoder = get_tycho_router_encoder(Chain::Ethereum);
 
     let solution = Solution::new(
         filler.clone(),

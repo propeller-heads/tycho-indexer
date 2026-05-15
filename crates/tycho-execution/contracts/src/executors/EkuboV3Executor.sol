@@ -24,6 +24,7 @@ import {
     MAX_SQRT_RATIO
 } from "@ekubo-v3/types/sqrtRatio.sol";
 import {TransferManager} from "../TransferManager.sol";
+import {ETH_ADDRESS} from "../../lib/NativeETH.sol";
 import {PoolKey} from "@ekubo-v3/types/poolKey.sol";
 import {PoolConfig} from "@ekubo-v3/types/poolConfig.sol";
 import {NATIVE_TOKEN_ADDRESS} from "@ekubo-v3/math/constants.sol";
@@ -107,6 +108,9 @@ contract EkuboV3Executor is IExecutor, ICallback {
         if (data.length < 72) revert EkuboV3Executor__InvalidDataLength();
 
         address tokenIn = address(bytes20(data[0:20]));
+        // Swap data uses ETH_ADDRESS for native ETH; translate to
+        // address(0) for Ekubo V3 protocol interaction.
+        if (tokenIn == ETH_ADDRESS) tokenIn = address(0);
         // startPayments needs to be called in CORE before we transfer the token IN (which happens during callback)
         // slither-disable-next-line unused-return
         LibCall.callContract(
@@ -155,7 +159,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
     {
         receiver = CORE_ADDRESS;
 
-        if (tokenIn == NATIVE_TOKEN_ADDRESS) {
+        if (tokenIn == ETH_ADDRESS) {
             // Native ETH: Dispatcher updates delta accounting; actual transfer
             // happens inside _pay() via safeTransferETH.
             transferType = TransferManager.TransferType.TransferNativeInExecutor;
@@ -169,6 +173,9 @@ contract EkuboV3Executor is IExecutor, ICallback {
         int128 nextAmountIn = int128(amountIn);
         address receiver = address(bytes20(swapData[16:36]));
         address tokenIn = address(bytes20(swapData[36:56]));
+        // Swap data uses ETH_ADDRESS for native ETH; translate to
+        // address(0) for Ekubo V3 protocol interaction.
+        if (tokenIn == ETH_ADDRESS) tokenIn = address(0);
         address nextTokenOut = address(0);
 
         address nextTokenIn = tokenIn;
@@ -181,6 +188,7 @@ contract EkuboV3Executor is IExecutor, ICallback {
         for (uint256 i = 0; i < hopsLength; i++) {
             nextTokenOut =
                 address(bytes20(LibBytes.loadCalldata(swapData, offset)));
+            if (nextTokenOut == ETH_ADDRESS) nextTokenOut = address(0);
             PoolConfig poolConfig =
                 PoolConfig.wrap(LibBytes.loadCalldata(swapData, offset + 20));
 

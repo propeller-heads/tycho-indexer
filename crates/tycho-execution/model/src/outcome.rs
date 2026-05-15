@@ -54,7 +54,8 @@ impl<T: Log> Outcome<T> {
     fn sender_vault_eth_change(&self) -> i64 {
         let mut total = 0;
         for ((owner, token), balance) in &self.vault.owner_and_token_to_balance {
-            if owner.is_sender_controlled() && (*token == Address::Zero || *token == Address::WETH)
+            if owner.is_sender_controlled() &&
+                (*token == Address::NativeETH || *token == Address::WETH)
             {
                 total += balance;
             }
@@ -115,7 +116,7 @@ impl<T: Log> Outcome<T> {
                 // TODO if you introduce other value holding erc20 tokens,
                 // make sure to add code for them here and introduce
                 // some fixed conversion rate to eth
-                if *token == Address::Zero || *token == Address::WETH {
+                if *token == Address::NativeETH || *token == Address::WETH {
                     total_eth += balance;
                 }
             }

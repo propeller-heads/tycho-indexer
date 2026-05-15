@@ -60,6 +60,15 @@ pub enum Chain {
     Polygon,
 }
 
+pub use models::TvlThresholdTier;
+
+impl Chain {
+    /// Returns a default TVL threshold in native token units for the given tier.
+    pub fn default_tvl_threshold(&self, tier: TvlThresholdTier) -> f64 {
+        models::Chain::from(*self).default_tvl_threshold(tier)
+    }
+}
+
 impl From<models::contract::Account> for ResponseAccount {
     fn from(value: models::contract::Account) -> Self {
         ResponseAccount::new(

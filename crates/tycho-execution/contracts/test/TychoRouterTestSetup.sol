@@ -197,7 +197,7 @@ contract TychoRouterTestSetup is
         pancakev3Executor = new UniswapV3Executor();
         balancerv2Executor = new BalancerV2Executor();
         ekuboExecutor = new EkuboExecutor(ekuboCore, ekuboMevResist);
-        curveExecutor = new CurveExecutor(ETH_ADDR_FOR_CURVE, STETH_ADDR);
+        curveExecutor = new CurveExecutor(ETH_ADDR, STETH_ADDR);
         maverickv2Executor = new MaverickV2Executor();
         balancerV3Executor = new BalancerV3Executor();
         bebopExecutor = new BebopExecutor(BEBOP_SETTLEMENT);
@@ -209,7 +209,7 @@ contract TychoRouterTestSetup is
         wethExecutor = new WethExecutor(WETH_ADDR);
         ekuboV3Executor = new EkuboV3Executor();
         etherfiExecutor = new EtherfiExecutor(
-            ETH_ADDR_FOR_CURVE,
+            ETH_ADDR,
             EETH_ADDR,
             LIQUIDITY_POOL_ADDR,
             WEETH_ADDR,

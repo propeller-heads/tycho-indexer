@@ -19,11 +19,13 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
     {
         // swapData layout in msg.data: selector(4) | id(32) | amountIn(16) | receiver(20) | tokenIn(20) | ...
         // tokenIn starts at byte 72 (4 + 32 + 16 + 20 = 72)
+        // Swap data already uses ETH_ADDRESS for native ETH;
+        // getTransferData returns it as-is.
         address tokenIn = address(bytes20(msg.data[72:92]));
 
         (TransferManager.TransferType transferType, address receiver) =
             this.getCallbackTransferData(msg.data, tokenIn, msg.sender);
-        if (tokenIn == address(0)) {
+        if (tokenIn == ETH_ADDRESS) {
             assert(
                 transferType
                     == TransferManager.TransferType.TransferNativeInExecutor
@@ -33,7 +35,7 @@ contract EkuboV3ExecutorStandalone is EkuboV3Executor, ILocker {
         }
         uint256 amount = uint128(bytes16(msg.data[36:52]));
 
-        if (tokenIn != address(0)) {
+        if (tokenIn != ETH_ADDRESS) {
             IERC20(tokenIn).transfer(receiver, amount);
         }
         bytes memory res = handleCallback(msg.data);
@@ -82,7 +84,7 @@ contract EkuboV3ExecutorTest is Constants, TestUtils {
         uint256 usdcBalanceBeforeExecutor = USDC.balanceOf(address(executor));
 
         bytes memory data = abi.encodePacked(
-            address(0), // tokenIn (native ETH = address(0))
+            ETH_ADDRESS, // tokenIn
             USDC_ADDR, // tokenOut
             ORACLE_CONFIG // poolConfig
         );
@@ -113,7 +115,7 @@ contract EkuboV3ExecutorTest is Constants, TestUtils {
 
         bytes memory data = abi.encodePacked(
             USDC_ADDR, // tokenIn
-            address(0), // tokenOut (native ETH = address(0))
+            ETH_ADDRESS, // tokenOut
             ORACLE_CONFIG // config
         );
 

@@ -80,7 +80,7 @@ contract WethExecutorTest is TestUtils, Constants {
             uint8(TransferManager.TransferType.TransferNativeInExecutor)
         );
         assertEq(receiver, address(this));
-        assertEq(tokenIn, address(0));
+        assertEq(tokenIn, ETH_ADDR);
         assertEq(tokenOut, WETH_ADDR);
         assertEq(outputToRouter, true);
     }
@@ -104,7 +104,7 @@ contract WethExecutorTest is TestUtils, Constants {
         );
         assertEq(receiver, address(this));
         assertEq(tokenIn, WETH_ADDR);
-        assertEq(tokenOut, address(0));
+        assertEq(tokenOut, ETH_ADDR);
         assertEq(outputToRouter, true);
     }
 

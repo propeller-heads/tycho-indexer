@@ -38,6 +38,11 @@ use crate::evm::protocol::{
     },
 };
 
+// The names of the constants reflect the exact method from the tenderly log.
+const TICK_CROSSING_GAS_COST: i32 = 25_000;
+// nextInitializedTickWithinOneWord +  computeSwapStep + calculateFees
+const LOOP_GAS_COST: i32 = 10_000;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AerodromeSlipstreamsState {
     id: String,
@@ -234,12 +239,13 @@ impl AerodromeSlipstreamsState {
                     let liquidity_net = if zero_for_one { -liquidity_raw } else { liquidity_raw };
                     state.liquidity =
                         liquidity_math::add_liquidity_delta(state.liquidity, liquidity_net)?;
+                    gas_used = safe_add_u256(gas_used, U256::from(TICK_CROSSING_GAS_COST))?;
                 }
                 state.tick = if zero_for_one { step.tick_next - 1 } else { step.tick_next };
             } else if state.sqrt_price != step.sqrt_price_start {
                 state.tick = get_tick_at_sqrt_ratio(state.sqrt_price)?;
             }
-            gas_used = safe_add_u256(gas_used, U256::from(2000))?;
+            gas_used = safe_add_u256(gas_used, U256::from(LOOP_GAS_COST))?;
         }
         Ok(SwapResults {
             amount_calculated: state.amount_calculated,
