@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { ethers } = require("hardhat");
+const {ethers} = require("hardhat");
 const hre = require("hardhat");
 const roles = require("./roles.json");
 
@@ -24,6 +24,9 @@ async function main() {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
     } else if (network === "unichain") {
+        // permit2 address is the same as on ethereum
+        permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+    } else if (network === "arbitrum") {
         // permit2 address is the same as on ethereum
         permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
     } else {

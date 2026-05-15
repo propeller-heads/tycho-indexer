@@ -55,6 +55,11 @@ module.exports = {
             url: process.env.RPC_URL,
             accounts: [process.env.PRIVATE_KEY],
             chainId: 130
+        },
+        arbitrum: {
+            url: process.env.RPC_URL,
+            accounts: [process.env.PRIVATE_KEY],
+            chainId: 42161
         }
     },
 

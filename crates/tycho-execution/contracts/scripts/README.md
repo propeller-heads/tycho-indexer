@@ -36,6 +36,7 @@ For each of the following, you must select one of `tenderly_ethereum`, `tenderly
 `ethereum`, `base`, or `unichain` as the network.
 
 ### Deploy FeeCalculator
+
 The FeeCalculator must be deployed **before** the TychoRouter, as the router requires its address.
 
 1. Set the fee setter address:
@@ -67,7 +68,6 @@ Via the safe wallet UI:
 4. Set the executors addresses
 5. Set fee amounts and router fee receiver in FeeCalculator
 6. Set the pauser wallets
-
 ### Revoke roles
 
 1. If you wish to revoke a role for a certain address, run: `npx hardhat run scripts/revoke-role.js --network NETWORK`
