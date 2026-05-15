@@ -1,3 +1,79 @@
+## [0.292.0](https://github.com/propeller-heads/tycho-indexer/compare/0.291.4...0.292.0) (2026-05-15)
+
+
+### Features
+
+* add BSC default URL configuration in get_default_url function ([87b09cb](https://github.com/propeller-heads/tycho-indexer/commit/87b09cb34b984e86d72ad0e7d8742d39410a0e9e))
+* add BSC stream config for examples and integration tests ([e9e7a3c](https://github.com/propeller-heads/tycho-indexer/commit/e9e7a3ce2264720758b6dc34b3a18f7fd9a68bff))
+* add BSC stream config for examples and integration tests ([#1016](https://github.com/propeller-heads/tycho-indexer/issues/1016)) ([95b9ef2](https://github.com/propeller-heads/tycho-indexer/commit/95b9ef2bdae4a78085a950be16fdd36585421160))
+
+## [0.291.4](https://github.com/propeller-heads/tycho-indexer/compare/0.291.3...0.291.4) (2026-05-15)
+
+
+### Bug Fixes
+
+* **integration-test:** improve integration test stability and protocol state metrics ([#1017](https://github.com/propeller-heads/tycho-indexer/issues/1017)) ([fbe58b1](https://github.com/propeller-heads/tycho-indexer/commit/fbe58b12036d4e1003adfb4956c86144fa40572a))
+* **integration:** emit sync state 7 (Skipped) when RPC block is ahead of update block ([40fe540](https://github.com/propeller-heads/tycho-indexer/commit/40fe540ae81ef8f1101889dbf275bbd4805594ff))
+* **integration:** set infinite WebSocket reconnect retries on protocol stream ([8d8d5b9](https://github.com/propeller-heads/tycho-indexer/commit/8d8d5b96413beaaa90020325291fbf1aed15b70a))
+
+## [0.291.3](https://github.com/propeller-heads/tycho-indexer/compare/0.291.2...0.291.3) (2026-05-14)
+
+
+### Bug Fixes
+
+* **router v3:** Account for final transfer in slippage check ([0476e7f](https://github.com/propeller-heads/tycho-indexer/commit/0476e7f255a54c208d99f46e68df466de6337d00))
+* **router v3:** Account for final transfer in slippage check ([#1015](https://github.com/propeller-heads/tycho-indexer/issues/1015)) ([2b4bc93](https://github.com/propeller-heads/tycho-indexer/commit/2b4bc938a76f92a5f2514aa8eaaba514dda1045b))
+
+## [0.291.2](https://github.com/propeller-heads/tycho-indexer/compare/0.291.1...0.291.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* **router v3:** Vault deposits for fee tokens ([d9efb9d](https://github.com/propeller-heads/tycho-indexer/commit/d9efb9da17aaa0fb22fd1deeb0caf01f140e7c5f))
+* **router v3:** Vault deposits for fee tokens ([#1014](https://github.com/propeller-heads/tycho-indexer/issues/1014)) ([b5b7873](https://github.com/propeller-heads/tycho-indexer/commit/b5b7873d203a8a342ea9c62b3d8010a39ccc942b))
+
+## [0.291.1](https://github.com/propeller-heads/tycho-indexer/compare/0.291.0...0.291.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **deps:** upgrade diesel to 2.3.9 to resolve RUSTSEC-2026-0136 and RUSTSEC-2026-0137 ([a280cb5](https://github.com/propeller-heads/tycho-indexer/commit/a280cb5dbbb45d21e8c6c12373f2b94b062efe62))
+* **deps:** upgrade diesel to 2.3.9 to resolve RUSTSEC-2026-0136 and RUSTSEC-2026-0137 ([#1012](https://github.com/propeller-heads/tycho-indexer/issues/1012)) ([72e75fc](https://github.com/propeller-heads/tycho-indexer/commit/72e75fcf5ab3b1690b8c05b866228071d7c337f1))
+
+## [0.291.0](https://github.com/propeller-heads/tycho-indexer/compare/0.290.0...0.291.0) (2026-05-13)
+
+
+### Features
+
+* tune protocol gas estimates based on tenderly traces ([8f649db](https://github.com/propeller-heads/tycho-indexer/commit/8f649db02a5cd047065ac9bf6b66af30b2722ff6))
+
+
+### Bug Fixes
+
+* calibrate protocol specific gas costs ([#977](https://github.com/propeller-heads/tycho-indexer/issues/977)) ([f9c7c4f](https://github.com/propeller-heads/tycho-indexer/commit/f9c7c4fdd90064d28846c9013f57acb40eecce74))
+
+## [0.290.0](https://github.com/propeller-heads/tycho-indexer/compare/0.289.2...0.290.0) (2026-05-13)
+
+
+### Features
+
+* **common:** Add chain-aware TVL default thresholds ([3efe875](https://github.com/propeller-heads/tycho-indexer/commit/3efe87569cdab2639899e7e2a7f80de6ed938e2f))
+* **common:** Add chain-aware TVL default thresholds ([#1008](https://github.com/propeller-heads/tycho-indexer/issues/1008)) ([f956e3f](https://github.com/propeller-heads/tycho-indexer/commit/f956e3fd0c55058ba1022a8c776fa64cf389999b))
+
+
+### Performance Improvements
+
+* Check for cli TVL only if needed ([7987192](https://github.com/propeller-heads/tycho-indexer/commit/79871925d38a22566ae7a04dca83b2133f1206e5))
+
+## [0.289.2](https://github.com/propeller-heads/tycho-indexer/compare/0.289.1...0.289.2) (2026-05-13)
+
+## [0.289.1](https://github.com/propeller-heads/tycho-indexer/compare/0.289.0...0.289.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* **tycho-execution:** add missing alloy sol-types dependency feature ([f121a91](https://github.com/propeller-heads/tycho-indexer/commit/f121a91af9ee120a353b84a08880d9ce34f79833))
+
 ## [0.289.0](https://github.com/propeller-heads/tycho-indexer/compare/0.288.3...0.289.0) (2026-05-11)
 
 

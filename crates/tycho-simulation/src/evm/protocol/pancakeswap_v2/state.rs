@@ -83,7 +83,7 @@ impl ProtocolSim for PancakeswapV2State {
         };
         Ok(GetAmountOutResult::new(
             u256_to_biguint(amount_out),
-            BigUint::from(120_000u32),
+            BigUint::from(70_000u32),
             Box::new(new_state),
         ))
     }

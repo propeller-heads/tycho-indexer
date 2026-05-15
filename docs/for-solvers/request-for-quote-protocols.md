@@ -21,7 +21,7 @@ Currently, Tycho supports the following RFQ protocols:
 
 The RFQ quickstart is similar to the other protocols [quickstart](../).
 
-See the code [here](https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples/rfq_quickstart). As of now, [Bebop](https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro), [Hashflow](https://docs.hashflow.com/hashflow/taker/getting-started-api-v3) and [Liquorice](https://liquorice.tech/) are the only supported providers.
+See the code <a href="https://github.com/propeller-heads/tycho-indexer/tree/main/crates/tycho-simulation/examples/rfq_quickstart" target="_blank" rel="noopener noreferrer">here</a>. As of now, <a href="https://docs.bebop.xyz/bebop/bebop-api-pmm-rfq/pmm-rfq-api-intro" target="_blank" rel="noopener noreferrer">Bebop</a>, <a href="https://docs.hashflow.com/hashflow/taker/getting-started-api-v3" target="_blank" rel="noopener noreferrer">Hashflow</a> and <a href="https://liquorice.tech/" target="_blank" rel="noopener noreferrer">Liquorice</a> are the only supported providers.
 
 You need to set up the API credentials of the desired RFQs to access live pricing data and quoting, as well as your private key if you wish to execute against the Tycho Router:
 
