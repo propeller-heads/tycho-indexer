@@ -161,6 +161,22 @@ const executors_to_deploy = {
             ]
         },
     ],
+    "bsc": [
+        // USV2 - Args: Fee BPS
+        { exchange: "UniswapV2Executor", args: [30] },
+        // PANCAKESWAP V2 - Args: Fee BPS
+        { exchange: "UniswapV2Executor", args: [25] },
+        // USV3 & PANCAKESWAP V3 - Args: (none)
+        { exchange: "UniswapV3Executor", args: [] },
+        // USV4 - Args: Pool manager, Angstrom hook
+        {
+            exchange: "UniswapV4Executor", args: [
+                "	0x28e2ea090877bf75740558f6bfb36a5ffee9e9df",
+                // This is the Angstrom address for ethereum. There isn't one for BSC
+                "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
+            ]
+        },
+    ],
 }
 
 async function main() {
