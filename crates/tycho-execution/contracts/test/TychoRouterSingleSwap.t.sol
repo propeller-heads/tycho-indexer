@@ -651,8 +651,9 @@ contract TychoRouterSingleSwapFeeTokenTest is TychoRouterTestSetup {
             hook: address(0),
             hookData: new bytes(0)
         });
-        bytes memory protocolData =
-            UniswapV4Utils.encodeExactInput(USDC_ADDR, TWIF, false, pools);
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR, TWIF, false, false, pools
+        );
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);
 
@@ -726,8 +727,9 @@ contract TychoRouterSingleSwapFeeTokenTest is TychoRouterTestSetup {
             hook: address(0),
             hookData: new bytes(0)
         });
-        bytes memory protocolData =
-            UniswapV4Utils.encodeExactInput(USDC_ADDR, TWIF, false, pools);
+        bytes memory protocolData = UniswapV4Utils.encodeExactInput(
+            USDC_ADDR, TWIF, false, false, pools
+        );
         bytes memory swap =
             encodeSingleSwap(address(usv4Executor), protocolData);
 

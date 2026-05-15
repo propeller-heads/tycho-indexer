@@ -480,13 +480,14 @@ fn test_evm_single_encoding_strategy_usv4_grouped_swap() {
 
     let expected_swaps = String::from(concat!(
         // length of ple encoded swaps without padding
-        "000000000000000000000000000000000000000000000000000000000000009f",
+        "00000000000000000000000000000000000000000000000000000000000000a0",
         // Swap data header
         "f62849f9a0b5bf2913b396098f7c7019b51a820a", // executor address
         // Protocol data
         "a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", // group token in
         "6982508145454ce325ddbe47a25d4ec3d2311933", // group token out
         "00",                                       // zero2one
+        "00",                                       // skip unlock
         // First pool params
         "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", // intermediary token (ETH_ADDRESS)
         "000bb8",                                   // fee
@@ -501,7 +502,6 @@ fn test_evm_single_encoding_strategy_usv4_grouped_swap() {
         "0001f4",                                   // tick spacing
         "0000000000000000000000000000000000000000", // hook address
         "0000",                                     // hook data length
-        "00",                                       // padding to 32-byte boundary
     ));
 
     let hex_calldata = encode(&calldata);
