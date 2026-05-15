@@ -131,6 +131,23 @@ const executors_to_deploy = {
             exchange: "WethExecutor", args: ["0x4200000000000000000000000000000000000006"]
         },
     ],
+    "arbitrum": [
+        // USV2 - Args: Fee BPS
+        { exchange: "UniswapV2Executor", args: [30] },
+        // USV3 - Args: (none)
+        { exchange: "UniswapV3Executor", args: [] },
+        // USV4 - Args: Pool manager, Angstrom hook
+        {
+            exchange: "UniswapV4Executor", args: [
+                "0x360e68faccca8ca495c1b759fd9eee466db9fb32",
+                // This is the Angstrom address for ethereum. There isn't one for
+                // arbitrum
+                "0x0000000aa232009084Bd71A5797d089AA4Edfad4"
+            ]
+        },
+        // PANCAKESWAP V3 - Args: (none)
+        { exchange: "UniswapV3Executor", args: [] },
+    ],
 }
 
 async function main() {
