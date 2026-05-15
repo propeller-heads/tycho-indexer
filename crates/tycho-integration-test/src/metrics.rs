@@ -50,7 +50,8 @@ pub fn initialize_metrics() {
     );
     describe_gauge!(
         "tycho_integration_protocol_sync_state",
-        "Current synchronization state per protocol (1=Started, 2=Ready, 3=Delayed, 4=Stale, 5=Advanced, 6=Ended)"
+        "Current synchronization state per protocol (1=Started, 2=Ready, 3=Delayed, 4=Stale, \
+         5=Advanced, 6=Ended, 7=Skipped — Tycho reported Ready but RPC block was ahead)"
     );
     describe_counter!(
         "tycho_integration_protocol_updates_skipped_total",
@@ -184,6 +185,18 @@ pub fn record_protocol_sync_state(protocol: &str, sync_state: &SynchronizerState
         "protocol" => protocol.to_string()
     )
     .set(state_value);
+}
+
+/// Record that an update was skipped because the RPC block was ahead of the update block.
+///
+/// The protocol's `SynchronizerState` may report Ready in this case — the lag is only
+/// observable by comparing the update block against the RPC's latest block.
+pub fn record_protocol_sync_state_skipped(protocol: &str) {
+    gauge!(
+        "tycho_integration_protocol_sync_state",
+        "protocol" => protocol.to_string()
+    )
+    .set(7.0);
 }
 
 /// Explicitly mark a protocol as stale when no update has been received within the expected window.

@@ -690,6 +690,9 @@ async fn process_update(
                     metrics::record_block_processing_duration(latency_seconds, block_type);
                 }
                 metrics::record_protocol_update_skipped();
+                for protocol in update.update.sync_states.keys() {
+                    metrics::record_protocol_sync_state_skipped(protocol);
+                }
                 return Ok(());
             }
             BlockPollResult::Timeout => {
