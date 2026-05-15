@@ -1,3 +1,12 @@
+## [0.292.0](https://github.com/propeller-heads/tycho-indexer/compare/0.291.4...0.292.0) (2026-05-15)
+
+
+### Features
+
+* add BSC default URL configuration in get_default_url function ([87b09cb](https://github.com/propeller-heads/tycho-indexer/commit/87b09cb34b984e86d72ad0e7d8742d39410a0e9e))
+* add BSC stream config for examples and integration tests ([e9e7a3c](https://github.com/propeller-heads/tycho-indexer/commit/e9e7a3ce2264720758b6dc34b3a18f7fd9a68bff))
+* add BSC stream config for examples and integration tests ([#1016](https://github.com/propeller-heads/tycho-indexer/issues/1016)) ([95b9ef2](https://github.com/propeller-heads/tycho-indexer/commit/95b9ef2bdae4a78085a950be16fdd36585421160))
+
 ## [0.291.4](https://github.com/propeller-heads/tycho-indexer/compare/0.291.3...0.291.4) (2026-05-15)
 
 
