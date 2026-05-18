@@ -1,3 +1,12 @@
+## [0.295.0](https://github.com/propeller-heads/tycho-indexer/compare/0.294.0...0.295.0) (2026-05-18)
+
+
+### Features
+
+* add SwapEncoderRegistry::new_with_defaults and update docs ([edfffa8](https://github.com/propeller-heads/tycho-indexer/commit/edfffa8f1730193fe4f6073e09e86c525f7700cc))
+* **encoding:** add ClientFeeParams struct with into_abi_params conversion ([e02e368](https://github.com/propeller-heads/tycho-indexer/commit/e02e3685918f7d5e74bcd24bca174fab34388b4f))
+* **tycho-executor:** extend interface for convenience ([#1001](https://github.com/propeller-heads/tycho-indexer/issues/1001)) ([5b562d1](https://github.com/propeller-heads/tycho-indexer/commit/5b562d1e0895fcfa02778ca70add8c83c8e65a75))
+
 ## [0.294.0](https://github.com/propeller-heads/tycho-indexer/compare/0.293.0...0.294.0) (2026-05-18)
 
 
