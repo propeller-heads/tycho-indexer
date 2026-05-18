@@ -1,3 +1,36 @@
+## [0.293.0](https://github.com/propeller-heads/tycho-indexer/compare/0.292.0...0.293.0) (2026-05-15)
+
+
+### Features
+
+* (WIP) enable sequential unlocked USV4 swaps ([079ebf2](https://github.com/propeller-heads/tycho-indexer/commit/079ebf2a1674a52143bd52203b4f074290a2ba1b))
+* **UniV4 execution:** Allow swap when already unlocked ([5add52a](https://github.com/propeller-heads/tycho-indexer/commit/5add52ae49ced60a3d19183f5cc74e386a7cdfbb))
+* **UniV4 execution:** Allow swap when already unlocked ([#1009](https://github.com/propeller-heads/tycho-indexer/issues/1009)) ([339d1f4](https://github.com/propeller-heads/tycho-indexer/commit/339d1f42df1ae3857116e46b3784d0e277eebde8))
+
+
+### Bug Fixes
+
+* **UniV4:** Decode user_data as typed JSON struct ([be0ab7e](https://github.com/propeller-heads/tycho-indexer/commit/be0ab7e8bb528fea663e27e04d2120f6e112f7e7))
+* **univ4:** Fixes after merge with main ([47bf018](https://github.com/propeller-heads/tycho-indexer/commit/47bf018054b7eb26fe423a2ccb106c6640cfd018))
+
+## [0.292.0](https://github.com/propeller-heads/tycho-indexer/compare/0.291.4...0.292.0) (2026-05-15)
+
+
+### Features
+
+* add BSC default URL configuration in get_default_url function ([87b09cb](https://github.com/propeller-heads/tycho-indexer/commit/87b09cb34b984e86d72ad0e7d8742d39410a0e9e))
+* add BSC stream config for examples and integration tests ([e9e7a3c](https://github.com/propeller-heads/tycho-indexer/commit/e9e7a3ce2264720758b6dc34b3a18f7fd9a68bff))
+* add BSC stream config for examples and integration tests ([#1016](https://github.com/propeller-heads/tycho-indexer/issues/1016)) ([95b9ef2](https://github.com/propeller-heads/tycho-indexer/commit/95b9ef2bdae4a78085a950be16fdd36585421160))
+
+## [0.291.4](https://github.com/propeller-heads/tycho-indexer/compare/0.291.3...0.291.4) (2026-05-15)
+
+
+### Bug Fixes
+
+* **integration-test:** improve integration test stability and protocol state metrics ([#1017](https://github.com/propeller-heads/tycho-indexer/issues/1017)) ([fbe58b1](https://github.com/propeller-heads/tycho-indexer/commit/fbe58b12036d4e1003adfb4956c86144fa40572a))
+* **integration:** emit sync state 7 (Skipped) when RPC block is ahead of update block ([40fe540](https://github.com/propeller-heads/tycho-indexer/commit/40fe540ae81ef8f1101889dbf275bbd4805594ff))
+* **integration:** set infinite WebSocket reconnect retries on protocol stream ([8d8d5b9](https://github.com/propeller-heads/tycho-indexer/commit/8d8d5b96413beaaa90020325291fbf1aed15b70a))
+
 ## [0.291.3](https://github.com/propeller-heads/tycho-indexer/compare/0.291.2...0.291.3) (2026-05-14)
 
 

@@ -4,7 +4,7 @@ use futures::{Stream, StreamExt};
 use miette::{miette, IntoDiagnostic, WrapErr};
 use tokio::{sync::mpsc::Sender, task::JoinHandle};
 use tracing::{info, warn};
-use tycho_client::feed::component_tracker::ComponentFilter;
+use tycho_client::{feed::component_tracker::ComponentFilter, stream::RetryConfiguration};
 use tycho_common::{
     models::{token::Token, Chain},
     Bytes,
@@ -150,10 +150,12 @@ impl ProtocolStreamProcessor {
         if self.partial_blocks {
             protocol_stream = protocol_stream.enable_partial_blocks();
         }
+        let infinite_retries = RetryConfiguration::constant(u64::MAX, Duration::from_secs(10));
         protocol_stream
             .auth_key(Some(self.tycho_api_key.clone()))
             .skip_state_decode_failures(true)
             .startup_timeout(Duration::from_secs(500))
+            .websocket_retry_config(&infinite_retries)
             .set_tokens(all_tokens.clone())
             .await
             .build()
@@ -189,6 +191,13 @@ impl ProtocolStreamProcessor {
                 "uniswap_v4".to_string(),
                 "pancakeswap_v3".to_string(),
                 "aerodrome_slipstreams".to_string(),
+            ],
+            Chain::Bsc => vec![
+                "uniswap_v2".to_string(),
+                "uniswap_v3".to_string(),
+                "uniswap_v4".to_string(),
+                "pancakeswap_v2".to_string(),
+                "pancakeswap_v3".to_string(),
             ],
             Chain::Unichain => {
                 vec![
