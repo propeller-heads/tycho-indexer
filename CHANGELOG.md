@@ -1,3 +1,21 @@
+## [0.296.0](https://github.com/propeller-heads/tycho-indexer/compare/0.295.0...0.296.0) (2026-05-18)
+
+
+### Features
+
+* **tycho-client:** add Page<T> wrapper and params structs for paginated RPCClient methods ([8e28e9c](https://github.com/propeller-heads/tycho-indexer/commit/8e28e9c3cab25ab76dcb853eeca4388e6188a452))
+* **tycho-client:** add serializable dto wrappers for feed pipeline types ([c3e9bca](https://github.com/propeller-heads/tycho-indexer/commit/c3e9bca1f3748a61dcbca87da1aad834166e2ce7))
+* **tycho-client:** replace dto types with model types in public API ([#999](https://github.com/propeller-heads/tycho-indexer/issues/999)) ([2d37a17](https://github.com/propeller-heads/tycho-indexer/commit/2d37a17bb30948c0ea7fcab80c057589569d6862))
+
+
+### Bug Fixes
+
+* address post-review CI failures ([4b0b769](https://github.com/propeller-heads/tycho-indexer/commit/4b0b769723060ed5a55dac2fd38ea9cbd51da5a0))
+* resolve ws.rs import collision and apply nightly fmt ([2fed1e3](https://github.com/propeller-heads/tycho-indexer/commit/2fed1e3d1da44ab0375189cd49b95e397ad7f867))
+* **tycho-simulation:** move impl blocks before test module ([0cd39ed](https://github.com/propeller-heads/tycho-indexer/commit/0cd39ed85833a8f6fbd2e9e8207ee49659a7f7e0))
+* **tycho-simulation:** restore uniswap v3/v4 tests using ComponentWithStateDto ([cd94e85](https://github.com/propeller-heads/tycho-indexer/commit/cd94e8545a72e3be2ddc7163c7b0b2d7bb0ab6fc))
+* use infallible into() and fix ws test DummyDelta type ([8becda7](https://github.com/propeller-heads/tycho-indexer/commit/8becda7a55563408846fe67d282f2f04943ae3ea))
+
 ## [0.295.0](https://github.com/propeller-heads/tycho-indexer/compare/0.294.0...0.295.0) (2026-05-18)
 
 
