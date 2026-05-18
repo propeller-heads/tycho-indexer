@@ -1,3 +1,11 @@
+## [0.294.0](https://github.com/propeller-heads/tycho-indexer/compare/0.293.0...0.294.0) (2026-05-18)
+
+
+### Features
+
+* **gas-estimations:** Add router overhead gas ([e1e7320](https://github.com/propeller-heads/tycho-indexer/commit/e1e7320c40463bb7eca2d1e400e6b8e5d0fa79d8))
+* **gas-estimations:** Add router overhead gas ([#1019](https://github.com/propeller-heads/tycho-indexer/issues/1019)) ([c8f7a7c](https://github.com/propeller-heads/tycho-indexer/commit/c8f7a7c1f900e6c956c04141ad8269795f4f8e1d))
+
 ## [0.293.0](https://github.com/propeller-heads/tycho-indexer/compare/0.292.0...0.293.0) (2026-05-15)
 
 
