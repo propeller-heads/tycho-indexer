@@ -36,6 +36,7 @@ RUN resolve_base() { \
             base-alienbase-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
             robinhood-sushiswap-v3|robinhood-robinswap-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
             robinhood-ramses-v3) echo "polygon-ramses-v3" ;; \
+            robinhood-ekubo-v3) echo "ethereum-ekubo-v3" ;; \
             base-balancer-v3|arbitrum-balancer-v3|gnosis-balancer-v3) echo "ethereum-balancer-v3" ;; \
             ethereum-pancakeswap-v2) echo "ethereum-uniswap-v2" ;; \
             ethereum-sushiswap-v2) echo "ethereum-uniswap-v2" ;; \
@@ -77,6 +78,7 @@ RUN resolve_base() { \
             base-alienbase-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
             robinhood-sushiswap-v3|robinhood-robinswap-v3) echo "ethereum-uniswap-v3-logs-only" ;; \
             robinhood-ramses-v3) echo "polygon-ramses-v3" ;; \
+            robinhood-ekubo-v3) echo "ethereum-ekubo-v3" ;; \
             base-balancer-v3|arbitrum-balancer-v3|gnosis-balancer-v3) echo "ethereum-balancer-v3" ;; \
             ethereum-pancakeswap-v2) echo "ethereum-uniswap-v2" ;; \
             ethereum-sushiswap-v2) echo "ethereum-uniswap-v2" ;; \
