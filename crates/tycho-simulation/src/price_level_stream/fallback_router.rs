@@ -4,6 +4,8 @@
 //! executes their swaps through the router instead of the venue directly, so a stale maker
 //! quote falls back to a single-hop Uniswap V3 pool instead of reverting the route.
 
+use std::collections::HashSet;
+
 use alloy::{
     network::Ethereum,
     primitives::{address, Address, TxKind},
@@ -44,6 +46,17 @@ pub enum FetchVenuesError {
         /// Underlying transport or ABI decoding error.
         reason: String,
     },
+}
+
+/// The outcome of one whitelist read, as delivered to the tracker.
+#[derive(Debug)]
+pub(super) enum RouterVenuesRead {
+    Ok(HashSet<Bytes>),
+    // Not yet constructed by production code: the periodic whitelist reader that would surface
+    // a failed re-read is wired in by a task that follows. Mirrors the same situation in
+    // `tracker.rs` and `telemetry.rs`.
+    #[allow(dead_code)]
+    Failed(FetchVenuesError),
 }
 
 /// Reads the router's whitelisted pAMM venues via `eth_call` on the node at `rpc_url`.

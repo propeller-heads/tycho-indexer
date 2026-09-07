@@ -21,6 +21,7 @@ use tycho_common::{
 
 use super::{
     config::PriceLevelStreamConfig,
+    fallback_router::RouterVenuesRead,
     state::{PriceLevelStreamQuote, PriceLevelStreamState, QUOTE_TTL},
     stream::PAMM_ADDRESS_ATTRIBUTE,
     telemetry,
@@ -46,6 +47,11 @@ const SECONDS_PER_SLOT: u64 = 12;
 /// Extra blocks allowed beyond what elapsed time explains. Titan builds at chain head + 1 and
 /// sometimes + 2, so a frame right after a block boundary may jump by two.
 const BLOCK_JUMP_SLACK: u64 = 2;
+
+/// How many distinct unregistered venue addresses get a first-sight INFO line per process.
+/// Addresses come from an external source; the set is bounded so a misbehaving upstream cannot
+/// grow memory, and they never become metric labels.
+const MAX_UNREGISTERED_LOGGED: usize = 64;
 
 /// The instants a tracker event is judged against.
 #[derive(Clone, Copy, Debug)]
@@ -166,6 +172,8 @@ pub(super) struct SnapshotTracker {
     /// Whether the last frame was rejected: the first rejection of a streak logs at WARN, the
     /// rest at DEBUG, and the counter carries the rate.
     rejecting: bool,
+    /// Unregistered venue addresses already logged, at most [`MAX_UNREGISTERED_LOGGED`].
+    seen_unregistered: HashSet<Bytes>,
 }
 
 impl SnapshotTracker {
@@ -200,11 +208,68 @@ impl SnapshotTracker {
             newest_block: 0,
             last_accepted: None,
             rejecting: false,
+            seen_unregistered: HashSet::new(),
         }
     }
 
-    pub(super) fn set_router_venues(&mut self, venues: HashSet<Bytes>) {
+    #[cfg(test)]
+    pub(super) fn set_router_venues_for_test(&mut self, venues: HashSet<Bytes>) {
         self.router_venues = venues;
+    }
+
+    /// Applies a whitelist read. A failed read keeps the last known set (the reader already
+    /// logged it). A successful read that changes a served venue's family removes that venue's
+    /// components now; the next accepted frame carrying them re-adds them under the new family.
+    pub(super) fn on_router_venues(&mut self, read: RouterVenuesRead) -> Option<Update> {
+        let venues = match read {
+            RouterVenuesRead::Failed(error) => {
+                tracing::debug!(error = %error, "Whitelist read failed; whitelist unchanged");
+                return None;
+            }
+            RouterVenuesRead::Ok(venues) => venues,
+        };
+        telemetry::whitelisted_venues(venues.len());
+        let moved: Vec<String> = self
+            .served
+            .iter()
+            .filter(|(_, served)| {
+                self.router_venues
+                    .contains(&served.address) !=
+                    venues.contains(&served.address)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        self.router_venues = venues;
+
+        if let Source::AwaitingWhitelist = self.source {
+            tracing::info!(
+                venues = self.router_venues.len(),
+                "PropAMMRouter venue whitelist read; serving pAMMs from the next frame"
+            );
+            self.source = Source::Unserved;
+            telemetry::source_state(self.source.telemetry_state());
+            return None;
+        }
+        if moved.is_empty() {
+            return None;
+        }
+        let mut removed = HashMap::with_capacity(moved.len());
+        for id in moved {
+            let Some(served) = self.served.remove(&id) else {
+                continue;
+            };
+            tracing::info!(
+                venue = %served.venue,
+                "pAMM changed PropAMMRouter whitelist membership; re-adding it under its new \
+                 family on the next frame"
+            );
+            removed.insert(id, served.component);
+        }
+        // Build the update off the still-current frontier before `refresh_source` may reset it
+        // (it does, once nothing is left served) — mirrors `on_stale_deadline`.
+        let update = self.removal_update(removed);
+        self.refresh_source();
+        Some(update)
     }
 
     /// Checks a frame against the freshness and ordering rules, returning its age when it is
@@ -342,7 +407,16 @@ impl SnapshotTracker {
             return None;
         }
         if !self.auto_detect {
-            tracing::debug!(%pamm, "Skipping unregistered pAMM");
+            telemetry::unregistered_pamm();
+            if self.seen_unregistered.len() < MAX_UNREGISTERED_LOGGED &&
+                self.seen_unregistered
+                    .insert(pamm.clone())
+            {
+                tracing::info!(
+                    %pamm,
+                    "Skipping unregistered pAMM; register it via add_pamm to serve it"
+                );
+            }
             return None;
         }
         tracing::info!(%pamm, "Serving auto-detected pAMM");
@@ -540,7 +614,12 @@ mod tests {
     };
 
     use super::{
-        super::{config::DEFAULT_AUTO_DETECTED_GAS_COST, state::QUOTE_TTL, test_support::*},
+        super::{
+            config::DEFAULT_AUTO_DETECTED_GAS_COST,
+            fallback_router::{FetchVenuesError, RouterVenuesRead},
+            state::QUOTE_TTL,
+            test_support::*,
+        },
         *,
     };
 
@@ -1323,7 +1402,7 @@ mod tests {
             DEFAULT_STALE_AFTER,
             false,
         );
-        tracker.set_router_venues(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
+        tracker.set_router_venues_for_test(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -1350,7 +1429,7 @@ mod tests {
             DEFAULT_STALE_AFTER,
             false,
         );
-        tracker.set_router_venues(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
+        tracker.set_router_venues_for_test(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -1382,13 +1461,171 @@ mod tests {
             DEFAULT_STALE_AFTER,
             false,
         );
-        tracker.set_router_venues(HashSet::from([other_venue]));
+        tracker.set_router_venues_for_test(HashSet::from([other_venue]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
             .expect("update expected");
 
         assert_eq!(update.new_pairs[&expected_id()].protocol_system, "pricelevelstream:fermiswap");
+    }
+
+    fn read_ok(addresses: &[&str]) -> RouterVenuesRead {
+        RouterVenuesRead::Ok(
+            addresses
+                .iter()
+                .map(|address| Bytes::from_str(address).unwrap())
+                .collect(),
+        )
+    }
+
+    fn tracker_awaiting_whitelist() -> SnapshotTracker {
+        let config = PriceLevelStreamConfig::new(
+            "fermiswap",
+            Bytes::from_str(PAMM).unwrap(),
+            BigUint::from(120_000u64),
+        );
+        SnapshotTracker::new(
+            HashMap::from([(config.address.clone(), config)]),
+            HashSet::new(),
+            tokens(),
+            false,
+            BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
+            DEFAULT_STALE_AFTER,
+            true,
+        )
+    }
+
+    #[test]
+    fn nothing_is_emitted_until_the_whitelist_is_known() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        assert!(tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .is_none());
+        assert!(tracker.stale_deadline().is_none());
+
+        assert!(tracker
+            .on_router_venues(read_ok(&[PAMM]))
+            .is_none());
+        let update = tracker
+            .on_frame(message_at(100, 1, wbtc_usdc_pairs()), clock.at(1))
+            .expect("update expected");
+        assert_eq!(update.new_pairs[&expected_id()].protocol_system, "propammfallback:fermiswap");
+    }
+
+    #[test]
+    fn failed_whitelist_read_keeps_the_previous_set() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        tracker.on_router_venues(read_ok(&[PAMM]));
+        assert!(tracker
+            .on_router_venues(RouterVenuesRead::Failed(FetchVenuesError::Call {
+                reason: "boom".to_string(),
+            }))
+            .is_none());
+        let update = tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        assert_eq!(update.new_pairs[&expected_id()].protocol_system, "propammfallback:fermiswap");
+    }
+
+    #[test]
+    fn failed_first_read_keeps_waiting() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        tracker.on_router_venues(RouterVenuesRead::Failed(FetchVenuesError::Call {
+            reason: "boom".to_string(),
+        }));
+        assert!(tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .is_none());
+    }
+
+    #[test]
+    fn family_change_removes_now_and_re_adds_under_the_new_family() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        tracker.on_router_venues(read_ok(&[PAMM]));
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+
+        // The venue gets de-whitelisted.
+        let update = tracker
+            .on_router_venues(read_ok(&[]))
+            .expect("removal expected");
+        assert!(update.states.is_empty());
+        assert!(update.new_pairs.is_empty());
+        assert_eq!(
+            update.removed_pairs[&expected_id()].protocol_system,
+            "propammfallback:fermiswap"
+        );
+        assert!(tracker.stale_deadline().is_none());
+
+        let update = tracker
+            .on_frame(message_at(100, 1, wbtc_usdc_pairs()), clock.at(1))
+            .expect("update expected");
+        assert_eq!(update.new_pairs[&expected_id()].protocol_system, "pricelevelstream:fermiswap");
+        assert!(update.removed_pairs.is_empty());
+    }
+
+    #[test]
+    fn unchanged_whitelist_emits_nothing() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        tracker.on_router_venues(read_ok(&[PAMM]));
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        assert!(tracker
+            .on_router_venues(read_ok(&[PAMM]))
+            .is_none());
+    }
+
+    #[test]
+    fn unregistered_venues_are_counted_without_labels_and_logged_boundedly() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{counter_value, snapshot_map},
+            UNREGISTERED_PAMM_FRAMES,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let logged = metrics::with_local_recorder(&recorder, || {
+            let clock = Clock::new();
+            let mut tracker = SnapshotTracker::new(
+                HashMap::new(),
+                HashSet::new(),
+                tokens(),
+                false,
+                BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
+                DEFAULT_STALE_AFTER,
+                false,
+            );
+            // 70 distinct unregistered addresses, each seen twice.
+            for round in 0..2u64 {
+                for index in 0..70u64 {
+                    let address = Bytes::from(
+                        format!("{index:040x}")
+                            .as_bytes()
+                            .to_vec(),
+                    );
+                    let frame = TitanPriceLevelMessage {
+                        block_number: 100,
+                        timestamp: BASE_WALL_NANOS + (round * 70 + index) * 1_000,
+                        pamms: vec![TitanPammLevels { pamm: address, pairs: wbtc_usdc_pairs() }],
+                    };
+                    tracker.on_frame(frame, clock.at(1));
+                }
+            }
+            tracker.seen_unregistered.len()
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(counter_value(&snapshot, UNREGISTERED_PAMM_FRAMES, &[]), 140);
+        assert_eq!(logged, MAX_UNREGISTERED_LOGGED);
     }
 
     #[test]

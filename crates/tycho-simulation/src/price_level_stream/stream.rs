@@ -12,7 +12,7 @@ use super::{
         default_denied_pamms, default_served_pamms, PriceLevelStreamConfig,
         DEFAULT_AUTO_DETECTED_GAS_COST,
     },
-    fallback_router::fetch_fallback_router_venues,
+    fallback_router::{fetch_fallback_router_venues, RouterVenuesRead},
     titan::{self, ConnectionSettings, TITAN_PRICE_LEVEL_URL},
     tracker::{Now, SnapshotTracker, DEFAULT_STALE_AFTER},
 };
@@ -263,7 +263,7 @@ impl PriceLevelStreamBuilder {
                 DEFAULT_STALE_AFTER,
                 fallback_router,
             );
-            tracker.set_router_venues(router_venues);
+            tracker.on_router_venues(RouterVenuesRead::Ok(router_venues));
 
             titan::messages(url, connection)
                 .filter_map(move |message| tracker.on_frame(message, Now::current()))
