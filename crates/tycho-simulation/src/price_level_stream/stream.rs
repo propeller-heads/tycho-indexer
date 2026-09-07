@@ -131,9 +131,10 @@ impl PriceLevelStreamBuilder {
         self
     }
 
-    /// Overrides the longest gap between Titan messages tolerated before the connection is
-    /// treated as dead and re-established (default: 30s). Titan pushes several updates per
-    /// second, so a multi-second silence means a stalled or half-open connection.
+    /// Overrides the longest gap between parsed Titan frames tolerated before the connection is
+    /// treated as dead and re-established (default: 10s). Titan pushes one frame per second and
+    /// sends no keepalives, so a multi-second silence means a stalled or half-open connection.
+    /// Control frames and unparsable text do not count as liveness.
     pub fn read_idle_timeout(mut self, timeout: Duration) -> Self {
         self.connection.read_idle_timeout = timeout;
         self
@@ -251,33 +252,26 @@ impl PriceLevelStreamBuilder {
 
     /// Consumes the builder and opens the stream.
     ///
-    /// Venues on Titan's PropAMMRouter whitelist are served under `propammfallback:{name}`, so
-    /// tycho-execution routes their swaps through the router. The router falls back to a
-    /// single-hop Uniswap V3 pool when the venue reverts — which a stale maker quote does in any
-    /// simulation against a mined block. Only whitelisted venues may use the family: the router
-    /// reverts `UnknownVenue` for others, so every swap would execute on the Uniswap V3 fallback
-    /// at a worse price than the venue gives.
-    ///
-    /// Reading that whitelist needs a node at `RPC_URL` (from the environment, falling back to
-    /// `.env`), and degrades instead of failing: without the variable, or when the read fails, a
-    /// warning is logged and every venue stays on the direct `pricelevelstream:` path.
-    /// [`without_fallback_router`](Self::without_fallback_router) skips the read and takes the
-    /// direct path unconditionally.
-    ///
-    /// The whitelist is read once, on the first poll, and never re-read — it is governance-gated
-    /// and changes rarely, and renaming a running component's protocol system would churn every
-    /// consumer's component set. Restart the stream to pick up a whitelist change.
-    ///
     /// The connection is established lazily on first poll and maintained (with reconnects) for as
     /// long as the stream is polled; it never terminates on its own, and dropping the stream
-    /// closes the connection. Frames that contain no served pAMM produce no update.
+    /// closes the connection and stops the whitelist reader.
     ///
-    /// Each streamed frame is a complete snapshot of everything Titan currently streams, so
-    /// every update carries the full set of the frame's pair states, with `new_pairs` /
-    /// `removed_pairs` derived by diffing against the previous frame — a pair (or a whole
-    /// venue) the stream stops serving is removed. Frames older than an already processed one
-    /// are skipped, so updates never move backwards in block number. Pairs whose tokens are
-    /// missing from the provided token metadata are skipped.
+    /// Every accepted frame yields an update with the states of the served pairs it carries,
+    /// with `new_pairs` for pairs not currently served. Pairs the frame does not carry keep their
+    /// previous state downstream. A component no accepted frame has carried for
+    /// [`stale_after`](Self::stale_after) is emitted in `removed_pairs`, together with every
+    /// other component expiring at that instant, and re-added by the next accepted frame
+    /// carrying it. Frames that are too old, from the future, out of order, or whose block
+    /// regresses or jumps implausibly are rejected without effect. Frames that contain no served
+    /// pAMM produce no update. Pairs whose tokens are missing from the provided token metadata
+    /// are skipped.
+    ///
+    /// With the fallback router enabled (the default), nothing is emitted until the
+    /// PropAMMRouter whitelist has been read from the node at
+    /// [`fallback_router_rpc_url`](Self::fallback_router_rpc_url) or `RPC_URL`; each read is
+    /// bounded by a timeout, retried with backoff, and refreshed periodically. Without a node URL
+    /// an error is logged and nothing is ever served. See the [module documentation](super) for
+    /// the full contract.
     pub fn build(self) -> impl Stream<Item = Update> + Send {
         let Self {
             registry,
