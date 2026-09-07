@@ -52,7 +52,7 @@ impl Default for ConnectionSettings {
 
 /// The reconnect backoff after `attempt` consecutive failures: `2^attempt` seconds, capped at
 /// `max_backoff`.
-fn backoff(attempt: u32, max_backoff: Duration) -> Duration {
+pub(super) fn backoff(attempt: u32, max_backoff: Duration) -> Duration {
     let exponential = 2u64
         .checked_pow(attempt)
         .map(Duration::from_secs)
