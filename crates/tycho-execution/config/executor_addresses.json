@@ -37,7 +37,8 @@
     "aerodrome_slipstreams": "0xE12eb9FcD93c7ffabfEd66B20D4B0dF02b44F6B3",
     "native_wrapper": "0x68AF9cDcc2e177e9D75c60f132b8DC52EAF1adBf",
     "lunarbase": "0xf435299a20c1405c957C3F407cc3E9b9df76ee7b",
-    "aerodrome_v1": "0x76eeB7E737FDf441E0437F7051b4e0b84808c10a"
+    "aerodrome_v1": "0x76eeB7E737FDf441E0437F7051b4e0b84808c10a",
+    "rfq:metric": "0x08b9228A2Ab320Fa5335322961ed60DA2e7cfFc2"
   },
   "unichain": {
     "uniswap_v2": "0x55345739FCB5c5393f9BE32864439754649A204A",
@@ -83,6 +84,7 @@
     "robinswap_v3": "0x33E8602FeDD1215CB04c865C66648DbA5b81fb75",
     "ramses_v3": "0x33E8602FeDD1215CB04c865C66648DbA5b81fb75",
     "uniswap_v4": "0xe781c1869c9D8E60dDfcD8F8fb5213Ed8Ad07366",
-    "native_wrapper": "0x6EAd915f443eB0f8758BE58aFE7eF2dF1e2B927F"
+    "native_wrapper": "0x6EAd915f443eB0f8758BE58aFE7eF2dF1e2B927F",
+    "rfq:metric": "0x8C18318338915839199271e7f006BEeAdBa2Dd0E"
   }
 }
