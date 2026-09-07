@@ -617,11 +617,17 @@ mod tests {
             Bytes::from_str(PAMM).unwrap()
         );
 
-        let PriceLevelStreamState { token0, token1, quotes_0_to_1, quotes_1_to_0, gas_cost } =
-            states[&id]
-                .as_any()
-                .downcast_ref::<PriceLevelStreamState>()
-                .expect("price level state");
+        let PriceLevelStreamState {
+            token0,
+            token1,
+            quotes_0_to_1,
+            quotes_1_to_0,
+            gas_cost,
+            quotable_until: _,
+        } = states[&id]
+            .as_any()
+            .downcast_ref::<PriceLevelStreamState>()
+            .expect("price level state");
         assert_eq!(token0, &Bytes::from_str(WBTC).unwrap());
         assert_eq!(token1, &Bytes::from_str(USDC).unwrap());
         assert_eq!(quotes_0_to_1.len(), 1);
