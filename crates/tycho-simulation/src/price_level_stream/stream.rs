@@ -14,7 +14,7 @@ use super::{
     },
     fallback_router::fetch_fallback_router_venues,
     titan::{self, ConnectionSettings, TITAN_PRICE_LEVEL_URL},
-    tracker::SnapshotTracker,
+    tracker::{Now, SnapshotTracker, DEFAULT_STALE_AFTER},
 };
 use crate::protocol::models::Update;
 
@@ -261,9 +261,11 @@ impl PriceLevelStreamBuilder {
                 auto_detect,
                 auto_detected_gas_cost,
                 router_venues,
+                DEFAULT_STALE_AFTER,
             );
 
-            titan::messages(url, connection).filter_map(move |message| tracker.process(message))
+            titan::messages(url, connection)
+                .filter_map(move |message| tracker.on_frame(message, Now::current()))
         })
     }
 }
