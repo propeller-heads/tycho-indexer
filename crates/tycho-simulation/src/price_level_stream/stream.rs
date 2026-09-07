@@ -260,9 +260,10 @@ impl PriceLevelStreamBuilder {
                 tokens,
                 auto_detect,
                 auto_detected_gas_cost,
-                router_venues,
                 DEFAULT_STALE_AFTER,
+                fallback_router,
             );
+            tracker.set_router_venues(router_venues);
 
             titan::messages(url, connection)
                 .filter_map(move |message| tracker.on_frame(message, Now::current()))

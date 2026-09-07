@@ -1,7 +1,13 @@
 //! Turns Titan frames into [`Update`]s.
 
+// `on_stale_deadline`/`stale_deadline` (and the data they carry: `Served::address`,
+// `Source::Serving::deadline`) are not yet called from `stream.rs::build()` — the periodic
+// sweep timer that drives them is wired in by a task that follows. Mirrors the same situation
+// in `telemetry.rs`.
+#![allow(dead_code)]
+
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -15,7 +21,7 @@ use tycho_common::{
 
 use super::{
     config::PriceLevelStreamConfig,
-    state::{PriceLevelStreamQuote, PriceLevelStreamState},
+    state::{PriceLevelStreamQuote, PriceLevelStreamState, QUOTE_TTL},
     stream::PAMM_ADDRESS_ATTRIBUTE,
     telemetry,
     titan::{TitanPairLevels, TitanPammLevels, TitanPriceLevel, TitanPriceLevelMessage},
@@ -90,8 +96,43 @@ impl Rejection {
     }
 }
 
-/// Turns Titan frames into [`Update`]s, tracking the previously emitted components so pair
-/// additions and removals can be diffed against the last snapshot.
+/// A component the stream currently vouches for.
+struct Served {
+    component: ProtocolComponent,
+    /// The venue name, for logs and metric labels.
+    venue: String,
+    /// The venue address, for whitelist membership checks.
+    address: Bytes,
+    /// The instant this component's data turns `stale_after` old.
+    deadline: Instant,
+}
+
+/// What the stream can currently vouch for.
+enum Source {
+    /// The PropAMMRouter whitelist has not been read yet: the family of every component is
+    /// unknown, so frames are validated but nothing is emitted.
+    AwaitingWhitelist,
+    /// Whitelist known (or not needed) and nothing served: at start, and whenever the last
+    /// served component expired.
+    Unserved,
+    /// At least one component is served; `deadline` is the earliest component deadline.
+    Serving { deadline: Instant },
+}
+
+impl Source {
+    fn telemetry_state(&self) -> telemetry::SourceState {
+        match self {
+            Source::AwaitingWhitelist => telemetry::SourceState::AwaitingWhitelist,
+            Source::Unserved => telemetry::SourceState::Unserved,
+            Source::Serving { deadline: _ } => telemetry::SourceState::Serving,
+        }
+    }
+}
+
+/// Turns Titan frames into [`Update`]s. Frames are additive only: a component (or a whole venue)
+/// a frame omits is presumed still fresh until its own deadline lapses in
+/// [`on_stale_deadline`](Self::on_stale_deadline). There is no diff-based removal — omission from
+/// a single frame never removes anything by itself.
 pub(super) struct SnapshotTracker {
     registry: HashMap<Bytes, PriceLevelStreamConfig>,
     /// Venues excluded from auto-detection. The builder keeps this disjoint from the registry:
@@ -106,11 +147,11 @@ pub(super) struct SnapshotTracker {
     /// Venues whose components are emitted under the `propammfallback:` family, so their swaps
     /// execute through Titan's PropAMMRouter instead of the venue directly.
     router_venues: HashSet<Bytes>,
-    /// Components of the last emitted snapshot, across all pAMMs. A frame is a complete
-    /// snapshot of everything Titan currently streams, so removals are diffed globally: a
-    /// known component a frame does not re-emit is gone — including when its venue vanishes
-    /// from the stream entirely.
-    components: HashMap<String, ProtocolComponent>,
+    /// The components currently served, keyed by component id.
+    served: HashMap<String, Served>,
+    /// What the stream can currently vouch for; drives [`Self::stale_deadline`] and the
+    /// per-venue gauges.
+    source: Source,
     /// The data freshness window; see [`DEFAULT_STALE_AFTER`].
     stale_after: Duration,
     /// The `timestamp` of the newest accepted frame. Frames older than it are out of order;
@@ -134,23 +175,36 @@ impl SnapshotTracker {
         tokens: HashMap<Bytes, Token>,
         auto_detect: bool,
         auto_detected_gas_cost: BigUint,
-        router_venues: HashSet<Bytes>,
         stale_after: Duration,
+        fallback_router: bool,
     ) -> Self {
+        let source = if fallback_router { Source::AwaitingWhitelist } else { Source::Unserved };
+        telemetry::source_state(source.telemetry_state());
+        // Pre-initialise every per-venue series so a venue that never appears is a visible
+        // zero, not a missing series.
+        for config in registry.values() {
+            telemetry::served_components(&config.protocol, 0);
+            telemetry::last_seen(&config.protocol, 0);
+        }
         Self {
             registry,
             denied,
             tokens,
             auto_detect,
             auto_detected_gas_cost,
-            router_venues,
-            components: HashMap::new(),
+            router_venues: HashSet::new(),
+            served: HashMap::new(),
+            source,
             stale_after,
             newest_timestamp: 0,
             newest_block: 0,
             last_accepted: None,
             rejecting: false,
         }
+    }
+
+    pub(super) fn set_router_venues(&mut self, venues: HashSet<Bytes>) {
+        self.router_venues = venues;
     }
 
     /// Checks a frame against the freshness and ordering rules, returning its age when it is
@@ -194,7 +248,8 @@ impl SnapshotTracker {
     }
 
     /// Processes one frame into an [`Update`], or `None` if the frame is rejected (see
-    /// [`Rejection`]) or carries nothing relevant.
+    /// [`Rejection`]), the whitelist has not been read yet, or the frame carries nothing
+    /// relevant.
     pub(super) fn on_frame(&mut self, frame: TitanPriceLevelMessage, now: Now) -> Option<Update> {
         let frame_age = match self.accept(&frame, now) {
             Ok(frame_age) => frame_age,
@@ -209,105 +264,219 @@ impl SnapshotTracker {
         self.newest_timestamp = frame.timestamp;
         self.newest_block = frame.block_number;
         self.last_accepted = Some(now.instant);
-        let _ = frame_age;
 
+        if let Source::AwaitingWhitelist = self.source {
+            return None;
+        }
+
+        let deadline = now.instant +
+            self.stale_after
+                .saturating_sub(frame_age);
+        let quotable_until = now.instant + QUOTE_TTL.saturating_sub(frame_age);
+        let frame_unix_seconds = frame.timestamp / NANOS_PER_SECOND;
         let mut states: HashMap<String, Box<dyn ProtocolSim>> = HashMap::new();
         let mut new_pairs = HashMap::new();
-        // The frame is a complete snapshot: every known component is presumed gone until the
-        // frame re-emits it below.
-        let mut previous = std::mem::take(&mut self.components);
 
         for TitanPammLevels { pamm, pairs } in frame.pamms {
-            let config = match self.registry.entry(pamm.clone()) {
-                Entry::Occupied(entry) => &*entry.into_mut(),
-                Entry::Vacant(entry) => {
-                    if !self.auto_detect {
-                        tracing::debug!(%pamm, "Skipping unregistered pAMM");
-                        continue;
-                    }
-                    if self.denied.contains(&pamm) {
-                        tracing::debug!(%pamm, "Skipping denied pAMM");
-                        continue;
-                    }
-                    tracing::info!(%pamm, "Serving auto-detected pAMM");
-                    &*entry.insert(PriceLevelStreamConfig::auto_detected(
-                        pamm.clone(),
-                        self.auto_detected_gas_cost.clone(),
-                    ))
-                }
+            let Some(config) = self.resolve_config(&pamm) else {
+                continue;
             };
+            telemetry::last_seen(&config.protocol, frame_unix_seconds);
 
-            // Merge the frame's per-direction ladders into one entry per unordered token pair.
-            let mut merged_pairs: HashMap<(Bytes, Bytes), (Vec<_>, Vec<_>)> = HashMap::new();
-            for TitanPairLevels { token_in, token_out, order_book } in pairs {
-                if !self.tokens.contains_key(&token_in) || !self.tokens.contains_key(&token_out) {
-                    tracing::debug!(%token_in, %token_out, "Skipping pair with unknown token");
-                    continue;
-                }
-                let sells_token0 = token_in < token_out;
-                let key = if sells_token0 {
-                    (token_in.clone(), token_out.clone())
-                } else {
-                    (token_out.clone(), token_in.clone())
-                };
-                let quotes = order_book
-                    .into_iter()
-                    .map(|TitanPriceLevel { amount_in, amount_out }| {
-                        PriceLevelStreamQuote::new(amount_in, amount_out)
-                    })
-                    .collect();
-                let entry = merged_pairs.entry(key).or_default();
-                if sells_token0 {
-                    entry.0 = quotes;
-                } else {
-                    entry.1 = quotes;
-                }
-            }
-
-            for ((token0, token1), (quotes_0_to_1, quotes_1_to_0)) in merged_pairs {
+            for ((token0, token1), (quotes_0_to_1, quotes_1_to_0)) in self.merge_pairs(pairs) {
                 let id = component_id(&config.address, &token0, &token1);
                 let id_string = id.to_string();
-                let component = previous
-                    .remove(&id_string)
-                    .unwrap_or_else(|| {
+                let component = match self.served.get(&id_string) {
+                    Some(served) => served.component.clone(),
+                    None => {
                         let via_router = self
                             .router_venues
                             .contains(&config.address);
-                        let component =
-                            build_component(&self.tokens, config, id, &token0, &token1, via_router);
+                        let component = build_component(
+                            &self.tokens,
+                            &config,
+                            id,
+                            &token0,
+                            &token1,
+                            via_router,
+                        );
                         new_pairs.insert(id_string.clone(), component.clone());
                         component
-                    });
-
+                    }
+                };
                 let state = PriceLevelStreamState::new(
                     token0,
                     token1,
                     quotes_0_to_1,
                     quotes_1_to_0,
                     config.gas_cost.clone(),
-                );
-
+                )
+                .with_quotable_until(quotable_until);
                 states.insert(id_string.clone(), Box::new(state));
-                self.components
-                    .insert(id_string, component);
+                self.served.insert(
+                    id_string,
+                    Served {
+                        component,
+                        venue: config.protocol.clone(),
+                        address: config.address.clone(),
+                        deadline,
+                    },
+                );
             }
         }
 
-        // Every re-emitted pair was moved back into `self.components` above — whatever remains
-        // is gone: the pair, or its whole venue, is no longer streamed.
-        let removed_pairs = previous;
-
-        if states.is_empty() && new_pairs.is_empty() && removed_pairs.is_empty() {
+        if states.is_empty() {
             return None;
         }
+        self.refresh_source();
+        Some(Update::new(frame.block_number, states, new_pairs).set_is_partial(true))
+    }
 
-        Some(
-            // Quotes target the block currently being built, hence partial. Sync states stay
-            // empty (like the RFQ path) because no full block header is available.
-            Update::new(frame.block_number, states, new_pairs)
-                .set_is_partial(true)
-                .set_removed_pairs(removed_pairs),
-        )
+    /// The configuration a streamed venue is served under, or `None` when it is skipped.
+    fn resolve_config(&mut self, pamm: &Bytes) -> Option<PriceLevelStreamConfig> {
+        if let Some(config) = self.registry.get(pamm) {
+            return Some(config.clone());
+        }
+        if self.denied.contains(pamm) {
+            tracing::debug!(%pamm, "Skipping denied pAMM");
+            return None;
+        }
+        if !self.auto_detect {
+            tracing::debug!(%pamm, "Skipping unregistered pAMM");
+            return None;
+        }
+        tracing::info!(%pamm, "Serving auto-detected pAMM");
+        let config = PriceLevelStreamConfig::auto_detected(
+            pamm.clone(),
+            self.auto_detected_gas_cost.clone(),
+        );
+        telemetry::served_components(&config.protocol, 0);
+        telemetry::last_seen(&config.protocol, 0);
+        self.registry
+            .insert(pamm.clone(), config.clone());
+        Some(config)
+    }
+
+    /// Merges the frame's per-direction ladders into one entry per unordered token pair,
+    /// skipping pairs with unknown tokens. A direction the frame does not carry yields an empty
+    /// ladder, so that direction cannot be quoted.
+    fn merge_pairs(
+        &self,
+        pairs: Vec<TitanPairLevels>,
+    ) -> HashMap<(Bytes, Bytes), (Vec<PriceLevelStreamQuote>, Vec<PriceLevelStreamQuote>)> {
+        let mut merged: HashMap<(Bytes, Bytes), (Vec<_>, Vec<_>)> = HashMap::new();
+        for TitanPairLevels { token_in, token_out, order_book } in pairs {
+            if !self.tokens.contains_key(&token_in) || !self.tokens.contains_key(&token_out) {
+                tracing::debug!(%token_in, %token_out, "Skipping pair with unknown token");
+                continue;
+            }
+            let sells_token0 = token_in < token_out;
+            let key = if sells_token0 {
+                (token_in.clone(), token_out.clone())
+            } else {
+                (token_out.clone(), token_in.clone())
+            };
+            let quotes = order_book
+                .into_iter()
+                .map(|TitanPriceLevel { amount_in, amount_out }| {
+                    PriceLevelStreamQuote::new(amount_in, amount_out)
+                })
+                .collect();
+            let entry = merged.entry(key).or_default();
+            if sells_token0 {
+                entry.0 = quotes;
+            } else {
+                entry.1 = quotes;
+            }
+        }
+        merged
+    }
+
+    /// Removes every served component whose deadline has passed, as one [`Update`].
+    pub(super) fn on_stale_deadline(&mut self, now: Now) -> Option<Update> {
+        let due: Vec<String> = self
+            .served
+            .iter()
+            .filter(|(_, served)| served.deadline <= now.instant)
+            .map(|(id, _)| id.clone())
+            .collect();
+        if due.is_empty() {
+            return None;
+        }
+        let mut removed = HashMap::with_capacity(due.len());
+        let mut venues = BTreeSet::new();
+        for id in due {
+            let Some(served) = self.served.remove(&id) else {
+                continue;
+            };
+            telemetry::stale_removal(&served.venue);
+            venues.insert(served.venue);
+            removed.insert(id, served.component);
+        }
+        let component_ids: Vec<&String> = removed.keys().collect();
+        tracing::warn!(
+            removed = removed.len(),
+            venues = ?venues,
+            components = ?component_ids,
+            stale_after_secs = self.stale_after.as_secs(),
+            "Removing price level components: no fresh frame carried them within the window"
+        );
+        // Build the update off the still-current frontier before `refresh_source` may reset it
+        // (it does, once nothing is left served) — a removal always reports the block it was
+        // last known fresh at, never the reset value.
+        let update = self.removal_update(removed);
+        self.refresh_source();
+        Some(update)
+    }
+
+    /// The instant the earliest served component turns stale, if anything is served.
+    pub(super) fn stale_deadline(&self) -> Option<Instant> {
+        match self.source {
+            Source::Serving { deadline } => Some(deadline),
+            Source::AwaitingWhitelist | Source::Unserved => None,
+        }
+    }
+
+    fn removal_update(&self, removed: HashMap<String, ProtocolComponent>) -> Update {
+        Update::new(self.newest_block, HashMap::new(), HashMap::new())
+            .set_is_partial(true)
+            .set_removed_pairs(removed)
+    }
+
+    /// Recomputes the source state and the per-venue gauges from the served set. Returning to
+    /// unserved also resets the block frontier, so one absurd block can never outlive the
+    /// window it was served for.
+    fn refresh_source(&mut self) {
+        if let Source::AwaitingWhitelist = self.source {
+            return;
+        }
+        self.source = match self
+            .served
+            .values()
+            .map(|served| served.deadline)
+            .min()
+        {
+            Some(deadline) => Source::Serving { deadline },
+            None => {
+                self.newest_block = 0;
+                self.last_accepted = None;
+                Source::Unserved
+            }
+        };
+        telemetry::source_state(self.source.telemetry_state());
+        let mut per_venue: HashMap<&str, usize> = self
+            .registry
+            .values()
+            .map(|config| (config.protocol.as_str(), 0))
+            .collect();
+        for served in self.served.values() {
+            *per_venue
+                .entry(served.venue.as_str())
+                .or_default() += 1;
+        }
+        for (venue, count) in per_venue {
+            telemetry::served_components(venue, count);
+        }
     }
 
     /// WARN for the first rejected frame of a streak, DEBUG for the rest.
@@ -371,7 +540,7 @@ mod tests {
     };
 
     use super::{
-        super::{config::DEFAULT_AUTO_DETECTED_GAS_COST, test_support::*},
+        super::{config::DEFAULT_AUTO_DETECTED_GAS_COST, state::QUOTE_TTL, test_support::*},
         *,
     };
 
@@ -409,8 +578,8 @@ mod tests {
             tokens(),
             false,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::new(),
             DEFAULT_STALE_AFTER,
+            false,
         )
     }
 
@@ -460,6 +629,15 @@ mod tests {
     fn expected_id() -> String {
         // pamm ++ token0 ++ token1 with WBTC < USDC.
         format!("{PAMM}{}{}", &WBTC[2..], &USDC[2..])
+    }
+
+    fn quotable_until(update: &Update) -> Instant {
+        update.states[&expected_id()]
+            .as_any()
+            .downcast_ref::<PriceLevelStreamState>()
+            .expect("price level state")
+            .quotable_until
+            .expect("guard set")
     }
 
     #[test]
@@ -525,27 +703,6 @@ mod tests {
         assert!(update
             .states
             .contains_key(&expected_id()));
-    }
-
-    #[test]
-    fn dropped_pair_is_removed() {
-        let clock = Clock::new();
-        let mut tracker = tracker();
-        tracker
-            .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
-            .expect("update expected");
-        let weth_usdc =
-            vec![pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)])];
-        let update = tracker
-            .on_frame(message(101, weth_usdc), clock.at(0))
-            .expect("update expected");
-
-        assert_eq!(update.removed_pairs.len(), 1);
-        assert!(update
-            .removed_pairs
-            .contains_key(&expected_id()));
-        assert_eq!(update.new_pairs.len(), 1);
-        assert_eq!(update.states.len(), 1);
     }
 
     #[test]
@@ -702,51 +859,360 @@ mod tests {
     }
 
     #[test]
-    fn vanished_pamm_has_its_pairs_removed() {
+    fn quote_guard_is_one_block_after_the_frame_was_built() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // Built at t=7, accepted at t=9: the data is 2 s old, so 10 s of quotability remain.
+        let update = tracker
+            .on_frame(message_at(100, 7, wbtc_usdc_pairs()), clock.at(9))
+            .expect("update expected");
+        assert_eq!(
+            quotable_until(&update),
+            clock.at(9).instant + (QUOTE_TTL - Duration::from_secs(2))
+        );
+    }
+
+    #[test]
+    fn quote_guard_never_exceeds_one_block_for_a_future_stamped_frame() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // Maximum accepted skew: stamped 12 s ahead of the local clock.
+        let update = tracker
+            .on_frame(message_at(100, 12, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        assert_eq!(quotable_until(&update), clock.at(0).instant + QUOTE_TTL);
+    }
+
+    #[test]
+    fn frame_older_than_one_block_yields_an_unquotable_state() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // 15 s old: inside the 24 s window, past the 12 s quote guard.
+        let update = tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(15))
+            .expect("update expected");
+        assert_eq!(quotable_until(&update), clock.at(15).instant);
+        assert_eq!(
+            tracker
+                .stale_deadline()
+                .expect("serving"),
+            clock.at(24).instant
+        );
+    }
+
+    #[test]
+    fn omitted_pair_is_not_removed_by_the_frame() {
         let clock = Clock::new();
         let mut tracker = tracker();
         tracker
-            .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
             .expect("update expected");
 
-        // The next frame no longer contains the pAMM at all: a complete snapshot without a
-        // venue means the venue is gone, pairs and all.
+        let weth_usdc =
+            vec![pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)])];
         let update = tracker
-            .on_frame(
-                TitanPriceLevelMessage {
-                    block_number: 101,
-                    timestamp: BASE_WALL_NANOS,
-                    pamms: vec![],
-                },
-                clock.at(0),
-            )
+            .on_frame(message_at(101, 1, weth_usdc), clock.at(1))
             .expect("update expected");
+        assert!(update.removed_pairs.is_empty());
+        assert_eq!(update.new_pairs.len(), 1);
+        assert_eq!(update.states.len(), 1);
+        assert!(!update
+            .states
+            .contains_key(&expected_id()));
+    }
+
+    #[test]
+    fn omitted_venue_is_not_removed_by_the_frame() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        let empty = TitanPriceLevelMessage {
+            block_number: 101,
+            timestamp: BASE_WALL_NANOS + NANOS_PER_SECOND,
+            pamms: vec![],
+        };
+        assert!(tracker
+            .on_frame(empty, clock.at(1))
+            .is_none());
+        assert!(tracker.stale_deadline().is_some());
+    }
+
+    #[test]
+    fn component_expires_at_its_own_deadline_and_is_re_added_by_the_next_frame() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        assert_eq!(
+            tracker
+                .stale_deadline()
+                .expect("serving"),
+            clock.at(24).instant
+        );
+
+        // One second early: nothing due.
+        assert!(tracker
+            .on_stale_deadline(clock.at(23))
+            .is_none());
+
+        let update = tracker
+            .on_stale_deadline(clock.at(24))
+            .expect("removal expected");
         assert!(update.states.is_empty());
         assert!(update.new_pairs.is_empty());
         assert_eq!(update.removed_pairs.len(), 1);
         assert!(update
             .removed_pairs
             .contains_key(&expected_id()));
+        assert_eq!(update.block_number_or_timestamp, 100);
+        assert!(update.is_partial);
+        assert!(tracker.stale_deadline().is_none());
 
-        // Nothing served and nothing changed: no update.
+        // Firing again with nothing served emits nothing.
         assert!(tracker
-            .on_frame(
-                TitanPriceLevelMessage {
-                    block_number: 102,
-                    timestamp: BASE_WALL_NANOS,
-                    pamms: vec![],
-                },
-                clock.at(0),
-            )
+            .on_stale_deadline(clock.at(25))
             .is_none());
 
-        // A venue that reappears is a new pair again.
         let update = tracker
-            .on_frame(message(103, wbtc_usdc_pairs()), clock.at(0))
+            .on_frame(message_at(102, 26, wbtc_usdc_pairs()), clock.at(26))
             .expect("update expected");
         assert!(update
             .new_pairs
             .contains_key(&expected_id()));
+        assert!(update.removed_pairs.is_empty());
+    }
+
+    #[test]
+    fn deadline_is_shortened_by_the_frame_age_at_acceptance() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // Built at t=0, accepted at t=3: the data is already 3 s old.
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(3))
+            .expect("update expected");
+        assert_eq!(
+            tracker
+                .stale_deadline()
+                .expect("serving"),
+            clock.at(24).instant
+        );
+    }
+
+    #[test]
+    fn replayed_frame_does_not_extend_the_deadline() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        // The same frame arriving again 10 s later carries the same timestamp.
+        tracker
+            .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(10))
+            .expect("update expected");
+        assert_eq!(
+            tracker
+                .stale_deadline()
+                .expect("serving"),
+            clock.at(24).instant
+        );
+    }
+
+    #[test]
+    fn omitted_pair_expires_alone_while_the_rest_stays_served() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        let both = vec![
+            pair_levels(WBTC, USDC, vec![level(100_000_000, 100_000_000_000)]),
+            pair_levels(USDC, WBTC, vec![level(100_000_000_000, 99_000_000)]),
+            pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)]),
+        ];
+        tracker
+            .on_frame(message_at(100, 0, both), clock.at(0))
+            .expect("update expected");
+        // Only WETH/USDC keeps being carried, up to t=23; the clock never goes backwards.
+        for second in 1..=23 {
+            let weth_usdc = vec![pair_levels(
+                WETH,
+                USDC,
+                vec![level(1_000_000_000_000_000_000, 3_000_000_000)],
+            )];
+            tracker.on_frame(message_at(100 + second / 12, second, weth_usdc), clock.at(second));
+        }
+        let update = tracker
+            .on_stale_deadline(clock.at(24))
+            .expect("removal expected");
+        assert_eq!(update.removed_pairs.len(), 1);
+        assert!(update
+            .removed_pairs
+            .contains_key(&expected_id()));
+        // WETH/USDC is still served, with a deadline 24 s after its last frame at t=23.
+        assert_eq!(
+            tracker
+                .stale_deadline()
+                .expect("serving"),
+            clock.at(47).instant
+        );
+    }
+
+    #[test]
+    fn components_from_one_frame_expire_together() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        let both = vec![
+            pair_levels(WBTC, USDC, vec![level(100_000_000, 100_000_000_000)]),
+            pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)]),
+        ];
+        tracker
+            .on_frame(message_at(100, 0, both), clock.at(0))
+            .expect("update expected");
+        let update = tracker
+            .on_stale_deadline(clock.at(24))
+            .expect("removal expected");
+        assert_eq!(update.removed_pairs.len(), 2);
+    }
+
+    #[test]
+    fn pair_set_oscillation_emits_no_removal() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        let wide = || {
+            vec![
+                pair_levels(WBTC, USDC, vec![level(100_000_000, 100_000_000_000)]),
+                pair_levels(USDC, WBTC, vec![level(100_000_000_000, 99_000_000)]),
+                pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)]),
+            ]
+        };
+        let narrow =
+            || vec![pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)])];
+        tracker
+            .on_frame(message_at(100, 0, wide()), clock.at(0))
+            .expect("update expected");
+        for second in 1..=10u64 {
+            let pairs = if second % 2 == 0 { wide() } else { narrow() };
+            let update = tracker
+                .on_frame(message_at(100, second, pairs), clock.at(second))
+                .expect("update expected");
+            assert!(update.removed_pairs.is_empty(), "second {second}");
+            assert!(update.new_pairs.is_empty(), "second {second}");
+        }
+    }
+
+    #[test]
+    fn poisoned_first_block_recovers_after_expiry() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // A fresh first frame with an absurd block becomes the frontier.
+        tracker
+            .on_frame(message_at(u64::MAX / 2, 0, wbtc_usdc_pairs()), clock.at(0))
+            .expect("update expected");
+        // Sane frames regress below it and are rejected for the whole window.
+        for second in 1..=23 {
+            assert!(tracker
+                .on_frame(message_at(100, second, wbtc_usdc_pairs()), clock.at(second))
+                .is_none());
+        }
+        // Expiry clears the served set and resets the frontier.
+        let removal = tracker
+            .on_stale_deadline(clock.at(24))
+            .expect("removal expected");
+        assert_eq!(removal.removed_pairs.len(), 1);
+        assert_eq!(removal.block_number_or_timestamp, u64::MAX / 2);
+        // The next sane frame is accepted as a first frame again, and nothing from the
+        // poisoned frame survives: the pair comes back as new.
+        let update = tracker
+            .on_frame(message_at(100, 25, wbtc_usdc_pairs()), clock.at(25))
+            .expect("update expected");
+        assert_eq!(update.block_number_or_timestamp, 100);
+        assert!(update
+            .new_pairs
+            .contains_key(&expected_id()));
+    }
+
+    #[test]
+    fn recovery_re_adds_only_the_pairs_the_frame_carries() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        let both = vec![
+            pair_levels(WBTC, USDC, vec![level(100_000_000, 100_000_000_000)]),
+            pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)]),
+        ];
+        tracker
+            .on_frame(message_at(100, 0, both), clock.at(0))
+            .expect("update expected");
+        tracker
+            .on_stale_deadline(clock.at(24))
+            .expect("removal expected");
+        // After the outage only WETH/USDC comes back: WBTC/USDC stays absent.
+        let weth_usdc =
+            vec![pair_levels(WETH, USDC, vec![level(1_000_000_000_000_000_000, 3_000_000_000)])];
+        let update = tracker
+            .on_frame(message_at(102, 25, weth_usdc), clock.at(25))
+            .expect("update expected");
+        assert_eq!(update.new_pairs.len(), 1);
+        assert!(!update
+            .new_pairs
+            .contains_key(&expected_id()));
+        assert!(update.removed_pairs.is_empty());
+    }
+
+    #[test]
+    fn one_direction_frame_re_adds_the_pair_with_the_other_direction_unquotable() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        let one_way = vec![pair_levels(WBTC, USDC, vec![level(100_000_000, 100_000_000_000)])];
+        let update = tracker
+            .on_frame(message_at(100, 0, one_way), clock.at(0))
+            .expect("update expected");
+        let state = update.states[&expected_id()]
+            .as_any()
+            .downcast_ref::<PriceLevelStreamState>()
+            .expect("price level state");
+        assert_eq!(state.quotes_0_to_1.len(), 1);
+        assert!(state.quotes_1_to_0.is_empty());
+        let usdc = token(USDC, "USDC", 6);
+        let wbtc = token(WBTC, "WBTC", 8);
+        assert!(state
+            .get_amount_out(BigUint::from(1_000_000u64), &usdc, &wbtc)
+            .is_err());
+    }
+
+    #[test]
+    fn served_components_are_gauged_per_venue_from_zero() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{gauge_value, snapshot_map},
+            LAST_SEEN, SERVED_COMPONENTS, SOURCE_STATE,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, || {
+            let tracker = tracker();
+            drop(tracker);
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(gauge_value(&snapshot, SERVED_COMPONENTS, &[("pamm", "fermiswap")]), 0.0);
+        assert_eq!(gauge_value(&snapshot, LAST_SEEN, &[("pamm", "fermiswap")]), 0.0);
+        assert_eq!(gauge_value(&snapshot, SOURCE_STATE, &[]), 1.0);
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, || {
+            let clock = Clock::new();
+            let mut tracker = tracker();
+            tracker.on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0));
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(gauge_value(&snapshot, SERVED_COMPONENTS, &[("pamm", "fermiswap")]), 1.0);
+        assert_eq!(
+            gauge_value(&snapshot, LAST_SEEN, &[("pamm", "fermiswap")]),
+            (BASE_WALL_NANOS / NANOS_PER_SECOND) as f64
+        );
+        assert_eq!(gauge_value(&snapshot, SOURCE_STATE, &[]), 2.0);
     }
 
     #[test]
@@ -758,8 +1224,8 @@ mod tests {
             tokens(),
             false,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::new(),
             DEFAULT_STALE_AFTER,
+            false,
         );
         assert!(tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -776,8 +1242,8 @@ mod tests {
             tokens(),
             true,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::new(),
             DEFAULT_STALE_AFTER,
+            false,
         );
         assert!(tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -793,8 +1259,8 @@ mod tests {
             tokens(),
             true,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::new(),
             DEFAULT_STALE_AFTER,
+            false,
         );
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -824,8 +1290,8 @@ mod tests {
             tokens(),
             true,
             BigUint::from(42_000u64),
-            HashSet::new(),
             DEFAULT_STALE_AFTER,
+            false,
         );
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -854,9 +1320,10 @@ mod tests {
             tokens(),
             false,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::from([Bytes::from_str(PAMM).unwrap()]),
             DEFAULT_STALE_AFTER,
+            false,
         );
+        tracker.set_router_venues(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -880,9 +1347,10 @@ mod tests {
             tokens(),
             true,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::from([Bytes::from_str(PAMM).unwrap()]),
             DEFAULT_STALE_AFTER,
+            false,
         );
+        tracker.set_router_venues(HashSet::from([Bytes::from_str(PAMM).unwrap()]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
@@ -911,9 +1379,10 @@ mod tests {
             tokens(),
             false,
             BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST),
-            HashSet::from([other_venue]),
             DEFAULT_STALE_AFTER,
+            false,
         );
+        tracker.set_router_venues(HashSet::from([other_venue]));
 
         let update = tracker
             .on_frame(message(100, wbtc_usdc_pairs()), clock.at(0))
