@@ -371,6 +371,28 @@ mod tests {
         }
     }
 
+    /// A frame captured verbatim from the live stream (2026-09-05). It carries `timestamp`,
+    /// `slot`, and an undocumented per-venue `maker` field the parser must ignore.
+    const CAPTURED_MESSAGE_2026_09_05: &str =
+        include_str!("test_responses/pamm_price_levels_1788624558231060482.json");
+
+    #[test]
+    fn parses_captured_live_message_with_timestamp_and_extra_fields() {
+        let message: TitanPriceLevelMessage =
+            serde_json::from_str(CAPTURED_MESSAGE_2026_09_05).expect("valid JSON");
+        assert_eq!(message.timestamp, 1788624558231060482);
+        assert_eq!(message.block_number, 25912232);
+        assert_eq!(message.pamms.len(), 7);
+        let fermiswap = message
+            .pamms
+            .iter()
+            .find(|pamm| {
+                pamm.pamm == Bytes::from_str("0x5979458912f80b96d30d4220af8e2e4925a33320").unwrap()
+            })
+            .expect("fermiswap present");
+        assert_eq!(fermiswap.pairs.len(), 12);
+    }
+
     #[test]
     fn backoff_grows_exponentially_up_to_the_cap() {
         let max_backoff = ConnectionSettings::default().max_backoff;
