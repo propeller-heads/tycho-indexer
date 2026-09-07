@@ -212,13 +212,12 @@ mod tests {
         type ScriptQueue = Arc<Mutex<VecDeque<Result<Vec<Bytes>, FetchVenuesError>>>>;
 
         let venue = Bytes::from_str("0x5979458912f80b96d30d4220af8e2e4925a33320").unwrap();
-        let script: ScriptQueue =
-            Arc::new(Mutex::new(VecDeque::from([
-                Err(FetchVenuesError::Call { reason: "first".to_string() }),
-                Err(FetchVenuesError::Call { reason: "second".to_string() }),
-                Ok(vec![venue.clone()]),
-                Ok(vec![]),
-            ])));
+        let script: ScriptQueue = Arc::new(Mutex::new(VecDeque::from([
+            Err(FetchVenuesError::Call { reason: "first".to_string() }),
+            Err(FetchVenuesError::Call { reason: "second".to_string() }),
+            Ok(vec![venue.clone()]),
+            Ok(vec![]),
+        ])));
         let fetch = {
             let script = script.clone();
             move || {
