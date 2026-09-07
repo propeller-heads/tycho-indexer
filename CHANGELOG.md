@@ -1,3 +1,73 @@
+## [0.392.0](https://github.com/propeller-heads/tycho/compare/0.391.0...0.392.0) (2026-09-07)
+
+
+### Features
+
+* switch sf as provider for robinhood ([3b3d7f5](https://github.com/propeller-heads/tycho/commit/3b3d7f562dfe51993767daad740f64850088f995))
+* switch sf as provider for robinhood ([#1419](https://github.com/propeller-heads/tycho/issues/1419)) ([3b710bc](https://github.com/propeller-heads/tycho/commit/3b710bc7843376b4483e9b6804770fc22b9cbf62))
+
+## [0.391.0](https://github.com/propeller-heads/tycho/compare/0.390.0...0.391.0) (2026-09-07)
+
+
+### Features
+
+* **integration-test:** wire up Robinhood Chain protocols ([1372b11](https://github.com/propeller-heads/tycho/commit/1372b11eb5661795daf35f9cf7170cbec002105c))
+* **integration-test:** wire up Robinhood Chain protocols ([#1418](https://github.com/propeller-heads/tycho/issues/1418)) ([6b12f35](https://github.com/propeller-heads/tycho/commit/6b12f35d48f220e16cfec5791c6de3bdcd813f6e))
+
+## [0.390.0](https://github.com/propeller-heads/tycho/compare/0.389.0...0.390.0) (2026-09-05)
+
+
+### Features
+
+* **router-trades:** start each chain at its first v3 router ([#1415](https://github.com/propeller-heads/tycho/issues/1415)) ([034d9f2](https://github.com/propeller-heads/tycho/commit/034d9f23def3f88d0b9d64ad2aa08a47de34d62a))
+
+
+### Performance Improvements
+
+* **router-trades:** start each chain at its first v3 router ([630fe7f](https://github.com/propeller-heads/tycho/commit/630fe7fadef263e078c4c942133017f07567743b))
+
+## [0.389.0](https://github.com/propeller-heads/tycho/compare/0.388.0...0.389.0) (2026-09-04)
+
+
+### Features
+
+* **router-trades:** index the per-client positive slippage exemption ([5b7b6b6](https://github.com/propeller-heads/tycho/commit/5b7b6b68fff035996d607629946cfb11ea924951)), closes [#1371](https://github.com/propeller-heads/tycho/issues/1371)
+* **router-trades:** index the vault balances that hold router fees ([ac98632](https://github.com/propeller-heads/tycho/commit/ac98632983954459eb45efe8bcc56d7b2ca79c90))
+* **router-trades:** name executors from a table and settle on one flag ([dad1739](https://github.com/propeller-heads/tycho/commit/dad173906c71caaff92f69321a8b420e9382b2d6))
+* **router-trades:** skip a block that touched no router, with a block index ([88ec891](https://github.com/propeller-heads/tycho/commit/88ec891992f0daa609bd27ccf16eea15344520b6))
+
+
+### Bug Fixes
+
+* **router-trades:** read the fee bps scale off the calculator ([e7dd0a3](https://github.com/propeller-heads/tycho/commit/e7dd0a3f9751207abfb889f93d226ca6a4478224))
+* **router-trades:** read the fee bps scale off the calculator ([#1412](https://github.com/propeller-heads/tycho/issues/1412)) ([a37407e](https://github.com/propeller-heads/tycho/commit/a37407e3d6e8915990c501dfeb818b2aa7205466))
+
+## [0.388.0](https://github.com/propeller-heads/tycho/compare/0.387.0...0.388.0) (2026-09-04)
+
+
+### Features
+
+* **router-trades:** release the spkg packages apart from the image ([18e7d07](https://github.com/propeller-heads/tycho/commit/18e7d07762992b4dcb92469546b8c815b0857cdb))
+* **router-trades:** release the spkg packages apart from the image ([#1401](https://github.com/propeller-heads/tycho/issues/1401)) ([4586a6a](https://github.com/propeller-heads/tycho/commit/4586a6a96dfb1b6ec22587f40b7c8e3068e249d8))
+
+## [0.387.0](https://github.com/propeller-heads/tycho/compare/0.386.1...0.387.0) (2026-09-04)
+
+
+### Features
+
+* add sky executor ([af20b85](https://github.com/propeller-heads/tycho/commit/af20b852919b532e4a4508a9c7e846e46da43d8c))
+* add sky executor ([#1393](https://github.com/propeller-heads/tycho/issues/1393)) ([856f3c1](https://github.com/propeller-heads/tycho/commit/856f3c1131921ccc6896c715856ada578ba3d8e1))
+
+## [0.386.1](https://github.com/propeller-heads/tycho/compare/0.386.0...0.386.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* **testing:** make Robinhood Chain packages testable ([d93a698](https://github.com/propeller-heads/tycho/commit/d93a698d014b33c9ffd3ef8e1a91282ac4990f6b))
+* **testing:** make Robinhood Chain packages testable ([#1410](https://github.com/propeller-heads/tycho/issues/1410)) ([f39d07e](https://github.com/propeller-heads/tycho/commit/f39d07ee096a4182248c6f4179bc24880f1ce158))
+* **testing:** set ROBINHOOD_RPC_URL for the Foundry fork tests ([f2b689f](https://github.com/propeller-heads/tycho/commit/f2b689fb893c6c65bdb4e1d108fe5285d81813c4)), closes [#1337](https://github.com/propeller-heads/tycho/issues/1337)
+* **testing:** wire ROBINHOOD_RPC_URL through CI, and require it ([10d89ad](https://github.com/propeller-heads/tycho/commit/10d89adb27764913f76f8314fd2016ea7566dd54))
+
 ## [0.386.0](https://github.com/propeller-heads/tycho/compare/0.385.0...0.386.0) (2026-09-04)
 
 
