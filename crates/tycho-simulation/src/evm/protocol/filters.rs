@@ -179,6 +179,15 @@ fn asset_types_has_non_standard(attrs: &HashMap<String, Bytes>) -> bool {
 }
 
 /// Filters out ERC4626 vaults that cannot be quoted correctly.
+///
+/// FIXME: spETH, sUSDS and sUSDC are knowingly left in, and are correct only where `vm:curve` is
+/// indexed: its components trace their rate getter at a block where the accrual branch runs,
+/// which is what puts `vsr`/`ssr` into the indexed slot set. A deployment without it fails to
+/// decode them exactly like the vaults listed below. They stay because consumers route through
+/// them, and each one is a whole leg rather than depth — a vault converts at a fixed rate at any
+/// size up to its caps — so excluding one takes USDS/sUSDS, USDC/sUSDC or WETH/spETH out of the
+/// graph outright. The fix belongs in the substreams: emit an entrypoint per rate getter, so the
+/// slot is captured whichever branch a conversion takes.
 pub fn erc4626_filter(component: &ComponentWithState) -> bool {
     const UNSUPPORTED_POOLS: [&str; 3] = [
         // Spark Vault V2 (spUSDC, spUSDT). Their rate is `nowChi()`, which reads `vsr` (slot 4)
