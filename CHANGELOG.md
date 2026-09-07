@@ -1,3 +1,29 @@
+## [0.393.0](https://github.com/propeller-heads/tycho/compare/0.392.0...0.393.0) (2026-09-07)
+
+
+### Features
+
+* **execution:** update MetricExecutor to the MetricOmm pool interface ([7ff4994](https://github.com/propeller-heads/tycho/commit/7ff4994c3161222060314f01845a5efd9bf4d8ea))
+* **metric:** gate quotability on the new priceProviderStatus field ([0a78182](https://github.com/propeller-heads/tycho/commit/0a78182345a3e59c80721634128f26448909096a))
+* **metric:** support Robinhood Chain ([499163b](https://github.com/propeller-heads/tycho/commit/499163ba2977c53b7e77c98c8b29b6e6177f17ed))
+* **rfq:** drive Metric depth walk by cumulativeInputVolume; fetch tvlFiat ([6b2a1e2](https://github.com/propeller-heads/tycho/commit/6b2a1e2a56f407dd91b9bc8a9e1625ad527038c3))
+* **rfq:** migrate Metric integration to v1 API ([f167eb8](https://github.com/propeller-heads/tycho/commit/f167eb820cc95faadb31fce357c9b747e58af8b5))
+* **rfq:** migrate Metric integration to v1 API ([#1220](https://github.com/propeller-heads/tycho/issues/1220)) ([61267c9](https://github.com/propeller-heads/tycho/commit/61267c971a1a3e65a8461b33cccfa03ab0a5d014))
+* **rfq:** price Metric partial-bin fills pro-rata in integer units ([2a34a1c](https://github.com/propeller-heads/tycho/commit/2a34a1cf09764309eea779ef46ce2b52f2fc3488))
+* **rfq:** skip Metric pools with empty depth ([c1aa202](https://github.com/propeller-heads/tycho/commit/c1aa202773ef28d9df36c2a78f08e5cdd6e9151e))
+* **rfq:** take Metric input limits from depth cumulativeInputVolume ([c155ffc](https://github.com/propeller-heads/tycho/commit/c155ffccac5c92dc4c3ac784ff4b294a65466e01))
+
+
+### Bug Fixes
+
+* **execution:** silence Slither unused-return on the Metric pool swap ([5ae2fdc](https://github.com/propeller-heads/tycho/commit/5ae2fdc96feab4f158b3ae7e06a35b81fab9d08e))
+* **metric:** decode explicit null depth as an empty book ([d9f4990](https://github.com/propeller-heads/tycho/commit/d9f4990d40a3a0717087e33bc58c4404036af712))
+
+
+### Reverts
+
+* drop unrelated Ramses ABI formatting ([934bba2](https://github.com/propeller-heads/tycho/commit/934bba20836f2e8d747c9fcf74b260e41990b959))
+
 ## [0.392.0](https://github.com/propeller-heads/tycho/compare/0.391.0...0.392.0) (2026-09-07)
 
 
