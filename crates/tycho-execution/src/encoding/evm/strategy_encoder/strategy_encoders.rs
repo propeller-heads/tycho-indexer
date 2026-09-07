@@ -104,10 +104,10 @@ fn encode_swap_groups(
     let mut tasks: Vec<Vec<usize>> = Vec::new();
     let mut ordered_task: Vec<usize> = Vec::new();
     for (index, group) in grouped_swaps.iter().enumerate() {
-        let requires_order = swap_encoder_registry
+        let requires_ordered_quotes = swap_encoder_registry
             .get_encoder(&group.protocol_system)
             .is_some_and(|encoder| encoder.requires_ordered_quotes());
-        if requires_order {
+        if requires_ordered_quotes {
             ordered_task.push(index);
         } else {
             tasks.push(vec![index]);
@@ -133,13 +133,14 @@ fn encode_swap_groups(
     for (index, encoded) in encoded_tasks.into_iter().flatten() {
         encoded_groups[index] = Some(encoded);
     }
-    let mut results = Vec::with_capacity(grouped_swaps.len());
-    for encoded in encoded_groups {
-        results.push(encoded.ok_or_else(|| {
-            EncodingError::FatalError("encoding dropped a swap group".to_string())
-        })?);
-    }
-    Ok(results)
+    encoded_groups
+        .into_iter()
+        .map(|encoded| {
+            encoded.ok_or_else(|| {
+                EncodingError::FatalError("encoding dropped a swap group".to_string())
+            })
+        })
+        .collect()
 }
 
 /// Represents the encoder for a swap strategy which supports single swaps.
@@ -469,6 +470,7 @@ mod tests {
         collections::HashMap,
         fs,
         str::FromStr,
+        sync::{Arc, Mutex},
         time::{Duration, Instant},
     };
 
@@ -687,9 +689,9 @@ mod tests {
             assert!(first_hop < second_hop, "hops are out of route order");
         }
 
-        /// Hashflow quote nonces must increase in execution order, so its two hops (300ms
-        /// each) encode one after the other (>= 600ms total) while the bebop hop (300ms)
-        /// still overlaps with them (< 900ms total).
+        /// Hashflow quote nonces must increase in route order, so its two hops (300ms each)
+        /// encode one after the other (>= 600ms total) while the bebop hop (300ms) still
+        /// overlaps with them (< 900ms total).
         #[test]
         fn test_sequential_swap_serializes_hashflow_hops() {
             let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
@@ -697,6 +699,7 @@ mod tests {
             let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
             let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
             let delay = Duration::from_millis(300);
+            let request_log: Arc<Mutex<Vec<Bytes>>> = Arc::default();
             let solution = Solution::new(
                 Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
                 Bytes::default(),
@@ -706,8 +709,8 @@ mod tests {
                 BigUint::from(1_000u64),
                 BigUint::from(900u64),
                 vec![
-                    delayed_hashflow_swap(usdc.clone(), weth.clone(), delay),
-                    delayed_hashflow_swap(weth.clone(), dai.clone(), delay),
+                    delayed_hashflow_swap(usdc.clone(), weth.clone(), delay, request_log.clone()),
+                    delayed_hashflow_swap(weth.clone(), dai.clone(), delay, request_log.clone()),
                     delayed_bebop_swap(dai.clone(), wbtc.clone(), delay),
                 ],
             );
@@ -723,6 +726,8 @@ mod tests {
 
             assert!(elapsed >= Duration::from_millis(600), "hashflow hops overlapped: {elapsed:?}");
             assert!(elapsed < Duration::from_millis(900), "bebop hop did not overlap: {elapsed:?}");
+            let requests = request_log.lock().unwrap();
+            assert_eq!(*requests, vec![usdc.clone(), weth], "quotes requested out of route order");
             let hex_calldata = encode(encoded_solution.swaps());
             let first_hop = hex_calldata
                 .find(&encode(&usdc)[..])
@@ -732,11 +737,88 @@ mod tests {
                 .unwrap();
             assert!(first_hop < second_hop, "hashflow hops are out of route order");
         }
+
+        /// A route of only hashflow hops collapses to a single ordered task, which runs on the
+        /// calling thread; the hops still encode one after the other in route order.
+        #[test]
+        fn test_sequential_swap_serializes_hashflow_only_route() {
+            let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+            let weth = weth();
+            let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+            let delay = Duration::from_millis(300);
+            let request_log: Arc<Mutex<Vec<Bytes>>> = Arc::default();
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc.clone(),
+                dai.clone(),
+                BigUint::from(1_000u64),
+                BigUint::from(1_000u64),
+                BigUint::from(900u64),
+                vec![
+                    delayed_hashflow_swap(usdc.clone(), weth.clone(), delay, request_log.clone()),
+                    delayed_hashflow_swap(weth.clone(), dai.clone(), delay, request_log.clone()),
+                ],
+            );
+            let encoder =
+                SequentialSwapStrategyEncoder::new(get_swap_encoder_registry(), router_address())
+                    .unwrap();
+
+            let start = Instant::now();
+            encoder
+                .encode_strategy(&solution)
+                .unwrap();
+            let elapsed = start.elapsed();
+
+            assert!(elapsed >= Duration::from_millis(600), "hashflow hops overlapped: {elapsed:?}");
+            let requests = request_log.lock().unwrap();
+            assert_eq!(*requests, vec![usdc, weth], "quotes requested out of route order");
+        }
     }
 
     mod split {
         use super::*;
-        use crate::encoding::models::{default_token, Swap};
+        use crate::encoding::{
+            evm::testing_utils::delayed_hashflow_swap,
+            models::{default_token, Swap},
+        };
+
+        /// The split strategy shares `encode_swap_groups` with the sequential strategy, so its
+        /// hashflow hops (300ms each) also encode one after the other in route order.
+        #[test]
+        fn test_split_swap_serializes_hashflow_hops() {
+            let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+            let weth = weth();
+            let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+            let delay = Duration::from_millis(300);
+            let request_log: Arc<Mutex<Vec<Bytes>>> = Arc::default();
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc.clone(),
+                dai.clone(),
+                BigUint::from(1_000u64),
+                BigUint::from(1_000u64),
+                BigUint::from(900u64),
+                vec![
+                    delayed_hashflow_swap(usdc.clone(), weth.clone(), delay, request_log.clone()),
+                    delayed_hashflow_swap(weth.clone(), dai.clone(), delay, request_log.clone()),
+                ],
+            );
+            let encoder =
+                SplitSwapStrategyEncoder::new(get_swap_encoder_registry(), router_address())
+                    .unwrap();
+
+            let start = Instant::now();
+            encoder
+                .encode_strategy(&solution)
+                .unwrap();
+            let elapsed = start.elapsed();
+
+            assert!(elapsed >= Duration::from_millis(600), "hashflow hops overlapped: {elapsed:?}");
+            let requests = request_log.lock().unwrap();
+            assert_eq!(*requests, vec![usdc, weth], "quotes requested out of route order");
+        }
 
         #[test]
         fn test_split_input_cyclic_swap() {
