@@ -60,13 +60,21 @@ fn backoff(attempt: u32, max_backoff: Duration) -> Duration {
     exponential.min(max_backoff)
 }
 
-/// A parsed price level stream frame: a complete snapshot of all streamed pAMMs' quote ladders
-/// for the block currently being built.
+/// A parsed price level stream frame: the quote ladders of every pAMM Titan simulated in one
+/// build round, targeting the block currently being built.
+///
+/// Frames are best effort, not complete snapshots: a venue or pair can be absent from one frame
+/// and present in the next (observed on 7.7% of frames in a 15 minute capture), so absence must
+/// never be read as retirement.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct TitanPriceLevelMessage {
     /// The L1 block number the quotes target (the block currently being built).
     pub block_number: u64,
+    /// When Titan built this frame, in nanoseconds since the Unix epoch. Frames re-emitted
+    /// within one build round share a timestamp, so it is a freshness marker, not an identity.
+    #[allow(dead_code)]
+    pub timestamp: u64,
     /// Per-pAMM quote snapshots.
     pub pamms: Vec<TitanPammLevels>,
 }
@@ -254,6 +262,7 @@ mod tests {
     fn parses_documented_sample_message() {
         let message: TitanPriceLevelMessage = serde_json::from_str(SAMPLE_MESSAGE).unwrap();
         assert_eq!(message.block_number, 25345763);
+        assert_eq!(message.timestamp, 1781801564588230787);
         assert_eq!(message.pamms.len(), 1);
 
         let pamm = &message.pamms[0];
@@ -271,6 +280,14 @@ mod tests {
         assert_eq!(pair.order_book.len(), 2);
         assert_eq!(pair.order_book[0].amount_in, BigUint::from(0x989680u64));
         assert_eq!(pair.order_book[0].amount_out, BigUint::from(0x174b67393u64));
+    }
+
+    /// The wire `timestamp` is the only per-frame freshness signal, so a frame without it is
+    /// unusable and must not parse.
+    #[test]
+    fn rejects_frame_without_timestamp() {
+        let json = r#"{"slot": 1, "blockNumber": 2, "pamms": []}"#;
+        assert!(serde_json::from_str::<TitanPriceLevelMessage>(json).is_err());
     }
 
     #[test]

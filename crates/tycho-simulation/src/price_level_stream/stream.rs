@@ -573,6 +573,7 @@ mod tests {
     fn message(block_number: u64, pairs: Vec<TitanPairLevels>) -> TitanPriceLevelMessage {
         TitanPriceLevelMessage {
             block_number,
+            timestamp: 0,
             pamms: vec![TitanPammLevels { pamm: Bytes::from_str(PAMM).unwrap(), pairs }],
         }
     }
@@ -700,7 +701,7 @@ mod tests {
         // The next frame no longer contains the pAMM at all: a complete snapshot without a
         // venue means the venue is gone, pairs and all.
         let update = tracker
-            .process(TitanPriceLevelMessage { block_number: 101, pamms: vec![] })
+            .process(TitanPriceLevelMessage { block_number: 101, timestamp: 0, pamms: vec![] })
             .expect("update expected");
         assert!(update.states.is_empty());
         assert!(update.new_pairs.is_empty());
@@ -711,7 +712,7 @@ mod tests {
 
         // Nothing served and nothing changed: no update.
         assert!(tracker
-            .process(TitanPriceLevelMessage { block_number: 102, pamms: vec![] })
+            .process(TitanPriceLevelMessage { block_number: 102, timestamp: 0, pamms: vec![] })
             .is_none());
 
         // A venue that reappears is a new pair again.
