@@ -1,3 +1,11 @@
+## [0.392.0](https://github.com/propeller-heads/tycho/compare/0.391.0...0.392.0) (2026-09-07)
+
+
+### Features
+
+* switch sf as provider for robinhood ([3b3d7f5](https://github.com/propeller-heads/tycho/commit/3b3d7f562dfe51993767daad740f64850088f995))
+* switch sf as provider for robinhood ([#1419](https://github.com/propeller-heads/tycho/issues/1419)) ([3b710bc](https://github.com/propeller-heads/tycho/commit/3b710bc7843376b4483e9b6804770fc22b9cbf62))
+
 ## [0.391.0](https://github.com/propeller-heads/tycho/compare/0.390.0...0.391.0) (2026-09-07)
 
 
