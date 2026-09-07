@@ -1,11 +1,5 @@
 //! Turns Titan frames into [`Update`]s.
 
-// `on_stale_deadline`/`stale_deadline` (and the data they carry: `Served::address`,
-// `Source::Serving::deadline`) are not yet called from `stream.rs::build()` — the periodic
-// sweep timer that drives them is wired in by a task that follows. Mirrors the same situation
-// in `telemetry.rs`.
-#![allow(dead_code)]
-
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},

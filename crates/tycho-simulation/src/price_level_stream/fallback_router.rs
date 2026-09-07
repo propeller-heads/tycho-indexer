@@ -1,5 +1,3 @@
-#![allow(dead_code)] // The reader and its timeout are wired into the stream by a task that follows.
-
 //! Reads the venue whitelist of Titan's PropAMMRouter.
 //!
 //! Venues on the whitelist may be served under the `propammfallback:` protocol family, which

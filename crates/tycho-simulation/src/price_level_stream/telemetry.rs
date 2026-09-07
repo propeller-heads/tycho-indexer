@@ -3,8 +3,6 @@
 //! recorder every call is a no-op. Label values are registered venue names or fixed
 //! enumerations, never values from the wire.
 
-#![allow(dead_code)] // Helpers are wired in by tasks that follow
-
 use metrics::{counter, gauge};
 
 pub(super) const FRAMES_ACCEPTED: &str = "price_level_stream_frames_accepted_total";

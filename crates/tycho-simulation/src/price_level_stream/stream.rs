@@ -1,8 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
+    pin::Pin,
     time::Duration,
 };
 
+use async_stream::stream;
 use num_bigint::BigUint;
 use tokio_stream::{Stream, StreamExt};
 use tycho_common::{models::token::Token, Bytes};
@@ -12,7 +14,11 @@ use super::{
         default_denied_pamms, default_served_pamms, PriceLevelStreamConfig,
         DEFAULT_AUTO_DETECTED_GAS_COST,
     },
-    fallback_router::{fetch_fallback_router_venues, RouterVenuesRead},
+    fallback_router::{
+        fetch_fallback_router_venues, router_venues_reader, RouterVenuesRead,
+        WHITELIST_READ_TIMEOUT,
+    },
+    telemetry::{self, SourceState},
     titan::{self, ConnectionSettings, TITAN_PRICE_LEVEL_URL},
     tracker::{Now, SnapshotTracker, DEFAULT_STALE_AFTER},
 };
@@ -20,6 +26,10 @@ use crate::protocol::models::Update;
 
 /// Static attribute under which each emitted component carries its pAMM venue address.
 pub const PAMM_ADDRESS_ATTRIBUTE: &str = "pamm_address";
+
+/// How often the PropAMMRouter whitelist is re-read by default. It is governance-gated and
+/// changes rarely; ten minutes bounds how long a de-whitelisted venue keeps its old family.
+pub(super) const DEFAULT_WHITELIST_REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 
 /// Builds a stream of [`Update`]s from the Titan pAMM price level WebSocket.
 ///
@@ -46,6 +56,16 @@ pub struct PriceLevelStreamBuilder {
     /// Whether [`build`](Self::build) reads the PropAMMRouter whitelist and serves the venues on
     /// it under the `propammfallback:` family.
     fallback_router: bool,
+    /// See [`stale_after`](Self::stale_after).
+    stale_after: Duration,
+    /// See [`whitelist_refresh_interval`](Self::whitelist_refresh_interval).
+    whitelist_refresh_interval: Duration,
+    /// See [`fallback_router_rpc_url`](Self::fallback_router_rpc_url).
+    fallback_router_rpc_url: Option<String>,
+    /// Whether `RPC_URL` from the environment (or `.env`) is consulted when no explicit
+    /// fallback router URL is set. Only tests turn this off, to pin down the no-URL path
+    /// without touching process-global state.
+    env_rpc_url: bool,
 }
 
 impl Default for PriceLevelStreamBuilder {
@@ -59,6 +79,10 @@ impl Default for PriceLevelStreamBuilder {
             auto_detected_gas_cost: None,
             connection: ConnectionSettings::default(),
             fallback_router: true,
+            stale_after: DEFAULT_STALE_AFTER,
+            whitelist_refresh_interval: DEFAULT_WHITELIST_REFRESH_INTERVAL,
+            fallback_router_rpc_url: None,
+            env_rpc_url: true,
         }
     }
 }
@@ -192,6 +216,39 @@ impl PriceLevelStreamBuilder {
         self
     }
 
+    /// Overrides how long the data of one frame may be served without a fresher frame carrying
+    /// it (default: 24s, two block times). A component no accepted frame has carried for this
+    /// long is emitted in `removed_pairs`; the next accepted frame carrying it re-adds it in
+    /// `new_pairs`. Frames whose data is this old or older are rejected outright. Independent
+    /// of this setting, a state refuses to quote once its frame is one block time old.
+    pub fn stale_after(mut self, duration: Duration) -> Self {
+        self.stale_after = duration;
+        self
+    }
+
+    /// Overrides how often the PropAMMRouter whitelist is re-read (default: 10 minutes). A
+    /// venue whose family changes is removed at once and re-added under the new family by the
+    /// next frame carrying it.
+    pub fn whitelist_refresh_interval(mut self, interval: Duration) -> Self {
+        self.whitelist_refresh_interval = interval;
+        self
+    }
+
+    /// Sets the node URL the PropAMMRouter whitelist is read from, taking precedence over
+    /// `RPC_URL` from the environment or `.env`. Consumers that already hold a node URL as
+    /// configuration should pass it here rather than depend on process environment for an
+    /// execution-affecting decision.
+    pub fn fallback_router_rpc_url(mut self, url: impl Into<String>) -> Self {
+        self.fallback_router_rpc_url = Some(url.into());
+        self
+    }
+
+    #[cfg(test)]
+    fn without_env_rpc_url(mut self) -> Self {
+        self.env_rpc_url = false;
+        self
+    }
+
     /// Consumes the builder and opens the stream.
     ///
     /// Venues on Titan's PropAMMRouter whitelist are served under `propammfallback:{name}`, so
@@ -231,6 +288,10 @@ impl PriceLevelStreamBuilder {
             auto_detected_gas_cost,
             connection,
             fallback_router,
+            stale_after,
+            whitelist_refresh_interval,
+            fallback_router_rpc_url,
+            env_rpc_url,
         } = self;
         if registry.is_empty() && !auto_detect {
             tracing::warn!(
@@ -247,27 +308,78 @@ impl PriceLevelStreamBuilder {
         let url = url.unwrap_or_else(|| TITAN_PRICE_LEVEL_URL.to_string());
         let auto_detected_gas_cost =
             auto_detected_gas_cost.unwrap_or_else(|| BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST));
-
-        futures::FutureExt::flatten_stream(async move {
-            let router_venues = if fallback_router {
-                fetch_router_venues(rpc_url_from_env()).await
-            } else {
-                HashSet::new()
-            };
-            let mut tracker = SnapshotTracker::new(
-                registry,
-                denied,
-                tokens,
-                auto_detect,
-                auto_detected_gas_cost,
-                DEFAULT_STALE_AFTER,
-                fallback_router,
+        let rpc_url = match (fallback_router, fallback_router_rpc_url) {
+            (false, _) => None,
+            (true, Some(explicit)) => Some(explicit),
+            (true, None) => env_rpc_url
+                .then(rpc_url_from_env)
+                .flatten(),
+        };
+        if fallback_router && rpc_url.is_none() {
+            tracing::error!(
+                "No node URL to read the PropAMMRouter whitelist from: set RPC_URL, call \
+                 fallback_router_rpc_url, or opt out with without_fallback_router. No pAMM will \
+                 be served"
             );
-            tracker.on_router_venues(RouterVenuesRead::Ok(router_venues));
+            telemetry::source_state(SourceState::AwaitingWhitelist);
+        }
+        let mut tracker = SnapshotTracker::new(
+            registry,
+            denied,
+            tokens,
+            auto_detect,
+            auto_detected_gas_cost,
+            stale_after,
+            fallback_router,
+        );
+        let max_backoff = connection.max_backoff;
 
-            titan::messages(url, connection)
-                .filter_map(move |message| tracker.on_frame(message, Now::current()))
-        })
+        stream! {
+            let frames = titan::messages(url, connection);
+            tokio::pin!(frames);
+            let mut whitelist: Option<WhitelistReader> = rpc_url.map(|rpc_url| {
+                let fetch = move || {
+                    let rpc_url = rpc_url.clone();
+                    async move { fetch_fallback_router_venues(&rpc_url).await }
+                };
+                Box::pin(router_venues_reader(
+                    fetch,
+                    WHITELIST_READ_TIMEOUT,
+                    max_backoff,
+                    whitelist_refresh_interval,
+                )) as WhitelistReader
+            });
+            loop {
+                let deadline = tracker.stale_deadline();
+                let sleep_until_deadline = tokio::time::sleep_until(
+                    deadline.map_or_else(tokio::time::Instant::now, tokio::time::Instant::from_std),
+                );
+                let update = tokio::select! {
+                    Some(frame) = frames.next() => tracker.on_frame(frame, Now::current()),
+                    () = sleep_until_deadline, if deadline.is_some() => {
+                        tracker.on_stale_deadline(Now::current())
+                    }
+                    read = next_whitelist_read(&mut whitelist) => tracker.on_router_venues(read),
+                };
+                if let Some(update) = update {
+                    yield update;
+                }
+            }
+        }
+    }
+}
+
+type WhitelistReader = Pin<Box<dyn Stream<Item = RouterVenuesRead> + Send>>;
+
+/// The next whitelist read, or a future that never resolves when the whitelist is not read at
+/// all, so the `select!` arm simply never fires.
+async fn next_whitelist_read(reader: &mut Option<WhitelistReader>) -> RouterVenuesRead {
+    let Some(reader) = reader else {
+        return std::future::pending().await;
+    };
+    match reader.next().await {
+        Some(read) => read,
+        None => std::future::pending().await,
     }
 }
 
@@ -282,37 +394,28 @@ fn rpc_url_from_env() -> Option<String> {
         })
 }
 
-/// The PropAMMRouter's whitelisted venues, or an empty set when they cannot be read — no node
-/// URL, or a failed call. Both cases warn and leave every venue on the direct path, so a
-/// misconfigured deployment loses the Uniswap V3 fallback instead of losing the stream.
-async fn fetch_router_venues(rpc_url: Option<String>) -> HashSet<Bytes> {
-    let Some(rpc_url) = rpc_url else {
-        tracing::warn!(
-            "RPC_URL is not set; pAMM swaps execute on the venues directly, without the \
-             PropAMMRouter's Uniswap V3 fallback"
-        );
-        return HashSet::new();
-    };
-
-    match fetch_fallback_router_venues(&rpc_url).await {
-        Ok(venues) => venues.into_iter().collect(),
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "Could not read the PropAMMRouter venue whitelist; pAMM swaps execute on the \
-                 venues directly, without the Uniswap V3 fallback"
-            );
-            HashSet::new()
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use std::{
+        pin::Pin,
+        str::FromStr,
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
+    use futures::SinkExt;
+    use num_bigint::BigUint;
+    use tokio_tungstenite::tungstenite::Message;
 
     use super::{
-        super::{config::default_denied_pamms, test_support::PAMM},
+        super::{
+            config::{default_denied_pamms, PriceLevelStreamConfig},
+            test_support::{frame_text, tokens, wall_nanos_now, FakeConnection, FakeTitan, PAMM},
+            tracker::DEFAULT_STALE_AFTER,
+        },
         *,
     };
 
@@ -421,23 +524,6 @@ mod tests {
         );
     }
 
-    /// Without a node URL there is nothing to read the whitelist from: every venue stays on the
-    /// direct path instead of the build failing.
-    #[tokio::test]
-    async fn missing_rpc_url_leaves_every_venue_on_the_direct_path() {
-        assert!(fetch_router_venues(None)
-            .await
-            .is_empty());
-    }
-
-    /// A failed whitelist read degrades the same way as a missing node URL.
-    #[tokio::test]
-    async fn failed_whitelist_read_leaves_every_venue_on_the_direct_path() {
-        assert!(fetch_router_venues(Some("not a url".to_string()))
-            .await
-            .is_empty());
-    }
-
     /// The families this stream emits are the ones tycho-execution resolves an encoder for. A
     /// drift between the two makes every route through a pAMM fail to encode.
     #[test]
@@ -448,5 +534,447 @@ mod tests {
 
         assert_eq!(format!("{PRICE_LEVEL_STREAM_FAMILY}:"), PRICE_LEVEL_STREAM_PREFIX);
         assert_eq!(format!("{PROPAMM_FALLBACK_FAMILY}:"), PROPAMM_FALLBACK_PREFIX);
+    }
+
+    fn fermiswap() -> PriceLevelStreamConfig {
+        PriceLevelStreamConfig::new(
+            "fermiswap",
+            Bytes::from_str(PAMM).unwrap(),
+            BigUint::from(120_000u64),
+        )
+    }
+
+    /// Short windows: 300 ms of data freshness, a 100 ms idle watchdog, 20 ms backoff cap.
+    fn fast_builder(fake: &FakeTitan) -> PriceLevelStreamBuilder {
+        PriceLevelStreamBuilder::new()
+            .endpoint(fake.url())
+            .without_fallback_router()
+            .add_pamm(fermiswap())
+            .with_tokens(tokens())
+            .stale_after(Duration::from_millis(300))
+            .connect_timeout(Duration::from_secs(1))
+            .read_idle_timeout(Duration::from_millis(100))
+            .max_backoff(Duration::from_millis(20))
+    }
+
+    async fn next_within(
+        stream: &mut Pin<&mut impl Stream<Item = Update>>,
+        limit: Duration,
+    ) -> Option<Update> {
+        tokio::time::timeout(limit, stream.next())
+            .await
+            .ok()
+            .flatten()
+    }
+
+    fn assert_removal_only(update: &Update, expected_removed: usize) {
+        assert!(update.states.is_empty());
+        assert!(update.new_pairs.is_empty());
+        assert!(update.sync_states.is_empty());
+        assert!(update.is_partial);
+        assert_eq!(update.removed_pairs.len(), expected_removed);
+    }
+
+    /// Sends one fresh frame on the first connection only; later connections stay silent.
+    async fn first_connection_sends_one_frame(index: usize, mut socket: FakeConnection) {
+        if index == 0 {
+            let _ = socket
+                .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                .await;
+        }
+        std::future::pending::<()>().await;
+    }
+
+    #[tokio::test]
+    async fn silence_past_stale_after_removes_every_served_component() {
+        let fake = FakeTitan::spawn(first_connection_sends_one_frame).await;
+        let stream = fast_builder(&fake).build();
+        tokio::pin!(stream);
+
+        let first = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("first snapshot");
+        assert_eq!(first.new_pairs.len(), 1);
+        assert!(first.removed_pairs.is_empty());
+
+        // Idle reconnects happen (silent later connections), but no frame refreshes anything.
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+        assert_eq!(removal.block_number_or_timestamp, 100);
+        assert!(fake.connections.load(Ordering::SeqCst) >= 2);
+    }
+
+    #[tokio::test]
+    async fn repeated_immediate_closes_remove_within_stale_after() {
+        let fake = FakeTitan::spawn(|index, mut socket| async move {
+            if index == 0 {
+                let _ = socket
+                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                    .await;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+            let _ = socket.close(None).await;
+        })
+        .await;
+        let stream = fast_builder(&fake).build();
+        tokio::pin!(stream);
+
+        assert_eq!(
+            next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("first snapshot")
+                .new_pairs
+                .len(),
+            1
+        );
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+    }
+
+    #[tokio::test]
+    async fn refused_reconnects_remove_within_stale_after() {
+        let mut fake = FakeTitan::spawn(|_, mut socket| async move {
+            let _ = socket
+                .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                .await;
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            let _ = socket.close(None).await;
+        })
+        .await;
+        let stream = fast_builder(&fake).build();
+        tokio::pin!(stream);
+
+        assert_eq!(
+            next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("first snapshot")
+                .new_pairs
+                .len(),
+            1
+        );
+        // From here every connect is refused at TCP level.
+        fake.shutdown();
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+        assert_eq!(fake.connections.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn replayed_frames_remove_within_stale_after_and_never_re_add() {
+        // One frame, stamped once, replayed every 50 ms forever.
+        let fake = FakeTitan::spawn(|_, mut socket| async move {
+            let replay = frame_text(100, wall_nanos_now());
+            loop {
+                if socket
+                    .send(Message::Text(replay.clone().into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        let stream = fast_builder(&fake)
+            .read_idle_timeout(Duration::from_secs(5))
+            .build();
+        tokio::pin!(stream);
+
+        assert_eq!(
+            next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("first snapshot")
+                .new_pairs
+                .len(),
+            1
+        );
+        // Replays are accepted while fresh but cannot extend the deadline; the deadline fires
+        // even though a frame is ready on every poll.
+        let removal = loop {
+            let update = next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("stream stays alive");
+            if !update.removed_pairs.is_empty() {
+                break update;
+            }
+            assert!(update.new_pairs.is_empty());
+        };
+        assert_removal_only(&removal, 1);
+        // Every later replay is too old to be accepted: nothing comes back.
+        assert!(next_within(&mut stream, Duration::from_millis(500))
+            .await
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn ping_only_traffic_removes_within_stale_after() {
+        let fake = FakeTitan::spawn(|index, mut socket| async move {
+            if index == 0 {
+                let _ = socket
+                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                    .await;
+            }
+            loop {
+                if socket
+                    .send(Message::Ping(Vec::new().into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        let stream = fast_builder(&fake).build();
+        tokio::pin!(stream);
+        assert_eq!(
+            next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("first snapshot")
+                .new_pairs
+                .len(),
+            1
+        );
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+        assert!(fake.connections.load(Ordering::SeqCst) >= 2, "idle watchdog did not reconnect");
+    }
+
+    #[tokio::test]
+    async fn malformed_text_removes_within_stale_after() {
+        let fake = FakeTitan::spawn(|index, mut socket| async move {
+            if index == 0 {
+                let _ = socket
+                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                    .await;
+            }
+            loop {
+                if socket
+                    .send(Message::Text("nonsense".into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await;
+        let stream = fast_builder(&fake).build();
+        tokio::pin!(stream);
+        assert_eq!(
+            next_within(&mut stream, Duration::from_secs(2))
+                .await
+                .expect("first snapshot")
+                .new_pairs
+                .len(),
+            1
+        );
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+        assert!(fake.connections.load(Ordering::SeqCst) >= 2, "idle watchdog did not reconnect");
+    }
+
+    #[tokio::test]
+    async fn fresh_frame_after_removal_re_adds_the_component() {
+        let fake = FakeTitan::spawn(|_, mut socket| async move {
+            let _ = socket
+                .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                .await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let _ = socket
+                .send(Message::Text(frame_text(101, wall_nanos_now()).into()))
+                .await;
+            std::future::pending::<()>().await;
+        })
+        .await;
+        let stream = fast_builder(&fake)
+            .read_idle_timeout(Duration::from_secs(5))
+            .build();
+        tokio::pin!(stream);
+
+        let first = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("first snapshot");
+        assert_eq!(first.new_pairs.len(), 1);
+        let removal = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("removal");
+        assert_removal_only(&removal, 1);
+        let re_added = next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("re-add");
+        assert_eq!(re_added.new_pairs.len(), 1);
+        assert!(re_added.removed_pairs.is_empty());
+        assert_eq!(re_added.block_number_or_timestamp, 101);
+    }
+
+    #[tokio::test]
+    async fn frames_are_forwarded_without_waiting_on_timers() {
+        let fake = FakeTitan::spawn(|_, mut socket| async move {
+            loop {
+                if socket
+                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        let stream = fast_builder(&fake)
+            .stale_after(Duration::from_secs(24))
+            .build();
+        tokio::pin!(stream);
+        next_within(&mut stream, Duration::from_secs(2))
+            .await
+            .expect("first snapshot");
+        for _ in 0..5 {
+            let started = std::time::Instant::now();
+            let update = next_within(&mut stream, Duration::from_secs(1))
+                .await
+                .expect("steady-state frame");
+            assert!(started.elapsed() < Duration::from_millis(200));
+            assert!(update.removed_pairs.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn no_connection_before_first_poll_and_drop_closes_the_socket() {
+        let server_saw_close = Arc::new(AtomicBool::new(false));
+        let fake = {
+            let server_saw_close = server_saw_close.clone();
+            FakeTitan::spawn(move |_, mut socket| {
+                let server_saw_close = server_saw_close.clone();
+                async move {
+                    let _ = socket
+                        .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                        .await;
+                    // Read until the client goes away.
+                    while let Some(Ok(message)) = socket.next().await {
+                        if matches!(message, Message::Close(_)) {
+                            break;
+                        }
+                    }
+                    server_saw_close.store(true, Ordering::SeqCst);
+                }
+            })
+            .await
+        };
+        // `Box::pin` rather than `tokio::pin!`, so that `drop` below drops the stream itself
+        // rather than a `Pin<&mut _>` pointing at a value that outlives the assertion.
+        let mut stream = Box::pin(
+            fast_builder(&fake)
+                .read_idle_timeout(Duration::from_secs(5))
+                .build(),
+        );
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(fake.connections.load(Ordering::SeqCst), 0, "connected before first poll");
+
+        {
+            let mut polled = stream.as_mut();
+            next_within(&mut polled, Duration::from_secs(2))
+                .await
+                .expect("first snapshot");
+        }
+        assert_eq!(fake.connections.load(Ordering::SeqCst), 1);
+
+        drop(stream);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        assert!(server_saw_close.load(Ordering::SeqCst), "socket not closed on drop");
+        assert_eq!(fake.connections.load(Ordering::SeqCst), 1, "reconnected after drop");
+    }
+
+    #[tokio::test]
+    async fn unreachable_whitelist_serves_nothing_while_frames_flow() {
+        let fake = FakeTitan::spawn(|_, mut socket| async move {
+            loop {
+                if socket
+                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        // Port 1 refuses connections, so every whitelist read fails fast.
+        let stream = PriceLevelStreamBuilder::new()
+            .endpoint(fake.url())
+            .fallback_router_rpc_url("http://127.0.0.1:1")
+            .add_pamm(fermiswap())
+            .with_tokens(tokens())
+            .connect_timeout(Duration::from_secs(1))
+            .max_backoff(Duration::from_millis(20))
+            .build();
+        tokio::pin!(stream);
+        assert!(next_within(&mut stream, Duration::from_millis(700))
+            .await
+            .is_none());
+        assert!(fake.connections.load(Ordering::SeqCst) >= 1, "frames were not consumed");
+    }
+
+    // `metrics::with_local_recorder` takes a sync closure, so this test drives its own
+    // current-thread runtime instead of using `#[tokio::test]`.
+    #[test]
+    fn missing_node_url_serves_nothing_and_reports_awaiting_whitelist() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{gauge_value, snapshot_map},
+            SOURCE_STATE,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        metrics::with_local_recorder(&recorder, || {
+            runtime.block_on(async {
+                let fake = FakeTitan::spawn(first_connection_sends_one_frame).await;
+                let stream = PriceLevelStreamBuilder::new()
+                    .endpoint(fake.url())
+                    .without_env_rpc_url()
+                    .add_pamm(fermiswap())
+                    .with_tokens(tokens())
+                    .connect_timeout(Duration::from_secs(1))
+                    .build();
+                tokio::pin!(stream);
+                assert!(next_within(&mut stream, Duration::from_millis(500))
+                    .await
+                    .is_none());
+            });
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(gauge_value(&snapshot, SOURCE_STATE, &[]), 0.0);
+    }
+
+    #[test]
+    fn knob_defaults() {
+        let builder = PriceLevelStreamBuilder::new();
+        assert_eq!(builder.stale_after, DEFAULT_STALE_AFTER);
+        assert_eq!(builder.whitelist_refresh_interval, DEFAULT_WHITELIST_REFRESH_INTERVAL);
+        assert!(builder
+            .fallback_router_rpc_url
+            .is_none());
+        assert!(builder.env_rpc_url);
     }
 }
