@@ -7,7 +7,7 @@ use crate::rfq::errors::RFQError;
 pub const DEFAULT_METRIC_API_URL: &str = "http://54.199.103.16:8080";
 
 // Base host only - the client appends the /v1/... paths itself.
-pub const DEFAULT_BICONOMY_PROPAMM_API_URL: &str = "https://propamm.biconomy.io";
+pub const DEFAULT_BICONOMY_API_URL: &str = "https://propamm.biconomy.io";
 
 /// Hashflow authentication configuration
 pub struct HashflowAuth {
@@ -105,15 +105,15 @@ pub struct BiconomyConfig {
 }
 
 /// Read Biconomy PropAMM API configuration from environment variables.
-/// BICONOMY_PROPAMM_API_URL defaults to the production endpoint;
-/// BICONOMY_PROPAMM_API_KEY is required by the hosted API (issued by the Biconomy team) and
+/// BICONOMY_API_URL defaults to the production endpoint;
+/// BICONOMY_API_KEY is required by the hosted API (issued by the Biconomy team) and
 /// sent as the `x-api-key` header when present.
-pub fn get_biconomy_propamm_config() -> BiconomyConfig {
-    let base_url = env::var("BICONOMY_PROPAMM_API_URL")
+pub fn get_biconomy_config() -> BiconomyConfig {
+    let base_url = env::var("BICONOMY_API_URL")
         .ok()
         .filter(|url| !url.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_BICONOMY_PROPAMM_API_URL.to_string());
-    let api_key = env::var("BICONOMY_PROPAMM_API_KEY")
+        .unwrap_or_else(|| DEFAULT_BICONOMY_API_URL.to_string());
+    let api_key = env::var("BICONOMY_API_KEY")
         .ok()
         .filter(|key| !key.trim().is_empty());
 
@@ -194,18 +194,18 @@ mod tests {
     }
 
     #[test]
-    fn test_biconomy_propamm_config_defaults_and_reads_env() {
-        env::remove_var("BICONOMY_PROPAMM_API_URL");
+    fn test_biconomy_config_defaults_and_reads_env() {
+        env::remove_var("BICONOMY_API_URL");
 
-        let config = get_biconomy_propamm_config();
-        assert_eq!(config.base_url, DEFAULT_BICONOMY_PROPAMM_API_URL);
+        let config = get_biconomy_config();
+        assert_eq!(config.base_url, DEFAULT_BICONOMY_API_URL);
 
-        env::set_var("BICONOMY_PROPAMM_API_URL", "https://propamm.example");
+        env::set_var("BICONOMY_API_URL", "https://propamm.example");
 
-        let config = get_biconomy_propamm_config();
+        let config = get_biconomy_config();
         assert_eq!(config.base_url, "https://propamm.example");
 
-        env::remove_var("BICONOMY_PROPAMM_API_URL");
+        env::remove_var("BICONOMY_API_URL");
     }
 
     #[test]

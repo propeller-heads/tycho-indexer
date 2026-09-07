@@ -3,7 +3,7 @@ mod angstrom;
 mod balancer_v2;
 mod balancer_v3;
 mod bebop;
-mod biconomy_propamm;
+mod biconomy;
 mod bopamm;
 mod curve;
 mod ekubo;

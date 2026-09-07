@@ -17,10 +17,10 @@ use tycho_common::{
 
 use crate::rfq::{
     client::RFQClient,
-    protocols::biconomy_propamm::{
+    protocols::biconomy::{
         client::BiconomyClient,
         models::{
-            biconomy_propamm_price_scale, parse_biguint, BiconomyLevelsResponse,
+            biconomy_price_scale, parse_biguint, BiconomyLevelsResponse,
             BiconomyMakerLevels,
         },
     },
@@ -187,7 +187,7 @@ fn sweep_segments(
     maker_count: usize,
     amount_in: &BigUint,
 ) -> SweepResult {
-    let scale = biconomy_propamm_price_scale();
+    let scale = biconomy_price_scale();
 
     // (amount_in_maker, total_out) accumulators per maker
     let mut consumed_per_maker = vec![(BigUint::zero(), BigUint::zero()); maker_count];
@@ -412,7 +412,7 @@ mod tests {
     use tycho_common::models::Chain;
 
     use super::*;
-    use crate::rfq::protocols::biconomy_propamm::{
+    use crate::rfq::protocols::biconomy::{
         client_builder::BiconomyClientBuilder, models::BiconomyLevel,
     };
 
@@ -479,7 +479,7 @@ mod tests {
 
     fn fixture_state() -> BiconomyState {
         let json = std::fs::read_to_string(
-            "src/rfq/protocols/biconomy_propamm/test_responses/levels.json",
+            "src/rfq/protocols/biconomy/test_responses/levels.json",
         )
         .unwrap();
         let levels: BiconomyLevelsResponse = serde_json::from_str(&json).unwrap();

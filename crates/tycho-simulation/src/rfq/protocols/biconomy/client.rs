@@ -21,7 +21,7 @@ use crate::{
         client::RFQClient,
         errors::RFQError,
         models::TimestampHeader,
-        protocols::biconomy_propamm::models::{
+        protocols::biconomy::models::{
             parse_biguint, BiconomyChainLevelsResponse, BiconomyFirmQuoteResponse,
             BiconomyLevelsResponse,
         },
@@ -79,7 +79,7 @@ pub struct BiconomyClient {
 }
 
 impl BiconomyClient {
-    pub const PROTOCOL_SYSTEM: &'static str = "rfq:biconomy_propamm";
+    pub const PROTOCOL_SYSTEM: &'static str = "rfq:biconomy";
 
     pub fn new(
         chain: Chain,
@@ -172,7 +172,7 @@ impl BiconomyClient {
         let protocol_component = ProtocolComponent {
             id: component_id.clone(),
             protocol_system: Self::PROTOCOL_SYSTEM.to_string(),
-            protocol_type_name: "biconomy_propamm_pool".to_string(),
+            protocol_type_name: "biconomy_pool".to_string(),
             chain: self.chain,
             tokens: vec![levels.token_in.clone(), levels.token_out.clone()],
             contract_addresses: vec![], // empty for RFQ
@@ -372,7 +372,7 @@ impl RFQClient for BiconomyClient {
                         .as_secs(),
                 };
 
-                yield Ok(("biconomy_propamm".to_string(), StateSyncMessage {
+                yield Ok(("biconomy".to_string(), StateSyncMessage {
                     header: TimestampHeader { timestamp },
                     snapshots: Snapshot { states: new_components, vm_storage: HashMap::new() },
                     deltas: None, // Deltas are always None - all the changes are absolute
@@ -450,7 +450,7 @@ mod tests {
     use tokio::{io::AsyncWriteExt, net::TcpListener};
 
     use super::*;
-    use crate::rfq::protocols::biconomy_propamm::models::BiconomyCall;
+    use crate::rfq::protocols::biconomy::models::BiconomyCall;
 
     fn weth() -> Bytes {
         Bytes::from_str("0x4200000000000000000000000000000000000006").unwrap()
@@ -478,7 +478,7 @@ mod tests {
 
     fn levels_fixture() -> BiconomyLevelsResponse {
         let json = std::fs::read_to_string(
-            "src/rfq/protocols/biconomy_propamm/test_responses/levels.json",
+            "src/rfq/protocols/biconomy/test_responses/levels.json",
         )
         .unwrap();
         serde_json::from_str(&json).unwrap()
@@ -547,8 +547,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(component.component.id, component_id);
-        assert_eq!(component.component.protocol_system, "rfq:biconomy_propamm");
-        assert_eq!(component.component.protocol_type_name, "biconomy_propamm_pool");
+        assert_eq!(component.component.protocol_system, "rfq:biconomy");
+        assert_eq!(component.component.protocol_type_name, "biconomy_pool");
         assert_eq!(component.component.chain, Chain::Base);
         assert_eq!(component.component.tokens, vec![weth(), usdc()]);
         assert!(component
@@ -559,10 +559,10 @@ mod tests {
 
         let attrs = &component.state.attributes;
         assert_eq!(String::from_utf8(attrs["as_of"].to_vec()).unwrap(), "1784889534");
-        let makers: Vec<crate::rfq::protocols::biconomy_propamm::models::BiconomyMakerLevels> =
+        let makers: Vec<crate::rfq::protocols::biconomy::models::BiconomyMakerLevels> =
             serde_json::from_slice(&attrs["makers"]).unwrap();
         assert_eq!(makers, levels.makers);
-        let merged: Vec<crate::rfq::protocols::biconomy_propamm::models::BiconomyMergedLevel> =
+        let merged: Vec<crate::rfq::protocols::biconomy::models::BiconomyMergedLevel> =
             serde_json::from_slice(&attrs["merged"]).unwrap();
         assert_eq!(merged, levels.merged);
     }
@@ -580,7 +580,7 @@ mod tests {
     #[test]
     fn test_process_firm_quote_response() {
         let json = std::fs::read_to_string(
-            "src/rfq/protocols/biconomy_propamm/test_responses/firm_quote.json",
+            "src/rfq/protocols/biconomy/test_responses/firm_quote.json",
         )
         .unwrap();
         let quote: BiconomyFirmQuoteResponse = serde_json::from_str(&json).unwrap();
@@ -612,7 +612,7 @@ mod tests {
     #[test]
     fn test_process_firm_quote_response_rejects_wrong_receiver() {
         let json = std::fs::read_to_string(
-            "src/rfq/protocols/biconomy_propamm/test_responses/firm_quote.json",
+            "src/rfq/protocols/biconomy/test_responses/firm_quote.json",
         )
         .unwrap();
         let quote: BiconomyFirmQuoteResponse = serde_json::from_str(&json).unwrap();
@@ -626,7 +626,7 @@ mod tests {
     #[tokio::test]
     async fn test_polling_stream_emits_snapshots() {
         let addr = create_json_server(
-            "src/rfq/protocols/biconomy_propamm/test_responses/chain_levels.json",
+            "src/rfq/protocols/biconomy/test_responses/chain_levels.json",
         )
         .await;
         let client = test_client(&format!("http://127.0.0.1:{}", addr.port()));
@@ -635,14 +635,14 @@ mod tests {
 
         // First poll: the pair appears as a new component with the fixture's asOf timestamp.
         let (provider, msg) = stream.next().await.unwrap().unwrap();
-        assert_eq!(provider, "biconomy_propamm");
+        assert_eq!(provider, "biconomy");
         assert_eq!(msg.header.timestamp, 1784889534);
         assert_eq!(msg.snapshots.states.len(), 1);
         assert!(msg.removed_components.is_empty());
 
         let component_id = BiconomyClient::component_id(&weth(), &usdc());
         let component = &msg.snapshots.states[&component_id];
-        assert_eq!(component.component.protocol_system, "rfq:biconomy_propamm");
+        assert_eq!(component.component.protocol_system, "rfq:biconomy");
         assert!(component
             .state
             .attributes
@@ -657,7 +657,7 @@ mod tests {
     #[tokio::test]
     async fn test_request_binding_quote_over_http() {
         let addr =
-            create_json_server("src/rfq/protocols/biconomy_propamm/test_responses/firm_quote.json")
+            create_json_server("src/rfq/protocols/biconomy/test_responses/firm_quote.json")
                 .await;
         let client = test_client(&format!("http://127.0.0.1:{}", addr.port()));
 
@@ -690,24 +690,24 @@ mod tests {
     }
 
     /// Live integration against the production API. Ignored by default; run with:
-    ///   BICONOMY_PROPAMM_API_KEY=<key> cargo test -p tycho-simulation \
-    ///     biconomy_propamm::client::tests::live_levels_and_firm_quote -- --ignored --nocapture
+    ///   BICONOMY_API_KEY=<key> cargo test -p tycho-simulation \
+    ///     biconomy::client::tests::live_levels_and_firm_quote -- --ignored --nocapture
     #[tokio::test]
     #[ignore]
     async fn live_levels_and_firm_quote() {
-        let Ok(api_key) = std::env::var("BICONOMY_PROPAMM_API_KEY") else {
-            eprintln!("BICONOMY_PROPAMM_API_KEY not set - skipping live test");
+        let Ok(api_key) = std::env::var("BICONOMY_API_KEY") else {
+            eprintln!("BICONOMY_API_KEY not set - skipping live test");
             return;
         };
         let client = BiconomyClient::new(
             Chain::Base,
             vec![(weth(), usdc())],
             // Same env override the production config honors, so CI can point at staging.
-            std::env::var("BICONOMY_PROPAMM_API_URL")
+            std::env::var("BICONOMY_API_URL")
                 .ok()
                 .filter(|url| !url.trim().is_empty())
                 .unwrap_or_else(|| {
-                    crate::rfq::constants::DEFAULT_BICONOMY_PROPAMM_API_URL.to_string()
+                    crate::rfq::constants::DEFAULT_BICONOMY_API_URL.to_string()
                 }),
             Duration::from_millis(1000),
             Duration::from_secs(10),

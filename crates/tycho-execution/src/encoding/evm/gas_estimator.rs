@@ -56,7 +56,7 @@ pub const PROTOCOLS_NEEDING_APPROVAL: &[&str] = &[
     "vm:balancer_v2",
     "vm:curve",
     "rfq:bebop",
-    "rfq:biconomy_propamm",
+    "rfq:biconomy",
     "rfq:hashflow",
     "rfq:liquorice",
     "rfq:metric",

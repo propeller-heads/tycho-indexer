@@ -2,14 +2,14 @@ use tokio::time::Duration;
 use tycho_common::{models::Chain, Bytes};
 
 use super::client::BiconomyClient;
-use crate::rfq::{constants::get_biconomy_propamm_config, errors::RFQError};
+use crate::rfq::{constants::get_biconomy_config, errors::RFQError};
 
 /// `BiconomyClientBuilder` is a builder pattern implementation for creating instances of
 /// `BiconomyClient`.
 ///
 /// # Example
 /// ```rust
-/// use tycho_simulation::rfq::protocols::biconomy_propamm::client_builder::BiconomyClientBuilder;
+/// use tycho_simulation::rfq::protocols::biconomy::client_builder::BiconomyClientBuilder;
 /// use tycho_common::{models::Chain, Bytes};
 /// use std::str::FromStr;
 ///
@@ -32,7 +32,7 @@ pub struct BiconomyClientBuilder {
 
 impl BiconomyClientBuilder {
     pub fn new(chain: Chain) -> Self {
-        let config = get_biconomy_propamm_config();
+        let config = get_biconomy_config();
         Self {
             chain,
             pairs: Vec::new(),
@@ -58,7 +58,7 @@ impl BiconomyClientBuilder {
         self
     }
 
-    /// Override the Biconomy API base url (defaults to the BICONOMY_PROPAMM_API_URL env var).
+    /// Override the Biconomy API base url (defaults to the BICONOMY_API_URL env var).
     pub fn base_url(mut self, base_url: String) -> Self {
         self.base_url = base_url;
         self
@@ -76,7 +76,7 @@ impl BiconomyClientBuilder {
         self
     }
 
-    /// Set the hosted-API key (defaults to the BICONOMY_PROPAMM_API_KEY env var), sent as the
+    /// Set the hosted-API key (defaults to the BICONOMY_API_KEY env var), sent as the
     /// `x-api-key` header. The production API rejects unauthenticated requests.
     pub fn api_key(mut self, api_key: String) -> Self {
         self.api_key = Some(api_key);
