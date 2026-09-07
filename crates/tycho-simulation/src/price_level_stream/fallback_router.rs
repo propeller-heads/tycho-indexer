@@ -121,8 +121,8 @@ where
 
 /// Reads the router's whitelisted pAMM venues via `eth_call` on the node at `rpc_url`.
 ///
-/// Read at startup with retries and refreshed periodically by [`router_venues_reader`], each
-/// read bounded by [`WHITELIST_READ_TIMEOUT`]. The whitelist is governance-gated and changes
+/// Read at startup with retries and refreshed periodically by `router_venues_reader`, each
+/// read bounded by `WHITELIST_READ_TIMEOUT`. The whitelist is governance-gated and changes
 /// rarely, and renaming a running component's protocol system would churn every consumer's
 /// component set.
 ///
