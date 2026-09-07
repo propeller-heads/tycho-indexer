@@ -1,3 +1,10 @@
+## [0.393.1](https://github.com/propeller-heads/tycho/compare/0.393.0...0.393.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* correct the unsupported pool list in erc4626_filter ([#1322](https://github.com/propeller-heads/tycho/issues/1322)) ([11364de](https://github.com/propeller-heads/tycho/commit/11364de49b8741c86ccef20a508184613861fa36))
+
 ## [0.393.0](https://github.com/propeller-heads/tycho/compare/0.392.0...0.393.0) (2026-09-07)
 
 
