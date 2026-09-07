@@ -109,6 +109,13 @@ impl SwapEncoder for HashflowSwapEncoder {
         true
     }
 
+    /// Hashflow pools require each quote's nonce — a timestamp the market maker assigns when
+    /// answering — to be strictly increasing per trader. A quote fetched out of route order
+    /// carries a nonce that reverts the swap executed after it.
+    fn requires_ordered_quotes(&self) -> bool {
+        true
+    }
+
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
         Box::new(self.clone())
     }

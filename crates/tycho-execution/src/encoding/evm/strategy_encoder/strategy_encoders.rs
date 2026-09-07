@@ -73,7 +73,10 @@ fn encode_swap_group(
 /// Encodes every swap group and keeps the input order.
 ///
 /// Groups run through [`map_on_threads`] only when one of their encoders blocks on a quote
-/// request; a route of pure on-chain protocols encodes on the calling thread.
+/// request; a route of pure on-chain protocols encodes on the calling thread. Groups whose
+/// encoder requires ordered quotes share one thread and encode in route order, so their
+/// quotes arrive with increasing nonces; the remaining groups encode in parallel alongside
+/// them.
 fn encode_swap_groups(
     swap_encoder_registry: &SwapEncoderRegistry,
     grouped_swaps: &[SwapGroup],
@@ -95,9 +98,48 @@ fn encode_swap_groups(
         }
         return Ok(encoded_groups);
     }
-    map_on_threads(grouped_swaps, |grouped_swap| {
-        encode_swap_group(swap_encoder_registry, grouped_swap, router_address)
-    })
+
+    // One task per group, except ordered-quote groups, which form a single task encoding
+    // them in route order.
+    let mut tasks: Vec<Vec<usize>> = Vec::new();
+    let mut ordered_task: Vec<usize> = Vec::new();
+    for (index, group) in grouped_swaps.iter().enumerate() {
+        let requires_order = swap_encoder_registry
+            .get_encoder(&group.protocol_system)
+            .is_some_and(|encoder| encoder.requires_ordered_quotes());
+        if requires_order {
+            ordered_task.push(index);
+        } else {
+            tasks.push(vec![index]);
+        }
+    }
+    if !ordered_task.is_empty() {
+        tasks.push(ordered_task);
+    }
+
+    let encoded_tasks = map_on_threads(&tasks, |task| {
+        let mut encoded = Vec::with_capacity(task.len());
+        for &index in task {
+            encoded.push((
+                index,
+                encode_swap_group(swap_encoder_registry, &grouped_swaps[index], router_address)?,
+            ));
+        }
+        Ok(encoded)
+    })?;
+
+    let mut encoded_groups: Vec<Option<EncodedSwapGroup>> = Vec::new();
+    encoded_groups.resize_with(grouped_swaps.len(), || None);
+    for (index, encoded) in encoded_tasks.into_iter().flatten() {
+        encoded_groups[index] = Some(encoded);
+    }
+    let mut results = Vec::with_capacity(grouped_swaps.len());
+    for encoded in encoded_groups {
+        results.push(encoded.ok_or_else(|| {
+            EncodingError::FatalError("encoding dropped a swap group".to_string())
+        })?);
+    }
+    Ok(results)
 }
 
 /// Represents the encoder for a swap strategy which supports single swaps.
@@ -524,7 +566,7 @@ mod tests {
     mod sequential {
         use super::*;
         use crate::encoding::{
-            evm::testing_utils::delayed_bebop_swap,
+            evm::testing_utils::{delayed_bebop_swap, delayed_hashflow_swap},
             models::{default_token, Swap},
         };
 
@@ -643,6 +685,52 @@ mod tests {
                 .find(&encode(&dai)[..])
                 .unwrap();
             assert!(first_hop < second_hop, "hops are out of route order");
+        }
+
+        /// Hashflow quote nonces must increase in execution order, so its two hops (300ms
+        /// each) encode one after the other (>= 600ms total) while the bebop hop (300ms)
+        /// still overlaps with them (< 900ms total).
+        #[test]
+        fn test_sequential_swap_serializes_hashflow_hops() {
+            let usdc = Bytes::from_str("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+            let weth = weth();
+            let dai = Bytes::from_str("0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+            let wbtc = Bytes::from_str("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599").unwrap();
+            let delay = Duration::from_millis(300);
+            let solution = Solution::new(
+                Bytes::from_str("0xcd09f75E2BF2A4d11F3AB23f1389FcC1621c0cc2").unwrap(),
+                Bytes::default(),
+                usdc.clone(),
+                wbtc.clone(),
+                BigUint::from(1_000u64),
+                BigUint::from(1_000u64),
+                BigUint::from(900u64),
+                vec![
+                    delayed_hashflow_swap(usdc.clone(), weth.clone(), delay),
+                    delayed_hashflow_swap(weth.clone(), dai.clone(), delay),
+                    delayed_bebop_swap(dai.clone(), wbtc.clone(), delay),
+                ],
+            );
+            let encoder =
+                SequentialSwapStrategyEncoder::new(get_swap_encoder_registry(), router_address())
+                    .unwrap();
+
+            let start = Instant::now();
+            let encoded_solution = encoder
+                .encode_strategy(&solution)
+                .unwrap();
+            let elapsed = start.elapsed();
+
+            assert!(elapsed >= Duration::from_millis(600), "hashflow hops overlapped: {elapsed:?}");
+            assert!(elapsed < Duration::from_millis(900), "bebop hop did not overlap: {elapsed:?}");
+            let hex_calldata = encode(encoded_solution.swaps());
+            let first_hop = hex_calldata
+                .find(&encode(&usdc)[..])
+                .unwrap();
+            let second_hop = hex_calldata
+                .find(&encode(&dai)[..])
+                .unwrap();
+            assert!(first_hop < second_hop, "hashflow hops are out of route order");
         }
     }
 
