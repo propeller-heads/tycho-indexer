@@ -663,7 +663,10 @@ mod tests {
             .await
             .expect("removal");
         assert_removal_only(&removal, 1);
-        assert_eq!(fake.connections.load(Ordering::SeqCst), 1);
+        // The fake closes 20 ms in and the backoff is capped at 20 ms, so under load one
+        // reconnect can be accepted before `shutdown` drops the listener. What the removal
+        // proves is that refused reconnects re-add nothing, not the exact connection count.
+        assert!(fake.connections.load(Ordering::SeqCst) <= 2);
     }
 
     #[tokio::test]
@@ -900,35 +903,62 @@ mod tests {
         assert_eq!(fake.connections.load(Ordering::SeqCst), 1, "reconnected after drop");
     }
 
-    #[tokio::test]
-    async fn unreachable_whitelist_serves_nothing_while_frames_flow() {
-        let fake = FakeTitan::spawn(|_, mut socket| async move {
-            loop {
-                if socket
-                    .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+    // `metrics::with_local_recorder` takes a sync closure, so this test drives its own
+    // current-thread runtime instead of using `#[tokio::test]`.
+    #[test]
+    fn unreachable_whitelist_serves_nothing_while_frames_flow() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{counter_value, snapshot_map},
+            WHITELIST_READS,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let connections = metrics::with_local_recorder(&recorder, || {
+            runtime.block_on(async {
+                let fake = FakeTitan::spawn(|_, mut socket| async move {
+                    loop {
+                        if socket
+                            .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                })
+                .await;
+                // Port 1 refuses connections, so every whitelist read fails fast.
+                let stream = PriceLevelStreamBuilder::new()
+                    .endpoint(fake.url())
+                    .fallback_router_rpc_url("http://127.0.0.1:1")
+                    .add_pamm(fermiswap())
+                    .with_tokens(tokens())
+                    .connect_timeout(Duration::from_secs(1))
+                    .max_backoff(Duration::from_millis(20))
+                    .build();
+                tokio::pin!(stream);
+                assert!(next_within(&mut stream, Duration::from_millis(700))
                     .await
-                    .is_err()
-                {
-                    return;
-                }
-                tokio::time::sleep(Duration::from_millis(50)).await;
-            }
-        })
-        .await;
-        // Port 1 refuses connections, so every whitelist read fails fast.
-        let stream = PriceLevelStreamBuilder::new()
-            .endpoint(fake.url())
-            .fallback_router_rpc_url("http://127.0.0.1:1")
-            .add_pamm(fermiswap())
-            .with_tokens(tokens())
-            .connect_timeout(Duration::from_secs(1))
-            .max_backoff(Duration::from_millis(20))
-            .build();
-        tokio::pin!(stream);
-        assert!(next_within(&mut stream, Duration::from_millis(700))
-            .await
-            .is_none());
-        assert!(fake.connections.load(Ordering::SeqCst) >= 1, "frames were not consumed");
+                    .is_none());
+                fake.connections.load(Ordering::SeqCst)
+            })
+        });
+        assert!(connections >= 1, "frames were not consumed");
+        // Without this the test would also pass if the reads had succeeded and the stream were
+        // silent for some other reason.
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert!(
+            counter_value(&snapshot, WHITELIST_READS, &[("outcome", "error")]) >= 1,
+            "no whitelist read failed"
+        );
     }
 
     // `metrics::with_local_recorder` takes a sync closure, so this test drives its own

@@ -288,4 +288,52 @@ mod tests {
         }
         assert!(calls.load(Ordering::SeqCst) >= 2);
     }
+
+    // `metrics::with_local_recorder` takes a sync closure, so this test drives its own
+    // current-thread runtime instead of using `#[tokio::test]`.
+    #[test]
+    fn whitelist_read_failures_are_counted() {
+        use std::time::Duration;
+
+        use futures::StreamExt;
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{counter_value, snapshot_map},
+            WHITELIST_READS,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        metrics::with_local_recorder(&recorder, || {
+            runtime.block_on(async {
+                let fetch = || async {
+                    Err::<Vec<Bytes>, FetchVenuesError>(FetchVenuesError::Call {
+                        reason: "connection refused".to_string(),
+                    })
+                };
+                let reader = router_venues_reader(
+                    fetch,
+                    Duration::from_millis(30),
+                    Duration::from_millis(5),
+                    Duration::from_secs(60),
+                );
+                tokio::pin!(reader);
+                for _ in 0..2 {
+                    match reader.next().await {
+                        Some(RouterVenuesRead::Failed(FetchVenuesError::Call { reason })) => {
+                            assert_eq!(reason, "connection refused");
+                        }
+                        other => panic!("expected a failed read, got {other:?}"),
+                    }
+                }
+            });
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert!(counter_value(&snapshot, WHITELIST_READS, &[("outcome", "error")]) >= 2);
+    }
 }

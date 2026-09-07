@@ -1078,6 +1078,31 @@ mod tests {
     }
 
     #[test]
+    fn stale_removal_is_counted_per_venue() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{counter_value, snapshot_map},
+            STALE_REMOVALS,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, || {
+            let clock = Clock::new();
+            let mut tracker = tracker();
+            tracker
+                .on_frame(message_at(100, 0, wbtc_usdc_pairs()), clock.at(0))
+                .expect("update expected");
+            tracker
+                .on_stale_deadline(clock.at(24))
+                .expect("removal expected");
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(counter_value(&snapshot, STALE_REMOVALS, &[("pamm", "fermiswap")]), 1);
+    }
+
+    #[test]
     fn deadline_is_shortened_by_the_frame_age_at_acceptance() {
         let clock = Clock::new();
         let mut tracker = tracker();
@@ -1643,6 +1668,25 @@ mod tests {
         assert!(tracker
             .on_router_venues(read_ok(&[PAMM]))
             .is_none());
+    }
+
+    #[test]
+    fn whitelist_read_gauges_the_venue_count() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::telemetry::{
+            test_support::{gauge_value, snapshot_map},
+            WHITELISTED_VENUES,
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        metrics::with_local_recorder(&recorder, || {
+            let mut tracker = tracker_awaiting_whitelist();
+            tracker.on_router_venues(read_ok(&[PAMM]));
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert_eq!(gauge_value(&snapshot, WHITELISTED_VENUES, &[]), 1.0);
     }
 
     #[test]

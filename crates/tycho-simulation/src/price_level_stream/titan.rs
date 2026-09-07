@@ -446,6 +446,66 @@ mod tests {
         assert!(fake.connections.load(Ordering::SeqCst) >= 2, "no reconnect on ping-only traffic");
     }
 
+    // `metrics::with_local_recorder` takes a sync closure, so this test drives its own
+    // current-thread runtime instead of using `#[tokio::test]`.
+    #[test]
+    fn ping_only_traffic_counts_an_idle_timeout_reconnect() {
+        use std::time::Duration;
+
+        use futures::SinkExt;
+        use metrics_util::debugging::DebuggingRecorder;
+
+        use super::super::{
+            telemetry::{
+                test_support::{counter_value, snapshot_map},
+                RECONNECTS,
+            },
+            test_support::{frame_text, wall_nanos_now, FakeTitan},
+        };
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        metrics::with_local_recorder(&recorder, || {
+            runtime.block_on(async {
+                let fake = FakeTitan::spawn(|_, mut socket| async move {
+                    let _ = socket
+                        .send(Message::Text(frame_text(100, wall_nanos_now()).into()))
+                        .await;
+                    loop {
+                        if socket
+                            .send(Message::Ping(Vec::new().into()))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                    }
+                })
+                .await;
+                let settings = ConnectionSettings {
+                    connect_timeout: Duration::from_secs(1),
+                    read_idle_timeout: Duration::from_millis(100),
+                    max_backoff: Duration::from_millis(10),
+                };
+                let stream = messages(fake.url(), settings);
+                tokio::pin!(stream);
+                assert!(tokio::time::timeout(Duration::from_secs(2), stream.next())
+                    .await
+                    .expect("first frame")
+                    .is_some());
+                // Keep polling so the idle watchdog runs and reconnects.
+                let _ = tokio::time::timeout(Duration::from_millis(400), stream.next()).await;
+            });
+        });
+        let snapshot = snapshot_map(snapshotter.snapshot());
+        assert!(counter_value(&snapshot, RECONNECTS, &[("reason", "idle_timeout")]) >= 1);
+    }
+
     #[tokio::test]
     async fn malformed_text_does_not_count_as_liveness() {
         use std::{sync::atomic::Ordering, time::Duration};
