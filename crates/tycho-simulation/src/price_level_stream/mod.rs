@@ -40,4 +40,5 @@ pub mod config;
 pub mod fallback_router;
 pub mod state;
 pub mod stream;
+mod telemetry;
 mod titan;
