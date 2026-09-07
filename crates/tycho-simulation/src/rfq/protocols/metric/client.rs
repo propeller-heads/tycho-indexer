@@ -1,7 +1,6 @@
 //! Metric RFQ client for the `api.metric.xyz` API.
 //!
-//! API and integration docs: <https://oracle-based-omm.gitbook.io/metric/RSm94m71kqtGICv4iKRj>
-//! (Developers -> API for the endpoint reference, Aggregators/Solvers for the integration guide).
+//! Endpoint reference: <https://docs.metric.xyz/RSm94m71kqtGICv4iKRj/developers/api>
 
 use std::{
     collections::{HashMap, HashSet},
