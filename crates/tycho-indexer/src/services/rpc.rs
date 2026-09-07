@@ -421,19 +421,13 @@ where
         };
 
         let Some(pending_deltas) = &self.pending_deltas else {
-            // With no pending source, exact block identifiers are immutable database lookups.
-            // Timestamp lookups can still move while the database catches up to that timestamp.
-            let cache_policy = match request_version {
-                BlockOrTimestamp::Block(BlockIdentifier::Number(_) | BlockIdentifier::Hash(_)) => {
-                    CachePolicy::Cache
-                }
-                BlockOrTimestamp::Block(BlockIdentifier::Latest(_)) |
-                BlockOrTimestamp::Timestamp(_) => CachePolicy::Bypass,
-            };
+            // Blocks are shared across extractors. Even an exact block can exist before this
+            // extractor has persisted its state through that block. Without commit status, a
+            // database-only response can still change as the extractor catches up.
             return Ok(ResolvedStateVersions::new(
                 Version(request_version.clone(), VersionKind::Last),
                 None,
-                cache_policy,
+                CachePolicy::Bypass,
             ));
         };
 
@@ -1191,9 +1185,9 @@ where
 /// it's a way to specify the protocol system associated with the contracts requested and is used to
 /// ensure that the correct extractor's block status is used when querying the database. If omitted
 /// while pending deltas are enabled, pending state cannot be applied, so the response is read from
-/// the database and is not cached. Without a pending-deltas service, normal exact-block caching
-/// still applies. Filtering by protocol system is not currently supported on this endpoint and
-/// should be done client side.
+/// the database and is not cached. Responses also bypass caching without a pending-deltas service,
+/// since database coverage for the requested extractor cannot be verified. Filtering by protocol
+/// system is not currently supported on this endpoint and should be done client side.
 #[utoipa::path(
     post,
     path = "/v1/contract_state",
@@ -1589,8 +1583,8 @@ mod tests {
                 AddressStorageLocation, EntryPoint, EntryPointWithTracingParams, RPCTracerParams,
                 TracingParams, TracingResult,
             },
-            contract::Account,
-            protocol::{ProtocolComponent, ProtocolComponentState},
+            contract::{Account, AccountDelta},
+            protocol::{ProtocolComponent, ProtocolComponentState, ProtocolComponentStateDelta},
             token::Token,
             ChangeType,
         },
@@ -1602,7 +1596,11 @@ mod tests {
     };
 
     use super::*;
-    use crate::testing::{evm_contract_slots, MockGateway};
+    use crate::{
+        extractor::DeltaCommand,
+        services::deltas_buffer::PendingDeltas,
+        testing::{evm_contract_slots, MockGateway},
+    };
 
     const WETH: &str = "C02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const USDC: &str = "A0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
@@ -1738,37 +1736,6 @@ mod tests {
         assert_eq!(result.version.block, expected.version.block);
     }
 
-    #[rstest]
-    #[case::exact_block(
-        BlockOrTimestamp::Block(BlockIdentifier::Number((Chain::Ethereum, 1))),
-        CachePolicy::Cache
-    )]
-    #[case::timestamp(BlockOrTimestamp::Timestamp(NaiveDateTime::default()), CachePolicy::Bypass)]
-    #[tokio::test]
-    async fn test_cache_policy_without_pending_deltas(
-        #[case] request_version: BlockOrTimestamp,
-        #[case] expected_policy: CachePolicy,
-    ) {
-        let req_handler = RpcHandler::new(
-            MockGateway::new(),
-            None,
-            MockEntryPointTracer::new(),
-            PlansConfig::default(),
-            vec![],
-            vec![],
-        );
-
-        let resolved = req_handler
-            .calculate_versions(&request_version, "uniswap_v2", Chain::Ethereum)
-            .await
-            .unwrap();
-
-        assert_eq!(resolved.cache_policy, expected_policy);
-        assert_eq!(resolved.db_version.0, request_version);
-        assert!(matches!(resolved.db_version.1, VersionKind::Last));
-        assert!(resolved.deltas_version.is_none());
-    }
-
     #[tokio::test]
     async fn test_get_contract_state() {
         let expected = Account::new(
@@ -1871,8 +1838,26 @@ mod tests {
         assert_eq!(state.pagination.total, 2);
     }
 
-    #[tokio::test]
+    #[actix_web::test]
     async fn test_uncommitted_contract_state_bypasses_cache() {
+        let address = Bytes::from(1u8).lpad(20, 0);
+        let account_block = |number, hash, parent, balance: u8| BlockAggregatedChanges {
+            account_deltas: HashMap::from([(
+                address.clone(),
+                AccountDelta::new(
+                    Chain::Ethereum,
+                    address.clone(),
+                    HashMap::new(),
+                    Some(Bytes::from(balance).lpad(32, 0)),
+                    Some(Bytes::from(0u8)),
+                    if number == 1 { ChangeType::Creation } else { ChangeType::Update },
+                ),
+            )]),
+            ..pending_block(number, hash, parent)
+        };
+        let buffer = PendingDeltas::new(["uniswap_v2"]);
+        let ancestor = account_block(1, 1, 0, 10);
+        apply_pending_blocks(&buffer, vec![ancestor.clone(), account_block(2, 2, 1, 20)]).await;
         let mut gw = MockGateway::new();
         gw.expect_get_contracts()
             .times(2)
@@ -1880,40 +1865,46 @@ mod tests {
                 Box::pin(async { Ok(WithTotal { entity: vec![], total: Some(0) }) })
             });
 
-        let mut mock_buffer = MockPendingDeltas::new();
-        mock_buffer
-            .expect_get_block_commit_status()
-            .times(2)
-            .returning(|_, _| Ok(Some(CommitStatus::Uncommitted)));
-        mock_buffer
-            .expect_update_vm_states()
-            .times(2)
-            .returning(|_, _, _, _| Ok(()));
-
         let req_handler = RpcHandler::new(
             gw,
-            Some(Arc::new(mock_buffer)),
+            Some(Arc::new(buffer.clone())),
             MockEntryPointTracer::new(),
             PlansConfig::default(),
             vec![],
             vec![],
         );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(req_handler))
+                .route(
+                    "/v1/contract_state",
+                    web::post().to(contract_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
         let request = dto::StateRequestBody {
-            contract_ids: Some(vec![]),
+            contract_ids: Some(vec![address.clone()]),
             protocol_system: "uniswap_v2".to_string(),
             version: dto::VersionParam::at_block(dto::Chain::Ethereum, 2),
             chain: dto::Chain::Ethereum,
             pagination: dto::PaginationParams::default(),
         };
 
-        req_handler
-            .get_contract_state(&request)
-            .await
-            .unwrap();
-        req_handler
-            .get_contract_state(&request)
-            .await
-            .unwrap();
+        let post = || {
+            test::TestRequest::post()
+                .uri("/v1/contract_state")
+                .set_json(&request)
+                .to_request()
+        };
+        let before: dto::StateRequestResponse = test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(before.accounts[0].native_balance, Bytes::from(20u8).lpad(32, 0));
+        apply_pending_blocks(
+            &buffer,
+            vec![BlockAggregatedChanges { revert: true, ..ancestor }, account_block(2, 3, 1, 30)],
+        )
+        .await;
+        let after: dto::StateRequestResponse = test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(after.accounts[0].native_balance, Bytes::from(30u8).lpad(32, 0));
     }
 
     #[tokio::test]
@@ -2876,94 +2867,73 @@ mod tests {
         assert_eq!(res.pagination.total, 2);
     }
 
+    #[rstest]
+    #[case::block_number(dto::VersionParam::at_block(dto::Chain::Ethereum, 1))]
+    #[case::historical_timestamp(dto::VersionParam::new(
+        Some(NaiveDateTime::default() + TimeDelta::seconds(12)), None
+    ))]
     #[tokio::test]
-    async fn test_uncommitted_protocol_state_is_recomputed() {
+    async fn test_committed_protocol_state_is_cached(#[case] version: dto::VersionParam) {
+        let buffer = PendingDeltas::new(["uniswap_v2"]);
+        apply_pending_blocks(&buffer, vec![pending_state_block(1, 1, 0, 10)]).await;
         let mut gw = MockGateway::new();
+        let expected_version = BlockOrTimestamp::try_from(&version).unwrap();
         gw.expect_get_protocol_states()
             .times(2)
-            .returning(|_, _, _, _, _, _| {
-                Box::pin(async { Ok(WithTotal { entity: vec![], total: Some(0) }) })
-            });
-
-        let mut mock_buffer = MockPendingDeltas::new();
-        mock_buffer
-            .expect_get_block_commit_status()
-            .times(2)
-            .returning(|_, _| Ok(Some(CommitStatus::Uncommitted)));
-        let merge_count = Arc::new(AtomicUsize::new(0));
-        mock_buffer
-            .expect_merge_native_states()
-            .times(2)
-            .returning({
-                let merge_count = merge_count.clone();
-                move |_, states, _, _| {
-                    let value = merge_count.fetch_add(1, Ordering::SeqCst) as i32 + 1;
-                    states.push(ProtocolComponentState::new(
+            .returning(move |_, at, _, _, _, _| {
+                let at = at.unwrap();
+                let states = if matches!(
+                    at.0,
+                    BlockOrTimestamp::Block(BlockIdentifier::Latest(Chain::Ethereum))
+                ) {
+                    vec![]
+                } else {
+                    assert_eq!(at.0, expected_version);
+                    vec![ProtocolComponentState::new(
                         "state",
-                        protocol_attributes([("reserve", value)]),
+                        protocol_attributes([("reserve", 10)]),
                         HashMap::new(),
-                    ));
-                    Ok(())
-                }
+                    )]
+                };
+                Box::pin(async move { Ok(WithTotal { entity: states, total: None }) })
             });
-
         let req_handler = RpcHandler::new(
             gw,
-            Some(Arc::new(mock_buffer)),
+            Some(Arc::new(buffer.clone())),
             MockEntryPointTracer::new(),
             PlansConfig::default(),
             vec![],
             vec![],
         );
-        let request = protocol_state_request(2);
-
-        let first = req_handler
+        let mut request = protocol_state_request(1);
+        request.version = version;
+        let pending = req_handler
             .get_protocol_state(&request)
             .await
             .unwrap();
-        let second = req_handler
+        assert_eq!(pending.states[0].attributes["reserve"], Bytes::from(10u8).lpad(32, 0));
+
+        // The next block acknowledges block 1 in the database and drains it from the buffer.
+        apply_pending_blocks(
+            &buffer,
+            vec![BlockAggregatedChanges {
+                db_committed_block_height: Some(1),
+                ..pending_state_block(2, 2, 1, 20)
+            }],
+        )
+        .await;
+        let committed = req_handler
             .get_protocol_state(&request)
             .await
             .unwrap();
-
-        assert_ne!(first.states[0].attributes["reserve"], second.states[0].attributes["reserve"]);
-    }
-
-    #[tokio::test]
-    async fn test_committed_protocol_state_is_cached() {
-        let mut gw = MockGateway::new();
-        gw.expect_get_protocol_states()
-            .once()
-            .returning(|_, _, _, _, _, _| {
-                Box::pin(async { Ok(WithTotal { entity: vec![], total: Some(0) }) })
-            });
-
-        let mut mock_buffer = MockPendingDeltas::new();
-        mock_buffer
-            .expect_get_block_commit_status()
-            .once()
-            .returning(|_, _| Ok(Some(CommitStatus::Committed)));
-
-        let req_handler = RpcHandler::new(
-            gw,
-            Some(Arc::new(mock_buffer)),
-            MockEntryPointTracer::new(),
-            PlansConfig::default(),
-            vec![],
-            vec![],
-        );
-        let request = protocol_state_request(1);
-
-        let first = req_handler
-            .get_protocol_state(&request)
-            .await
-            .unwrap();
-        let second = req_handler
+        let cached = req_handler
             .get_protocol_state(&request)
             .await
             .unwrap();
 
-        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(committed.states[0].attributes["reserve"], Bytes::from(10u8).lpad(32, 0));
+        assert!(!Arc::ptr_eq(&pending, &committed));
+        assert!(Arc::ptr_eq(&committed, &cached));
     }
 
     #[tokio::test]
@@ -3135,6 +3105,293 @@ mod tests {
             .unwrap_err();
 
         assert!(matches!(error, RpcError::DeltasError(PendingDeltasError::LockError(_, _))));
+    }
+
+    fn pending_block(number: u64, hash: u8, parent: u8) -> BlockAggregatedChanges {
+        BlockAggregatedChanges {
+            extractor: "uniswap_v2".into(),
+            chain: Chain::Ethereum,
+            block: blockchain::Block::new(
+                number,
+                Chain::Ethereum,
+                Bytes::from(hash),
+                Bytes::from(parent),
+                NaiveDateTime::default() + TimeDelta::seconds(number as i64 * 12),
+            ),
+            ..Default::default()
+        }
+    }
+
+    fn pending_state_block(
+        number: u64,
+        hash: u8,
+        parent: u8,
+        reserve: i32,
+    ) -> BlockAggregatedChanges {
+        BlockAggregatedChanges {
+            state_deltas: HashMap::from([(
+                "state".into(),
+                ProtocolComponentStateDelta::new(
+                    "state",
+                    protocol_attributes([("reserve", reserve)]),
+                    Default::default(),
+                ),
+            )]),
+            ..pending_block(number, hash, parent)
+        }
+    }
+
+    fn pending_component_block(
+        number: u64,
+        hash: u8,
+        parent: u8,
+        component: Option<ProtocolComponent>,
+    ) -> BlockAggregatedChanges {
+        BlockAggregatedChanges {
+            extractor: "ambient".into(),
+            new_protocol_components: component
+                .into_iter()
+                .map(|c| (c.id.clone(), c))
+                .collect(),
+            ..pending_block(number, hash, parent)
+        }
+    }
+
+    async fn apply_pending_blocks(buffer: &PendingDeltas, blocks: Vec<BlockAggregatedChanges>) {
+        let (tx, rx) = tokio::sync::mpsc::channel(blocks.len().max(1));
+        for block in blocks {
+            tx.send(DeltaCommand::Block(Arc::new(block)))
+                .await
+                .unwrap();
+        }
+        // Closing the channel lets the real consumer drain every message before returning.
+        drop(tx);
+        let (start_tx, _start_rx) = std::sync::mpsc::sync_channel(1);
+        buffer
+            .clone()
+            .run(vec![rx], start_tx)
+            .await
+            .unwrap();
+    }
+
+    #[actix_web::test]
+    async fn test_protocol_state_with_real_pending_buffer_reorg() {
+        let buffer = PendingDeltas::new(["uniswap_v2"]);
+        let ancestor = pending_state_block(1, 1, 0, 10);
+        apply_pending_blocks(&buffer, vec![ancestor.clone(), pending_state_block(2, 2, 1, 20)])
+            .await;
+        let mut gw = MockGateway::new();
+        gw.expect_get_protocol_states()
+            .times(3)
+            .returning(|_, at, _, _, _, _| {
+                assert!(matches!(
+                    at.unwrap().0,
+                    BlockOrTimestamp::Block(BlockIdentifier::Latest(Chain::Ethereum))
+                ));
+                Box::pin(async { Ok(WithTotal { entity: vec![], total: None }) })
+            });
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(buffer.clone())),
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            vec![],
+        );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(handler))
+                .route(
+                    "/v1/protocol_state",
+                    web::post().to(protocol_state::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+        let first: dto::ProtocolStateRequestResponse = test::call_and_read_body_json(
+            &app,
+            test::TestRequest::post()
+                .uri("/v1/protocol_state")
+                .set_json(protocol_state_request(1))
+                .to_request(),
+        )
+        .await;
+        assert_eq!(first.states[0].attributes["reserve"], Bytes::from(10u8).lpad(32, 0));
+        let request = protocol_state_request(2);
+        let post = || {
+            test::TestRequest::post()
+                .uri("/v1/protocol_state")
+                .set_json(&request)
+                .to_request()
+        };
+        let before: dto::ProtocolStateRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(before.states[0].attributes["reserve"], Bytes::from(20u8).lpad(32, 0));
+        apply_pending_blocks(&buffer, vec![BlockAggregatedChanges { revert: true, ..ancestor }])
+            .await;
+        let missing = test::call_service(&app, post()).await;
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+        apply_pending_blocks(&buffer, vec![pending_state_block(2, 3, 1, 30)]).await;
+        let after: dto::ProtocolStateRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(after.states[0].attributes["reserve"], Bytes::from(30u8).lpad(32, 0));
+    }
+
+    #[tokio::test]
+    async fn test_future_timestamp_state_refreshes_when_buffer_advances() {
+        let buffer = PendingDeltas::new(["uniswap_v2"]);
+        apply_pending_blocks(&buffer, vec![pending_state_block(1, 1, 0, 10)]).await;
+        let mut gw = MockGateway::new();
+        gw.expect_get_protocol_states()
+            .times(2)
+            .returning(|_, _, _, _, _, _| {
+                Box::pin(async { Ok(WithTotal { entity: vec![], total: None }) })
+            });
+        let handler = RpcHandler::new(
+            gw,
+            Some(Arc::new(buffer.clone())),
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            vec![],
+        );
+        let mut request = protocol_state_request(1);
+        request.version =
+            dto::VersionParam::new(Some(NaiveDateTime::default() + TimeDelta::seconds(36)), None);
+        let before = handler
+            .get_protocol_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(before.states[0].attributes["reserve"], Bytes::from(10u8).lpad(32, 0));
+        apply_pending_blocks(&buffer, vec![pending_state_block(2, 2, 1, 20)]).await;
+        let after = handler
+            .get_protocol_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(after.states[0].attributes["reserve"], Bytes::from(20u8).lpad(32, 0));
+    }
+
+    #[rstest]
+    #[case::number(dto::VersionParam::at_block(dto::Chain::Ethereum, 2))]
+    #[case::hash(serde_json::from_str(r#"{"block":{"hash":"0x02"}}"#).unwrap())]
+    #[case::timestamp(dto::VersionParam::new(
+        Some(NaiveDateTime::default() + TimeDelta::seconds(24)), None
+    ))]
+    #[tokio::test]
+    async fn test_standalone_state_refreshes_after_extractor_catches_up(
+        #[case] version: dto::VersionParam,
+    ) {
+        // The shared block table already contains block 2 from a faster extractor.
+        // The requested extractor initially has only its block-1 state persisted.
+        let persisted_reserve = Arc::new(AtomicUsize::new(10));
+        let mut gw = MockGateway::new();
+        gw.expect_get_block()
+            .with(eq(BlockIdentifier::Hash(Bytes::from(2u8))))
+            .returning(|_| Ok(pending_state_block(2, 2, 1, 0).block));
+        gw.expect_get_protocol_states()
+            .times(2)
+            .returning({
+                let persisted_reserve = persisted_reserve.clone();
+                let expected_version = BlockOrTimestamp::try_from(&version).unwrap();
+                move |chain, at, system, ids, _, _| {
+                    assert_eq!(*chain, Chain::Ethereum);
+                    assert_eq!(at.unwrap().0, expected_version);
+                    assert_eq!(system.as_deref(), Some("uniswap_v2"));
+                    assert_eq!(ids, Some(["state"].as_slice()));
+                    let value = persisted_reserve.load(Ordering::SeqCst) as i32;
+                    Box::pin(async move {
+                        Ok(WithTotal {
+                            entity: vec![ProtocolComponentState::new(
+                                "state",
+                                protocol_attributes([("reserve", value)]),
+                                HashMap::new(),
+                            )],
+                            total: None,
+                        })
+                    })
+                }
+            });
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            vec![],
+        );
+        let mut request = protocol_state_request(2);
+        request.version = version;
+        let before = handler
+            .get_protocol_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(before.states[0].attributes["reserve"], Bytes::from(10u8).lpad(32, 0));
+        persisted_reserve.store(20, Ordering::SeqCst);
+        let after = handler
+            .get_protocol_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(
+            after.states[0].attributes["reserve"],
+            Bytes::from(20u8).lpad(32, 0),
+            "exact block existence does not establish per-extractor state completeness"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_standalone_contract_state_refreshes_after_extractor_catches_up() {
+        let persisted_balance = Arc::new(AtomicUsize::new(10));
+        let address = Bytes::from(1u8).lpad(20, 0);
+        let mut gw = MockGateway::new();
+        gw.expect_get_contracts()
+            .times(2)
+            .returning({
+                let address = address.clone();
+                let persisted_balance = persisted_balance.clone();
+                move |chain, ids, at, _, _| {
+                    assert_eq!(*chain, Chain::Ethereum);
+                    assert_eq!(ids, Some([address.clone()].as_slice()));
+                    assert_eq!(at.unwrap().0, Version::from_block_number(Chain::Ethereum, 2).0);
+                    let account = AccountDelta::new(
+                        Chain::Ethereum,
+                        address.clone(),
+                        HashMap::new(),
+                        Some(
+                            Bytes::from(persisted_balance.load(Ordering::SeqCst) as u32)
+                                .lpad(32, 0),
+                        ),
+                        Some(Bytes::from(0u8)),
+                        ChangeType::Creation,
+                    )
+                    .into_account_without_tx();
+                    Box::pin(async move { Ok(WithTotal { entity: vec![account], total: Some(1) }) })
+                }
+            });
+        let handler = RpcHandler::new(
+            gw,
+            None,
+            MockEntryPointTracer::new(),
+            PlansConfig::default(),
+            vec![],
+            vec![],
+        );
+        let request = dto::StateRequestBody {
+            contract_ids: Some(vec![address]),
+            protocol_system: "uniswap_v2".into(),
+            version: dto::VersionParam::at_block(dto::Chain::Ethereum, 2),
+            chain: dto::Chain::Ethereum,
+            pagination: dto::PaginationParams::default(),
+        };
+        let before = handler
+            .get_contract_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(before.accounts[0].native_balance, Bytes::from(10u8).lpad(32, 0));
+        persisted_balance.store(20, Ordering::SeqCst);
+        let after = handler
+            .get_contract_state(&request)
+            .await
+            .unwrap();
+        assert_eq!(after.accounts[0].native_balance, Bytes::from(20u8).lpad(32, 0));
     }
 
     fn protocol_state_request(block_number: u64) -> dto::ProtocolStateRequestBody {
@@ -3373,25 +3630,16 @@ mod tests {
         assert_eq!(response2.pagination.total, 3);
     }
 
-    #[tokio::test]
+    #[actix_web::test]
     async fn test_pending_protocol_components_are_not_cached() {
-        let gw = MockGateway::new();
-        let mut mock_buffer = MockPendingDeltas::new();
-        let lookup_count = Arc::new(AtomicUsize::new(0));
-        mock_buffer
-            .expect_get_new_components()
-            .times(2)
-            .returning({
-                let lookup_count = lookup_count.clone();
-                move |_, _, _| {
-                    lookup_count.fetch_add(1, Ordering::SeqCst);
-                    Ok(vec![protocol_component("pending", "pool")])
-                }
-            });
-
+        let buffer = PendingDeltas::new(["ambient"]);
+        let ancestor = pending_component_block(1, 1, 0, None);
+        let original =
+            pending_component_block(2, 2, 1, Some(protocol_component("pending", "original_pool")));
+        apply_pending_blocks(&buffer, vec![ancestor.clone(), original]).await;
         let req_handler = RpcHandler::new(
-            gw,
-            Some(Arc::new(mock_buffer)),
+            MockGateway::new(),
+            Some(Arc::new(buffer.clone())),
             MockEntryPointTracer::new(),
             PlansConfig::default(),
             vec![],
@@ -3404,17 +3652,40 @@ mod tests {
             chain: dto::Chain::Ethereum,
             pagination: dto::PaginationParams::default(),
         };
-
-        req_handler
-            .get_protocol_components(&request)
-            .await
-            .unwrap();
-        req_handler
-            .get_protocol_components(&request)
-            .await
-            .unwrap();
-
-        assert_eq!(lookup_count.load(Ordering::SeqCst), 2);
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(req_handler))
+                .route(
+                    "/v1/protocol_components",
+                    web::post().to(protocol_components::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+        let post = || {
+            test::TestRequest::post()
+                .uri("/v1/protocol_components")
+                .set_json(&request)
+                .to_request()
+        };
+        let first: dto::ProtocolComponentRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(first.protocol_components[0].protocol_type_name, "original_pool");
+        apply_pending_blocks(
+            &buffer,
+            vec![
+                BlockAggregatedChanges { revert: true, ..ancestor },
+                pending_component_block(
+                    2,
+                    3,
+                    1,
+                    Some(protocol_component("pending", "replacement_pool")),
+                ),
+            ],
+        )
+        .await;
+        let second: dto::ProtocolComponentRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(second.protocol_components[0].protocol_type_name, "replacement_pool");
     }
 
     #[tokio::test]
@@ -3466,62 +3737,88 @@ mod tests {
         assert_eq!(first.protocol_components[0].id, "committed");
     }
 
-    #[tokio::test]
-    async fn test_protocol_components_do_not_cache_during_reorg_gap() {
+    #[rstest]
+    #[case::open_ended(false)]
+    #[case::incomplete_explicit_ids(true)]
+    #[actix_web::test]
+    async fn test_protocol_components_do_not_cache_during_reorg_gap(#[case] explicit_ids: bool) {
+        let db_total = if explicit_ids { 1 } else { 2 };
         let mut gw = MockGateway::new();
         gw.expect_get_protocol_components()
-            .times(2)
-            .returning(|_, _, _, _, _| {
-                Box::pin(async {
+            .times(3)
+            .returning(move |_, _, _, _, _| {
+                Box::pin(async move {
                     Ok(WithTotal {
                         entity: vec![protocol_component("committed", "pool")],
-                        total: Some(2),
+                        total: Some(db_total),
                     })
                 })
             });
-
-        let mut mock_buffer = MockPendingDeltas::new();
-        mock_buffer
-            .expect_get_new_components()
-            .times(2)
-            .returning({
-                let lookup_count = Arc::new(AtomicUsize::new(0));
-                move |_, _, _| {
-                    if lookup_count.fetch_add(1, Ordering::SeqCst) == 0 {
-                        Ok(vec![])
-                    } else {
-                        Ok(vec![protocol_component("replacement", "pool")])
-                    }
-                }
-            });
-
+        let buffer = PendingDeltas::new(["ambient"]);
+        let ancestor = pending_component_block(1, 1, 0, None);
+        apply_pending_blocks(
+            &buffer,
+            vec![
+                ancestor.clone(),
+                pending_component_block(2, 2, 1, None),
+                BlockAggregatedChanges { revert: true, ..ancestor.clone() },
+            ],
+        )
+        .await;
         let req_handler = RpcHandler::new(
             gw,
-            Some(Arc::new(mock_buffer)),
+            Some(Arc::new(buffer.clone())),
             MockEntryPointTracer::new(),
             PlansConfig::default(),
             vec![],
             vec![],
         );
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(req_handler))
+                .route(
+                    "/v1/protocol_components",
+                    web::post().to(protocol_components::<MockGateway, MockEntryPointTracer>),
+                ),
+        )
+        .await;
+        // The open-ended case is a full, non-final page. The explicit-ID case is missing
+        // one requested component, so it must fail the completeness check for caching.
         let request = dto::ProtocolComponentsRequestBody {
             protocol_system: "ambient".to_string(),
-            component_ids: None,
+            component_ids: explicit_ids.then(|| vec!["committed".into(), "replacement".into()]),
             tvl_gt: None,
             chain: dto::Chain::Ethereum,
-            pagination: dto::PaginationParams::new(0, 1),
+            pagination: dto::PaginationParams::new(0, if explicit_ids { 2 } else { 1 }),
         };
-
-        let first = req_handler
-            .get_protocol_components(&request)
-            .await
-            .unwrap();
-        let second = req_handler
-            .get_protocol_components(&request)
-            .await
-            .unwrap();
-
-        assert_eq!(first.pagination.total, 2);
-        assert_eq!(second.pagination.total, 3);
+        let post = || {
+            test::TestRequest::post()
+                .uri("/v1/protocol_components")
+                .set_json(&request)
+                .to_request()
+        };
+        let first: dto::ProtocolComponentRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(first.pagination.total, db_total);
+        assert_eq!(first.protocol_components.len(), 1);
+        apply_pending_blocks(
+            &buffer,
+            vec![pending_component_block(2, 3, 1, Some(protocol_component("replacement", "pool")))],
+        )
+        .await;
+        let second: dto::ProtocolComponentRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(second.pagination.total, db_total + 1);
+        if explicit_ids {
+            assert_eq!(second.protocol_components.len(), 2);
+            assert_eq!(second.protocol_components[1].id, "replacement");
+        }
+        apply_pending_blocks(&buffer, vec![BlockAggregatedChanges { revert: true, ..ancestor }])
+            .await;
+        let after_removal: dto::ProtocolComponentRequestResponse =
+            test::call_and_read_body_json(&app, post()).await;
+        assert_eq!(after_removal.pagination.total, db_total);
+        assert_eq!(after_removal.protocol_components.len(), 1);
     }
 
     fn plans_config_with_restrictions() -> PlansConfig {
