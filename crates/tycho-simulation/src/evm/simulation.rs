@@ -419,8 +419,7 @@ pub struct BlockEnvOverrides {
 
 /// State a view call runs against, overriding what the engine's database holds.
 ///
-/// Built once per pending block and reused across every pool priced against it. `Default`
-/// overrides nothing, so a call reads the engine's confirmed state.
+/// `Default` means no overrides, so a call reads the engine's confirmed state.
 #[derive(Debug, Clone, Default)]
 pub struct PendingOverrides {
     pub storage: Option<HashMap<Address, HashMap<U256, U256>>>,

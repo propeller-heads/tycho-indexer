@@ -66,9 +66,10 @@ fallback for protocols too complex to port, not a default.
 
 ## Pending-block state for hybrid/VM protocols
 
-`apply_deltas_ephemeral` applies only `state_deltas`, so nothing on the pending path writes to the
-VM database. A protocol whose `delta_transition` re-reads the VM would therefore quote a pending
-block against confirmed state. Fluid and Curve close that gap the same way:
+`apply_deltas_ephemeral` applies only `state_deltas`; nothing on the pending path writes to the
+VM database, so `apply_deltas_ephemeral` can't read the pending state from there. A protocol
+whose `delta_transition` re-reads the VM would therefore quote a pending block against confirmed
+state. Fluid and Curve close that gap the same way:
 
 1. A `TxDeltaIndexer` implementation — which lives in the consuming repo, not here — builds
    `evm::simulation::PendingOverrides` (storage, native balances and block environment) from the

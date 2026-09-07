@@ -143,10 +143,10 @@ where
 
 /// Read the view getters `variant` needs from `engine`, for a pool with `n_coins` coins.
 ///
-/// `overrides` is the state the getters run against; [`PendingOverrides::default`] reads the
-/// engine's confirmed state. Pass a pending block's storage, native balances and block
-/// environment to read the state that block would leave behind — the block environment matters
-/// because a ramping `A()` and rate providers interpolate against the block's own timestamp.
+/// `overrides` allows for overriding the state the getters run against; empty [`PendingOverrides`]
+/// means normal reading from engine's confirmed state. Pass a pending block's storage, native
+/// balances and block environment to read the state that block would leave behind (block timestamp
+/// matters!).
 ///
 /// Returns a [`SimulationError`] if a getter required by the variant reverts. Getters that only
 /// some deployments of a variant expose are recorded as `None` instead.

@@ -211,8 +211,7 @@ impl ProtocolSim for CurveState {
     ///
     /// The attribute exists for pending blocks, whose state never reaches that storage: an
     /// indexer that has already read the pool under the pending block's overrides passes the
-    /// readings through instead. Only the readings travel — the variant and the coin decimals are
-    /// static, so this state supplies them.
+    /// readings through instead.
     fn delta_transition(
         &mut self,
         delta: ProtocolStateDelta,
