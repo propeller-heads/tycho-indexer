@@ -60,11 +60,20 @@ pub(super) struct Now {
 
 impl Now {
     pub(super) fn current() -> Self {
-        let wall_nanos = SystemTime::now()
+        let since_epoch = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .ok()
-            .and_then(|since_epoch| u64::try_from(since_epoch.as_nanos()).ok())
-            .unwrap_or(0);
+            .and_then(|since_epoch| u64::try_from(since_epoch.as_nanos()).ok());
+        let wall_nanos = match since_epoch {
+            Some(wall_nanos) => wall_nanos,
+            None => {
+                tracing::error!(
+                    "System clock unrepresentable as unix nanoseconds; every price level frame \
+                     will be rejected as in_future"
+                );
+                0
+            }
+        };
         Self { wall_nanos, instant: Instant::now() }
     }
 }
@@ -160,8 +169,10 @@ pub(super) struct SnapshotTracker {
     /// The block of the newest accepted frame. Later frames may not regress below it, nor jump
     /// further ahead than the elapsed time explains. Reset with `last_accepted`.
     newest_block: u64,
-    /// When the newest frame was accepted; `None` before the first one and after the source
-    /// returns to unserved, which skips the block checks for the next frame.
+    /// When the newest frame was accepted; `None` whenever nothing is served, which skips the
+    /// block checks for the next frame. The frontier is established only while the stream
+    /// serves something: a frame that serves nothing — because the whitelist is still awaited,
+    /// or because it carries nothing this tracker can build — resets it immediately.
     last_accepted: Option<Instant>,
     /// Whether the last frame was rejected: the first rejection of a streak logs at WARN, the
     /// rest at DEBUG, and the counter carries the rate.
@@ -223,6 +234,16 @@ impl SnapshotTracker {
             RouterVenuesRead::Ok(venues) => venues,
         };
         telemetry::whitelisted_venues(venues.len());
+        if let Source::AwaitingWhitelist = self.source {
+            self.router_venues = venues;
+            tracing::info!(
+                venues = self.router_venues.len(),
+                "PropAMMRouter venue whitelist read; serving pAMMs from the next frame"
+            );
+            self.source = Source::Unserved;
+            telemetry::source_state(self.source.telemetry_state());
+            return None;
+        }
         let moved: Vec<String> = self
             .served
             .iter()
@@ -234,16 +255,6 @@ impl SnapshotTracker {
             .map(|(id, _)| id.clone())
             .collect();
         self.router_venues = venues;
-
-        if let Source::AwaitingWhitelist = self.source {
-            tracing::info!(
-                venues = self.router_venues.len(),
-                "PropAMMRouter venue whitelist read; serving pAMMs from the next frame"
-            );
-            self.source = Source::Unserved;
-            telemetry::source_state(self.source.telemetry_state());
-            return None;
-        }
         if moved.is_empty() {
             return None;
         }
@@ -325,6 +336,7 @@ impl SnapshotTracker {
         self.last_accepted = Some(now.instant);
 
         if let Source::AwaitingWhitelist = self.source {
+            self.refresh_source();
             return None;
         }
 
@@ -384,10 +396,10 @@ impl SnapshotTracker {
             }
         }
 
+        self.refresh_source();
         if states.is_empty() {
             return None;
         }
-        self.refresh_source();
         Some(Update::new(frame.block_number, states, new_pairs).set_is_partial(true))
     }
 
@@ -511,14 +523,18 @@ impl SnapshotTracker {
             .set_removed_pairs(removed)
     }
 
-    /// Recomputes the source state and the per-venue gauges from the served set. Returning to
-    /// unserved also resets the block frontier, so one absurd block can never outlive the
-    /// window it was served for.
+    /// Recomputes the source state and the per-venue gauges from the served set. The block
+    /// frontier is reset whenever nothing is served — after the last served component expired,
+    /// after a frame that carried nothing this tracker can build, and on every frame accepted
+    /// while the whitelist is still awaited — so one absurd block can never outlive the window
+    /// it was served for. The whitelist wait itself is left only by a successful read, never by
+    /// the served set.
     fn refresh_source(&mut self) {
-        if let Source::AwaitingWhitelist = self.source {
-            return;
-        }
-        self.source = match self
+        let awaiting_whitelist = match self.source {
+            Source::AwaitingWhitelist => true,
+            Source::Unserved | Source::Serving { deadline: _ } => false,
+        };
+        let served_state = match self
             .served
             .values()
             .map(|served| served.deadline)
@@ -531,6 +547,9 @@ impl SnapshotTracker {
                 Source::Unserved
             }
         };
+        if !awaiting_whitelist {
+            self.source = served_state;
+        }
         telemetry::source_state(self.source.telemetry_state());
         let mut per_venue: HashMap<&str, usize> = self
             .registry
@@ -1197,6 +1216,55 @@ mod tests {
         // poisoned frame survives: the pair comes back as new.
         let update = tracker
             .on_frame(message_at(100, 25, wbtc_usdc_pairs()), clock.at(25))
+            .expect("update expected");
+        assert_eq!(update.block_number_or_timestamp, 100);
+        assert!(update
+            .new_pairs
+            .contains_key(&expected_id()));
+    }
+
+    #[test]
+    fn poisoned_block_during_whitelist_wait_does_not_wedge_the_tracker() {
+        let clock = Clock::new();
+        let mut tracker = tracker_awaiting_whitelist();
+        // Accepted, but nothing is served while the whitelist is unknown, so the absurd block
+        // must not survive as the frontier.
+        assert!(tracker
+            .on_frame(message_at(u64::MAX / 2, 0, wbtc_usdc_pairs()), clock.at(0))
+            .is_none());
+
+        assert!(tracker
+            .on_router_venues(read_ok(&[PAMM]))
+            .is_none());
+
+        // The first frame that can be served is judged as a first frame, not against the block
+        // of a frame that served nothing.
+        let update = tracker
+            .on_frame(message_at(100, 1, wbtc_usdc_pairs()), clock.at(1))
+            .expect("update expected");
+        assert_eq!(update.block_number_or_timestamp, 100);
+        assert!(update
+            .new_pairs
+            .contains_key(&expected_id()));
+    }
+
+    #[test]
+    fn poisoned_block_on_a_frame_serving_nothing_does_not_wedge_the_tracker() {
+        let clock = Clock::new();
+        let mut tracker = tracker();
+        // Fresh enough to be accepted, but its only pair prices an unknown token, so the frame
+        // serves nothing and its absurd block must not survive as the frontier.
+        let unknown = vec![pair_levels(
+            "0x1111111111111111111111111111111111111111",
+            USDC,
+            vec![level(1, 1)],
+        )];
+        assert!(tracker
+            .on_frame(message_at(u64::MAX / 2, 0, unknown), clock.at(0))
+            .is_none());
+
+        let update = tracker
+            .on_frame(message_at(100, 1, wbtc_usdc_pairs()), clock.at(1))
             .expect("update expected");
         assert_eq!(update.block_number_or_timestamp, 100);
         assert!(update

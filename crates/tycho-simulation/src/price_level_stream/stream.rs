@@ -303,7 +303,14 @@ impl PriceLevelStreamBuilder {
         let auto_detected_gas_cost =
             auto_detected_gas_cost.unwrap_or_else(|| BigUint::from(DEFAULT_AUTO_DETECTED_GAS_COST));
         let rpc_url = match (fallback_router, fallback_router_rpc_url) {
-            (false, _) => None,
+            (false, Some(_)) => {
+                tracing::debug!(
+                    "fallback_router_rpc_url is set but the fallback router is disabled; \
+                     ignoring it"
+                );
+                None
+            }
+            (false, None) => None,
             (true, Some(explicit)) => Some(explicit),
             (true, None) => env_rpc_url
                 .then(rpc_url_from_env)

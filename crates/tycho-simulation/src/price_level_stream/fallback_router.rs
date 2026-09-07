@@ -36,6 +36,7 @@ sol! {
 
 /// Error reading the PropAMMRouter's venue whitelist.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FetchVenuesError {
     /// The RPC URL could not be parsed.
     #[error("invalid RPC URL {url:?}: {reason}")]
