@@ -40,15 +40,17 @@ for any protocol indexed by Tycho.
   removes on frame diff, and emits `removed_pairs` only when a component's data is `stale_after`
   (default 24 s) old or its PropAMMRouter family changes; the next accepted frame carrying it
   re-adds it. Frames are accepted only if their wire `timestamp` is younger than `stale_after`,
-  not in the future, not older than the newest accepted one (equal allowed), and their block
-  neither regresses nor jumps implausibly; the block frontier resets whenever nothing is served.
+  not more than one slot in the future, not older than the newest accepted one (equal allowed),
+  and their block neither regresses nor jumps implausibly; the block frontier resets whenever
+  nothing is served.
   `build()` is an `async_stream` loop selecting over frames, an earliest-deadline timer, and the
   whitelist reader (`fallback_router.rs`, each read bounded by 15 s, retried with backoff,
   refreshed every 10 min); nothing is served until the whitelist is known, and without
   `fallback_router_rpc_url` or `RPC_URL` nothing is ever served. `titan.rs` counts only parsed
   frames as liveness (idle timeout 10 s). `telemetry.rs` emits `price_level_stream_*` metrics via
-  the `metrics` facade, per-venue series pre-initialised to zero, no wire values as labels.
-  Components are identified as `pricelevelstream:{pamm}` or `propammfallback:{pamm}` for
+  the `metrics` facade, per-venue series pre-initialised to zero, no wire values as labels except
+  the address of an auto-detected venue. Components are identified as `pricelevelstream:{pamm}` or
+  `propammfallback:{pamm}` for
   whitelisted venues; a stale expiry and a retired venue look the same downstream. Registration
   precedence (`with_known_pamms`, `add_pamm`, `deny_pamm`, auto-detection) is unchanged: later
   explicit calls win, defaults never override them.

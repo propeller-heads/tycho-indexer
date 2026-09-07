@@ -436,7 +436,8 @@ would already be dropping this entire stream, so immediate emission adds no new 
 exporter. Consumers with a recorder installed (Fynd, tycho-integration-test) see them for free.
 Every per-venue series is initialised to 0 for every registered venue when the tracker is
 built, so a venue that never appears is visible as a zero, not as a missing series. Label
-values are venue names from the registry or fixed enumerations; never an address from the wire.
+values are venue names from the registry or fixed enumerations; never an address from the wire,
+except the venue address itself when a pAMM is served under auto-detection.
 
 | Name | Type | Labels | Emitted by |
 |---|---|---|---|

@@ -68,7 +68,8 @@
 //! accepted and rejected by reason, last seen timestamp and served components per registered
 //! venue, stale removals, source state, reconnects, whitelist reads); a consumer with a
 //! recorder installed sees them without wiring. Per-venue series start at zero for every
-//! registered venue, and no label ever carries a value from the wire.
+//! registered venue, and no label ever carries a value from the wire, except the venue address
+//! itself when a pAMM is served under auto-detection.
 //!
 //! Entry point: [`PriceLevelStreamBuilder`](stream::PriceLevelStreamBuilder). Register the pAMMs
 //! to serve — the known venues via
