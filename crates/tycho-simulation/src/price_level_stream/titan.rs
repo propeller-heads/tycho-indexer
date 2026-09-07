@@ -73,6 +73,7 @@ pub(super) struct TitanPriceLevelMessage {
     pub block_number: u64,
     /// When Titan built this frame, in nanoseconds since the Unix epoch. Frames re-emitted
     /// within one build round share a timestamp, so it is a freshness marker, not an identity.
+    // Consumed once staleness detection lands in a later task.
     #[allow(dead_code)]
     pub timestamp: u64,
     /// Per-pAMM quote snapshots.
