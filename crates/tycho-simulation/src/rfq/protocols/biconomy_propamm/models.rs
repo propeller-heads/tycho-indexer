@@ -31,6 +31,10 @@ pub struct BiconomyLevelsResponse {
     /// Per-maker cumulative ladders. This is the source of truth for the sweep math.
     #[serde(default)]
     pub makers: Vec<BiconomyMakerLevels>,
+    /// Smallest servable amountIn for this pair (tokenIn wei, decimal string). Requests below
+    /// it return `400 No routes found`; simulation must decline the same way.
+    #[serde(rename = "minQuote", default)]
+    pub min_quote: Option<String>,
     /// Unix timestamp (seconds) at which this snapshot was assembled.
     #[serde(rename = "asOf")]
     pub as_of: u64,
@@ -52,6 +56,8 @@ pub struct BiconomyChainLevelsResponse {
 /// One direction inside the batch response: the single-pair shape minus the envelope fields.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BiconomyChainPairLevels {
+    #[serde(rename = "minQuote", default)]
+    pub min_quote: Option<String>,
     #[serde(rename = "tokenIn")]
     pub token_in: Bytes,
     #[serde(rename = "tokenOut")]
@@ -89,6 +95,10 @@ pub struct BiconomyMakerLevels {
     pub levels: Vec<BiconomyLevel>,
     /// Maker nonce as a decimal string.
     pub nonce: String,
+    /// Smallest fill this maker executes (tokenIn wei, decimal string). Route construction
+    /// never allocates a maker less than this, so the sweep must not either.
+    #[serde(rename = "minFill", default)]
+    pub min_fill: Option<String>,
 }
 
 /// One cumulative level of a maker's ladder.
@@ -229,12 +239,16 @@ mod tests {
         let quote = firm_quote();
 
         assert_eq!(quote.chain_id, 8453);
-        assert_eq!(quote.gas_estimate, "265000");
+        assert_eq!(quote.gas_estimate, "1258000");
         assert_eq!(quote.amount_in, "15000000000000000000");
-        assert_eq!(quote.amount_out, "28164999999");
+        assert_eq!(quote.amount_out, "28167499995");
         assert_eq!(quote.valid_until, 1751536030);
-        assert_eq!(quote.calls.len(), 2);
+        // A firm quote is exactly one settlement swap() call.
+        assert_eq!(quote.calls.len(), 1);
         assert_eq!(quote.calls[0].value, "0");
+        assert!(quote.calls[0]
+            .data
+            .starts_with(&[0x1e, 0xad, 0xa9, 0x22]));
     }
 
     #[test]

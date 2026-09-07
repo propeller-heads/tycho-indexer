@@ -95,7 +95,6 @@ struct BiconomyCall {
     /// BiconomyExecutor - but step targets are validated against it.
     to: Bytes,
     /// Native value as a decimal string; Biconomy settlement is ERC20-only.
-    #[allow(dead_code)]
     value: String,
     data: Bytes,
 }
@@ -240,6 +239,14 @@ impl SwapEncoder for BiconomySwapEncoder {
             )));
         }
         let settlement_call = &calls[0];
+        // Biconomy settlement is ERC20-only: a non-zero native value means the API shape
+        // changed, and silently dropping it would strand ETH in the router.
+        if settlement_call.value != "0" {
+            return Err(EncodingError::FatalError(format!(
+                "Biconomy settlement call carries unexpected native value {}",
+                settlement_call.value
+            )));
+        }
         let call_data: &[u8] = settlement_call.data.as_ref();
         if call_data.len() < 4 || call_data[..4] != swapCall::SELECTOR[..] {
             return Err(EncodingError::FatalError(
@@ -557,6 +564,7 @@ mod tests {
         let state = MockRFQState {
             quote_amount_out: BigUint::from_str("28164999999").unwrap(),
             quote_data,
+            ..Default::default()
         };
         Swap::new(component, default_token(weth()), default_token(usdc()), BigUint::ZERO)
             .with_estimated_amount_in(estimated_amount_in)

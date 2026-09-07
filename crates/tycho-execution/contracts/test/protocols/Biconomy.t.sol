@@ -133,16 +133,17 @@ contract BiconomyExecutorTest is Constants, TestUtils {
         view
         returns (bytes memory)
     {
-        bytes memory commitData = abi.encodeWithSignature(
-            "updatePrices(bytes)", hex"deadbeef"
-        );
+        // Real PropAMMExecutor.updatePrices selector; the executor pins it before
+        // forwarding, so test commits must carry it even against the mock adapter.
+        bytes memory commitData =
+            abi.encodePacked(bytes4(0x86e97b02), hex"deadbeef");
         return abi.encode(address(tokenIn), address(tokenOut), commitData, legs);
     }
 
     function testDecodeData() public view {
         IBiconomyAdapter.FillLeg[] memory legs = _sampleLegs();
         bytes memory commitData =
-            abi.encodeWithSignature("updatePrices(bytes)", hex"deadbeef");
+            abi.encodePacked(bytes4(0x86e97b02), hex"deadbeef");
         bytes memory data =
             abi.encode(address(tokenIn), address(tokenOut), commitData, legs);
 
@@ -247,10 +248,27 @@ contract BiconomyExecutorTest is Constants, TestUtils {
         propammExecutor.getTransferData(tooShort);
     }
 
+    function testSwapRejectsForeignCommitSelector() public {
+        IBiconomyAdapter.FillLeg[] memory legs = _sampleLegs();
+        bytes memory commitData =
+            abi.encodePacked(bytes4(0x9e84d86b), hex"deadbeef");
+        bytes memory data =
+            abi.encode(address(tokenIn), address(tokenOut), commitData, legs);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                BiconomyExecutor.BiconomyExecutor__InvalidCommitSelector
+                .selector,
+                bytes4(0x9e84d86b)
+            )
+        );
+        propammExecutor.swap(AMOUNT_IN, data, BOB);
+    }
+
     function testSwap() public {
         IBiconomyAdapter.FillLeg[] memory legs = _sampleLegs();
         bytes memory commitData =
-            abi.encodeWithSignature("updatePrices(bytes)", hex"deadbeef");
+            abi.encodePacked(bytes4(0x86e97b02), hex"deadbeef");
         bytes memory data =
             abi.encode(address(tokenIn), address(tokenOut), commitData, legs);
 

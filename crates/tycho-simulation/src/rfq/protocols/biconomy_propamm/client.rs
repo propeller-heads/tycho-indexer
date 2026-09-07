@@ -168,7 +168,7 @@ impl BiconomyClient {
         &self,
         component_id: String,
         levels: &BiconomyLevelsResponse,
-    ) -> ComponentWithState {
+    ) -> Result<ComponentWithState, RFQError> {
         let protocol_component = ProtocolComponent {
             id: component_id.clone(),
             protocol_system: Self::PROTOCOL_SYSTEM.to_string(),
@@ -189,15 +189,22 @@ impl BiconomyClient {
         attributes.insert(
             "makers".to_string(),
             serde_json::to_vec(&levels.makers)
-                .unwrap_or_default()
+                .map_err(|e| {
+                    RFQError::ParsingError(format!("Failed to serialize makers attribute: {e}"))
+                })?
                 .into(),
         );
         attributes.insert(
             "merged".to_string(),
             serde_json::to_vec(&levels.merged)
-                .unwrap_or_default()
+                .map_err(|e| {
+                    RFQError::ParsingError(format!("Failed to serialize merged attribute: {e}"))
+                })?
                 .into(),
         );
+        if let Some(min_quote) = &levels.min_quote {
+            attributes.insert("min_quote".to_string(), min_quote.clone().into_bytes().into());
+        }
         attributes.insert(
             "as_of".to_string(),
             levels
@@ -207,13 +214,13 @@ impl BiconomyClient {
                 .into(),
         );
 
-        ComponentWithState {
+        Ok(ComponentWithState {
             state: ProtocolComponentState::new(&component_id, attributes, HashMap::new()),
             component: protocol_component,
             // Biconomy levels carry no USD normalization data, so no TVL is reported.
             component_tvl: None,
             entrypoints: vec![],
-        }
+        })
     }
 
     fn process_firm_quote_response(
@@ -331,12 +338,20 @@ impl RFQClient for BiconomyClient {
                         token_out: entry.token_out.clone(),
                         merged: entry.merged.clone(),
                         makers: entry.makers.clone(),
+                        min_quote: entry.min_quote.clone(),
                         as_of: chain_levels.as_of,
                     };
                     let component_id = Self::component_id(token_in, token_out);
-                    let component_with_state =
-                        client.create_component_with_state(component_id.clone(), &levels);
-                    new_components.insert(component_id, component_with_state);
+                    match client.create_component_with_state(component_id.clone(), &levels) {
+                        Ok(component_with_state) => {
+                            new_components.insert(component_id, component_with_state);
+                        }
+                        // A pair that cannot serialize must not kill the whole poll stream;
+                        // skip it and let the next snapshot retry.
+                        Err(e) => {
+                            warn!("Skipping Biconomy component {component_id}: {e}");
+                        }
+                    }
                 }
 
                 let removed_components: HashMap<String, ProtocolComponent> = current_components
@@ -527,7 +542,9 @@ mod tests {
         let levels = levels_fixture();
         let component_id = BiconomyClient::component_id(&weth(), &usdc());
 
-        let component = client.create_component_with_state(component_id.clone(), &levels);
+        let component = client
+            .create_component_with_state(component_id.clone(), &levels)
+            .unwrap();
 
         assert_eq!(component.component.id, component_id);
         assert_eq!(component.component.protocol_system, "rfq:biconomy_propamm");
@@ -575,7 +592,7 @@ mod tests {
         assert_eq!(signed.base_token, params.token_in);
         assert_eq!(signed.quote_token, params.token_out);
         assert_eq!(signed.amount_in, BigUint::from_str("15000000000000000000").unwrap());
-        assert_eq!(signed.amount_out, BigUint::from_str("28164999999").unwrap());
+        assert_eq!(signed.amount_out, BigUint::from_str("28167499995").unwrap());
 
         assert_eq!(signed.quote_attributes["quote_id"], quote.quote_id);
 
@@ -585,7 +602,7 @@ mod tests {
 
         let mut gas_estimate = [0u8; 8];
         gas_estimate.copy_from_slice(signed.quote_attributes["gas_estimate"].as_ref());
-        assert_eq!(u64::from_be_bytes(gas_estimate), 265000);
+        assert_eq!(u64::from_be_bytes(gas_estimate), 1258000);
 
         let calls: Vec<BiconomyCall> =
             serde_json::from_slice(&signed.quote_attributes["calls"]).unwrap();
@@ -650,7 +667,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(signed.amount_in, BigUint::from_str("15000000000000000000").unwrap());
-        assert_eq!(signed.amount_out, BigUint::from_str("28164999999").unwrap());
+        assert_eq!(signed.amount_out, BigUint::from_str("28167499995").unwrap());
         assert!(signed
             .quote_attributes
             .contains_key("calls"));

@@ -42,7 +42,7 @@ interface IBiconomyAdapter {
 }
 
 /// @title BiconomyExecutor
-/// @notice Executor for Biconomy Biconomy streaming-maker RFQ swaps
+/// @notice Executor for Biconomy streaming-maker RFQ swaps
 ///         (rfq:biconomy_propamm)
 /// @dev The Rust swap encoder requests a binding firm quote immediately
 ///      before encoding (quotes are valid for seconds; superseded ladders
@@ -58,6 +58,13 @@ contract BiconomyExecutor is IExecutor {
     /// @notice Biconomy-specific errors
     error BiconomyExecutor__ZeroAddress();
     error BiconomyExecutor__InvalidDataLength();
+    error BiconomyExecutor__InvalidCommitSelector(bytes4 selector);
+
+    /// @dev PropAMMExecutor.updatePrices - the only call a firm quote's commit
+    ///      step ever encodes. Pinning the selector keeps arbitrary calldata
+    ///      from reaching the adapter's commit hop even if the API is
+    ///      compromised: commits can only publish maker-signed ladders.
+    bytes4 private constant _UPDATE_PRICES_SELECTOR = 0x86e97b02;
 
     /// @dev abi.encode(address, address, bytes, FillLeg[]) is at least four
     ///      head words plus one length word each for the empty bytes and the
@@ -102,6 +109,16 @@ contract BiconomyExecutor is IExecutor {
             bytes memory commitData,
             IBiconomyAdapter.FillLeg[] memory legs
         ) = _decodeData(data);
+
+        // A non-empty commit step must be the executor's updatePrices call;
+        // anything else is a malformed or hostile quote and reverts here
+        // rather than reaching the adapter.
+        if (
+            commitData.length != 0
+                && bytes4(commitData) != _UPDATE_PRICES_SELECTOR
+        ) {
+            revert BiconomyExecutor__InvalidCommitSelector(bytes4(commitData));
+        }
 
         // No approve here: getTransferData returns ProtocolWillDebit with the
         // adapter as receiver, so the router's TransferManager has already

@@ -68,6 +68,14 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BiconomyState {
         let merged: Vec<BiconomyMergedLevel> = serde_json::from_slice(merged_json)
             .map_err(|e| InvalidSnapshotError::ValueError(format!("Invalid merged JSON: {e}")))?;
 
+        // Optional: pairs served before the attribute existed simply have no floor.
+        let min_quote = match state_attrs.get("min_quote") {
+            Some(bytes) => Some(String::from_utf8(bytes.to_vec()).map_err(|_| {
+                InvalidSnapshotError::ValueError("Invalid min_quote encoding".to_string())
+            })?),
+            None => None,
+        };
+
         let as_of = match state_attrs.get("as_of") {
             Some(bytes) => String::from_utf8(bytes.to_vec())
                 .map_err(|_| {
@@ -93,6 +101,7 @@ impl TryFromWithBlock<ComponentWithState, TimestampHeader> for BiconomyState {
             token_out: quote_token.address.clone(),
             merged,
             makers,
+            min_quote,
             as_of,
         };
 

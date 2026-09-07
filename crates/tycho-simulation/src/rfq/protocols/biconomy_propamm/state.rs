@@ -90,8 +90,24 @@ struct MarginalSegment {
 fn expand_marginal_segments(
     makers: &[BiconomyMakerLevels],
 ) -> Result<Vec<MarginalSegment>, SimulationError> {
+    expand_marginal_segments_excluding(makers, &[])
+}
+
+/// `expand_marginal_segments` minus the makers flagged in `excluded` (indexed like `makers`;
+/// shorter slices treat missing entries as included). Used by the minFill re-sweep.
+fn expand_marginal_segments_excluding(
+    makers: &[BiconomyMakerLevels],
+    excluded: &[bool],
+) -> Result<Vec<MarginalSegment>, SimulationError> {
     let mut segments = Vec::new();
     for (maker_idx, maker) in makers.iter().enumerate() {
+        if excluded
+            .get(maker_idx)
+            .copied()
+            .unwrap_or(false)
+        {
+            continue;
+        }
         let mut previous_cumulative = BigUint::zero();
         for level in &maker.levels {
             let cumulative = parse_biguint(&level.size, "level size")?;
@@ -116,6 +132,9 @@ struct SweepResult {
     delivered: BigUint,
     /// Total tokenIn wei consumed (== amount_in unless liquidity ran out).
     consumed: BigUint,
+    /// tokenIn wei allocated to each maker (indexed like the `makers` slice), so callers can
+    /// enforce per-maker minimum fills the way route construction does.
+    consumed_per_maker: Vec<BigUint>,
 }
 
 /// Marginal-merge sweep over all makers' ladders.
@@ -134,8 +153,31 @@ fn sweep_amount_out(
     makers: &[BiconomyMakerLevels],
     amount_in: &BigUint,
 ) -> Result<SweepResult, SimulationError> {
-    let segments = expand_marginal_segments(makers)?;
-    Ok(sweep_segments(&segments, makers.len(), amount_in))
+    // Route construction never allocates a maker less than its signed minFill: a leg below it
+    // is rejected and the route is rebuilt without that maker. Mirror that here by dropping
+    // any maker whose allocation lands below its minimum and re-sweeping; the loop terminates
+    // because every pass excludes at least one more maker.
+    let mut excluded = vec![false; makers.len()];
+    loop {
+        let segments = expand_marginal_segments_excluding(makers, &excluded)?;
+        let sweep = sweep_segments(&segments, makers.len(), amount_in);
+        let mut dropped = false;
+        for (idx, maker) in makers.iter().enumerate() {
+            if excluded[idx] {
+                continue;
+            }
+            let Some(min_fill) = &maker.min_fill else { continue };
+            let min_fill = parse_biguint(min_fill, "maker minFill")?;
+            let allocated = &sweep.consumed_per_maker[idx];
+            if !allocated.is_zero() && allocated < &min_fill {
+                excluded[idx] = true;
+                dropped = true;
+            }
+        }
+        if !dropped {
+            return Ok(sweep);
+        }
+    }
 }
 
 /// The sweep over pre-expanded segments; callers that already hold the expansion (get_limits)
@@ -174,7 +216,14 @@ fn sweep_segments(
         delivered += (amount_in_maker * &avg) / &scale;
     }
 
-    SweepResult { delivered, consumed: amount_in - remaining }
+    SweepResult {
+        delivered,
+        consumed: amount_in - remaining,
+        consumed_per_maker: consumed_per_maker
+            .into_iter()
+            .map(|(amount_in_maker, _)| amount_in_maker)
+            .collect(),
+    }
 }
 
 /// Best (highest) marginal price across all makers, 1e18-scaled.
@@ -235,12 +284,24 @@ impl ProtocolSim for BiconomyState {
             return Err(SimulationError::RecoverableError("No liquidity".into()));
         }
 
+        // The API declines sizes below the pair's minQuote with `400 No routes found`; decline
+        // the same way instead of quoting a size the firm-quote lane will refuse.
+        if let Some(min_quote) = &self.levels.min_quote {
+            let min_quote = parse_biguint(min_quote, "minQuote")?;
+            if amount_in < min_quote {
+                return Err(SimulationError::RecoverableError(format!(
+                    "amountIn {amount_in} is below the pair's minQuote {min_quote}"
+                )));
+            }
+        }
+
         let sweep = sweep_amount_out(&self.levels.makers, &amount_in)?;
         let res = GetAmountOutResult {
             amount: sweep.delivered,
-            // Routing-stage estimate. Binding quotes carry the exact per-quote figure from
-            // the API's gasEstimate in quote_attributes["gas_estimate"].
-            gas: BigUint::from(265_000u64),
+            // Routing-stage estimate, sized to the measured live gasEstimate band
+            // (1,099,015 - 1,344,949 depending on leg count). Binding quotes carry the exact
+            // per-quote figure from the API's gasEstimate in quote_attributes["gas_estimate"].
+            gas: BigUint::from(1_200_000u64),
             new_state: self.clone_box(), // The state doesn't change after a swap
         };
 
@@ -397,6 +458,7 @@ mod tests {
                 })
                 .collect(),
             nonce: "1".to_string(),
+            min_fill: None,
         }
     }
 
@@ -409,6 +471,7 @@ mod tests {
             token_out: quote.address.clone(),
             merged: vec![],
             makers,
+            min_quote: None,
             as_of: 1784889534,
         };
         BiconomyState::new(base, quote, levels, empty_propamm_client())
@@ -441,7 +504,39 @@ mod tests {
             .unwrap();
 
         assert_eq!(result.amount, BigUint::from(4_074_999u64));
-        assert_eq!(result.gas, BigUint::from(265_000u64));
+        assert_eq!(result.gas, BigUint::from(1_200_000u64));
+    }
+
+    #[test]
+    fn test_get_amount_out_rejects_below_min_quote() {
+        let mut state = state_with_makers(vec![maker(1, &[("10000000", "275000000000000000")])]);
+        state.levels.min_quote = Some("1000000".to_string());
+
+        let err = state
+            .get_amount_out(BigUint::from(999_999u64), &weth(), &usdc())
+            .unwrap_err();
+        assert!(matches!(err, SimulationError::RecoverableError(_)));
+
+        // At the floor exactly, the pair quotes.
+        assert!(state
+            .get_amount_out(BigUint::from(1_000_000u64), &weth(), &usdc())
+            .is_ok());
+    }
+
+    #[test]
+    fn test_get_amount_out_drops_makers_allocated_below_min_fill() {
+        // Maker 2 has the best price but its full depth (1M) sits below its own minFill (2M):
+        // route construction would never build that leg, so the sweep must re-run without it
+        // and price everything on maker 1.
+        let mut best = maker(2, &[("1000000", "280000000000000000")]);
+        best.min_fill = Some("2000000".to_string());
+        let state = state_with_makers(vec![maker(1, &[("20000000", "275000000000000000")]), best]);
+
+        let result = state
+            .get_amount_out(BigUint::from(10_000_000u64), &weth(), &usdc())
+            .unwrap();
+        // floor(10M * 0.275) = 2_750_000, avg-floor chain exact.
+        assert_eq!(result.amount, BigUint::from(2_750_000u64));
     }
 
     #[test]
