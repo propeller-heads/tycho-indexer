@@ -2,9 +2,10 @@
 //!
 //! Connects to the Titan `pamm_price_levels` WebSocket (see
 //! <https://docs.titanbuilder.xyz/propamms/takers#pamm-price-level>) and yields parsed frames.
-//! Each frame is a complete snapshot of quote ladders per pair per pAMM, targeting the block
-//! Titan is currently building; consumers keep the newest frame and treat older ones as
-//! superseded.
+//! Each frame carries the quote ladders Titan simulated in one build round, targeting the block
+//! it is currently building. Frames are best effort, not complete snapshots: a venue or pair can
+//! be absent from one frame and present in the next, so absence must never be read as
+//! retirement. Consumers key freshness on the frame `timestamp`, not on what a frame omits.
 //!
 //! All Titan specifics (endpoint, JSON shape, reconnect policy) live in this module; the rest of
 //! the price level stream machinery is venue-agnostic.
@@ -80,7 +81,8 @@ pub(super) struct TitanPriceLevelMessage {
     pub pamms: Vec<TitanPammLevels>,
 }
 
-/// One pAMM's complete pair snapshot within a frame.
+/// The quote ladders one pAMM was simulated for within a frame. Not every pair the venue trades
+/// is necessarily present.
 #[derive(Debug, Deserialize)]
 pub(super) struct TitanPammLevels {
     /// The pAMM venue address.
