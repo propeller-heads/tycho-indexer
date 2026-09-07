@@ -1,3 +1,11 @@
+## [0.391.0](https://github.com/propeller-heads/tycho/compare/0.390.0...0.391.0) (2026-09-07)
+
+
+### Features
+
+* **integration-test:** wire up Robinhood Chain protocols ([1372b11](https://github.com/propeller-heads/tycho/commit/1372b11eb5661795daf35f9cf7170cbec002105c))
+* **integration-test:** wire up Robinhood Chain protocols ([#1418](https://github.com/propeller-heads/tycho/issues/1418)) ([6b12f35](https://github.com/propeller-heads/tycho/commit/6b12f35d48f220e16cfec5791c6de3bdcd813f6e))
+
 ## [0.390.0](https://github.com/propeller-heads/tycho/compare/0.389.0...0.390.0) (2026-09-05)
 
 
