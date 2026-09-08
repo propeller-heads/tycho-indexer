@@ -23,7 +23,6 @@ import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPropAMM} from "@interfaces/IPropAMM.sol";
-import {ITychoFallbackRouter} from "@interfaces/ITychoFallbackRouter.sol";
 import {
     CryptoPool as ICurveCryptoPool,
     StablePool as ICurveStablePool
@@ -52,11 +51,7 @@ error TychoFallbackRouter__ZeroGasCap();
 /// which pays in a callback, cannot be funded. Here the tokens stay in this contract.
 ///
 /// Holds no funds and grants no allowances between transactions. Native ETH unsupported.
-contract TychoFallbackRouter is
-    ITychoFallbackRouter,
-    AccessControl,
-    ReentrancyGuardTransient
-{
+contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
     enum Venue {
@@ -65,6 +60,14 @@ contract TychoFallbackRouter is
         UniswapV4,
         Curve,
         FluidV1
+    }
+
+    /// @notice One swap leg: what goes in, what comes out, and who receives it.
+    struct Leg {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        address receiver;
     }
 
     struct UniswapV4Swap {
@@ -121,7 +124,13 @@ contract TychoFallbackRouter is
         fluidLiquidity = fluidLiquidity_;
     }
 
-    /// @inheritdoc ITychoFallbackRouter
+    /// @notice Runs `pamm` and, only if it fails, `fallbackSwap`. A failing fallback reverts the
+    /// swap; there is no third attempt.
+    /// @dev Only callers holding `CALLER_ROLE` (the TychoRouter). Push-payment: the caller MUST
+    /// transfer `leg.amountIn` of `leg.tokenIn` here first. Native ETH is not supported.
+    /// `fallbackSwap` is `[venue: uint8][venue data]`, and no venue kind is a pAMM.
+    /// No output is returned: the caller measures its own `leg.tokenOut` balance diff at
+    /// `leg.receiver`, which is how the Dispatcher verifies every leg.
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
         external
         nonReentrant

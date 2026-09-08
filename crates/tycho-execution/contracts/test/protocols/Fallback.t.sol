@@ -13,7 +13,6 @@ import {
     FallbackExecutor__AddressZero,
     FallbackExecutor__InvalidDataLength
 } from "../../src/executors/FallbackExecutor.sol";
-import {ITychoFallbackRouter} from "../../interfaces/ITychoFallbackRouter.sol";
 import {
     TychoFallbackRouter,
     TychoFallbackRouter__AddressZero,
@@ -33,8 +32,8 @@ library FallbackSwaps {
         address tokenOut,
         uint256 amountIn,
         address receiver
-    ) internal pure returns (ITychoFallbackRouter.Leg memory) {
-        return ITychoFallbackRouter.Leg({
+    ) internal pure returns (TychoFallbackRouter.Leg memory) {
+        return TychoFallbackRouter.Leg({
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             amountIn: amountIn,

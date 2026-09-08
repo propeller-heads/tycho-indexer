@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {IExecutor} from "@interfaces/IExecutor.sol";
-import {ITychoFallbackRouter} from "@interfaces/ITychoFallbackRouter.sol";
+import {TychoFallbackRouter} from "../fallback/TychoFallbackRouter.sol";
 import {TransferManager} from "../TransferManager.sol";
 
 error FallbackExecutor__AddressZero();
@@ -17,13 +17,13 @@ error FallbackExecutor__InvalidDataLength();
 /// Every venue gets `minAmountOut = 0`, since a binding value would revert the trades the fallback
 /// exists to rescue. The caller's leg-level `minAmountOut` must clear the fallback venue.
 contract FallbackExecutor is IExecutor {
-    ITychoFallbackRouter public immutable fallbackRouter;
+    TychoFallbackRouter public immutable fallbackRouter;
 
     constructor(address fallbackRouter_) {
         if (fallbackRouter_ == address(0)) {
             revert FallbackExecutor__AddressZero();
         }
-        fallbackRouter = ITychoFallbackRouter(fallbackRouter_);
+        fallbackRouter = TychoFallbackRouter(fallbackRouter_);
     }
 
     function fundsExpectedAddress(
@@ -49,7 +49,7 @@ contract FallbackExecutor is IExecutor {
         ) = _decodeData(data);
 
         fallbackRouter.swap(
-            ITychoFallbackRouter.Leg({
+            TychoFallbackRouter.Leg({
                 tokenIn: tokenIn,
                 tokenOut: tokenOut,
                 amountIn: amountIn,
