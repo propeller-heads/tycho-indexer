@@ -64,10 +64,7 @@ contract TychoFallbackRouter is
     }
 
     struct UniswapV4Swap {
-        address tokenIn;
-        address tokenOut;
-        uint256 amountIn;
-        address receiver;
+        Leg leg;
         uint24 fee;
         int24 tickSpacing;
         address hook;
@@ -109,86 +106,77 @@ contract TychoFallbackRouter is
     }
 
     /// @inheritdoc ITychoFallbackRouter
-    function swap(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        address pamm,
-        bytes calldata fallbackSwap
-    ) external nonReentrant returns (uint256 amountOut) {
+    function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
+        external
+        nonReentrant
+        returns (uint256 amountOut)
+    {
         // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
         // is the caller's chosen venue, so its revert is the swap's revert.
         // slither-disable-next-line reentrancy-events
-        try this.executePropAMM(
-            tokenIn, tokenOut, amountIn, receiver, pamm
-        ) returns (
-            uint256 pammAmountOut
-        ) {
+        try this.executePropAMM(leg, pamm) returns (uint256 pammAmountOut) {
             return pammAmountOut;
         } catch {}
 
-        return
-            _executeFallback(
-                tokenIn, tokenOut, amountIn, receiver, fallbackSwap
-            );
+        return _executeFallback(leg, fallbackSwap);
     }
 
     /// @notice Runs the pAMM. External only so `swap` can try/catch it.
-    function executePropAMM(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        address pamm
-    ) external returns (uint256 amountOut) {
+    function executePropAMM(Leg calldata leg, address pamm)
+        external
+        returns (uint256 amountOut)
+    {
         if (msg.sender != address(this)) {
             revert TychoFallbackRouter__NotSelf();
         }
-        uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
+        uint256 balanceBefore = IERC20(leg.tokenOut).balanceOf(leg.receiver);
 
         // Push-payment, so the transfer comes first.
-        IERC20(tokenIn).safeTransfer(pamm, amountIn);
+        IERC20(leg.tokenIn).safeTransfer(pamm, leg.amountIn);
         // slither-disable-next-line unused-return
         IPropAMM(pamm)
-            .swap(tokenIn, tokenOut, amountIn, 0, receiver, block.timestamp);
+            .swap(
+                leg.tokenIn,
+                leg.tokenOut,
+                leg.amountIn,
+                0,
+                leg.receiver,
+                block.timestamp
+            );
 
-        return _delivered(tokenOut, receiver, balanceBefore);
+        return _delivered(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
     /// @dev The fallback is venue-tagged; a pAMM is not among the kinds, so the venue the primary
     /// slot exists to retry can never also be the rescue.
-    function _executeFallback(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata encodedSwap
-    ) internal returns (uint256 amountOut) {
+    function _executeFallback(Leg calldata leg, bytes calldata encodedSwap)
+        internal
+        returns (uint256 amountOut)
+    {
         if (encodedSwap.length == 0) {
             revert TychoFallbackRouter__InvalidSwapLength(encodedSwap.length);
         }
 
-        uint256 balanceBefore = IERC20(tokenOut).balanceOf(receiver);
+        uint256 balanceBefore = IERC20(leg.tokenOut).balanceOf(leg.receiver);
 
         uint8 venue = uint8(encodedSwap[0]);
         bytes calldata venueData = encodedSwap[1:];
 
         if (venue == uint8(Venue.UniswapV2)) {
-            _swapUniswapV2(tokenIn, tokenOut, amountIn, receiver, venueData);
+            _swapUniswapV2(leg, venueData);
         } else if (venue == uint8(Venue.UniswapV3)) {
-            _swapUniswapV3(tokenIn, tokenOut, amountIn, receiver, venueData);
+            _swapUniswapV3(leg, venueData);
         } else if (venue == uint8(Venue.UniswapV4)) {
-            _swapUniswapV4(tokenIn, tokenOut, amountIn, receiver, venueData);
+            _swapUniswapV4(leg, venueData);
         } else if (venue == uint8(Venue.Curve)) {
-            _swapCurve(tokenIn, tokenOut, amountIn, receiver, venueData);
+            _swapCurve(leg, venueData);
         } else if (venue == uint8(Venue.FluidV1)) {
-            _swapFluidV1(tokenIn, amountIn, receiver, venueData);
+            _swapFluidV1(leg, venueData);
         } else {
             revert TychoFallbackRouter__UnknownVenue(venue);
         }
 
-        return _delivered(tokenOut, receiver, balanceBefore);
+        return _delivered(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
     /// @dev Zero delivered counts as a failure, so a venue that fills with nothing still falls
@@ -216,13 +204,7 @@ contract TychoFallbackRouter is
 
     /// @dev Venue data: `[pair: 20][feeBps: 1]`. The pair prices nothing, so the output amount
     /// comes from the reserves.
-    function _swapUniswapV2(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata data
-    ) internal {
+    function _swapUniswapV2(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
         }
@@ -232,45 +214,39 @@ contract TychoFallbackRouter is
             revert TychoFallbackRouter__InvalidUniswapV2Fee(feeBps);
         }
 
-        bool zeroForOne = tokenIn < tokenOut;
+        bool zeroForOne = leg.tokenIn < leg.tokenOut;
         // slither-disable-next-line unused-return
         (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
         uint256 calculatedAmount = UniswapV2Math.getAmountOut(
-            amountIn,
+            leg.amountIn,
             zeroForOne ? reserve0 : reserve1,
             zeroForOne ? reserve1 : reserve0,
             feeBps
         );
 
-        IERC20(tokenIn).safeTransfer(address(pair), amountIn);
+        IERC20(leg.tokenIn).safeTransfer(address(pair), leg.amountIn);
         if (zeroForOne) {
-            pair.swap(0, calculatedAmount, receiver, "");
+            pair.swap(0, calculatedAmount, leg.receiver, "");
         } else {
-            pair.swap(calculatedAmount, 0, receiver, "");
+            pair.swap(calculatedAmount, 0, leg.receiver, "");
         }
     }
 
     /// @dev Venue data: `[pool: 20]`.
-    function _swapUniswapV3(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata data
-    ) internal {
+    function _swapUniswapV3(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 20) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
         }
         address pool = address(bytes20(data[0:20]));
-        bool zeroForOne = tokenIn < tokenOut;
+        bool zeroForOne = leg.tokenIn < leg.tokenOut;
 
-        _setCallbackContext(pool, tokenIn, amountIn);
+        _setCallbackContext(pool, leg.tokenIn, leg.amountIn);
         // slither-disable-next-line unused-return
         IUniswapV3Pool(pool)
             .swap(
-                receiver,
+                leg.receiver,
                 zeroForOne,
-                int256(amountIn),
+                int256(leg.amountIn),
                 zeroForOne
                     ? TickMath.MIN_SQRT_PRICE + 1
                     : TickMath.MAX_SQRT_PRICE - 1,
@@ -281,22 +257,13 @@ contract TychoFallbackRouter is
 
     /// @dev Venue data: `[fee: 3][tickSpacing: 3][hook: 20][hookData: rest]`. One pool, never a
     /// path: the currencies come from the sort order of `tokenIn` and `tokenOut`.
-    function _swapUniswapV4(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata data
-    ) internal {
+    function _swapUniswapV4(Leg calldata leg, bytes calldata data) internal {
         if (data.length < 26) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
         }
 
         UniswapV4Swap memory v4Swap = UniswapV4Swap({
-            tokenIn: tokenIn,
-            tokenOut: tokenOut,
-            amountIn: amountIn,
-            receiver: receiver,
+            leg: leg,
             fee: uint24(bytes3(data[0:3])),
             tickSpacing: int24(uint24(bytes3(data[3:6]))),
             hook: address(bytes20(data[6:26])),
@@ -309,13 +276,7 @@ contract TychoFallbackRouter is
 
     /// @dev Venue data: `[pool: 20][poolType: 1][i: 1][j: 1]`. Curve pays the caller, so this
     /// forwards to `receiver`.
-    function _swapCurve(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata data
-    ) internal {
+    function _swapCurve(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 23) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
         }
@@ -324,41 +285,39 @@ contract TychoFallbackRouter is
         uint256 i = uint8(data[21]);
         uint256 j = uint8(data[22]);
 
-        uint256 balanceBefore = IERC20(tokenOut).balanceOf(address(this));
+        uint256 balanceBefore = IERC20(leg.tokenOut).balanceOf(address(this));
 
-        IERC20(tokenIn).forceApprove(pool, amountIn);
+        IERC20(leg.tokenIn).forceApprove(pool, leg.amountIn);
         if (poolType == 1 || poolType == 10) {
             // stable and stable_ng
             ICurveStablePool(pool)
-                .exchange(int128(uint128(i)), int128(uint128(j)), amountIn, 0);
+                .exchange(
+                    int128(uint128(i)), int128(uint128(j)), leg.amountIn, 0
+                );
         } else {
             // crypto or llamma
-            ICurveCryptoPool(pool).exchange(i, j, amountIn, 0);
+            ICurveCryptoPool(pool).exchange(i, j, leg.amountIn, 0);
         }
-        IERC20(tokenIn).forceApprove(pool, 0);
+        IERC20(leg.tokenIn).forceApprove(pool, 0);
 
         uint256 received =
-            IERC20(tokenOut).balanceOf(address(this)) - balanceBefore;
-        IERC20(tokenOut).safeTransfer(receiver, received);
+            IERC20(leg.tokenOut).balanceOf(address(this)) - balanceBefore;
+        IERC20(leg.tokenOut).safeTransfer(leg.receiver, received);
     }
 
     /// @dev Venue data: `[dex: 20][zero2one: 1]`. `zero2one` is the dex's token order, not the
     /// address sort order, so it cannot be derived.
-    function _swapFluidV1(
-        address tokenIn,
-        uint256 amountIn,
-        address receiver,
-        bytes calldata data
-    ) internal {
+    function _swapFluidV1(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
         }
         address dex = address(bytes20(data[0:20]));
         bool zero2one = uint8(data[20]) > 0;
 
-        _setCallbackContext(dex, tokenIn, amountIn);
+        _setCallbackContext(dex, leg.tokenIn, leg.amountIn);
         // slither-disable-next-line unused-return
-        IFluidV1Dex(dex).swapInWithCallback(zero2one, amountIn, 0, receiver);
+        IFluidV1Dex(dex)
+            .swapInWithCallback(zero2one, leg.amountIn, 0, leg.receiver);
         _setCallbackContext(address(0), address(0), 0);
     }
 
@@ -394,23 +353,19 @@ contract TychoFallbackRouter is
             revert TychoFallbackRouter__NotPoolManager();
         }
         UniswapV4Swap memory v4Swap = abi.decode(data, (UniswapV4Swap));
-        bool zeroForOne = v4Swap.tokenIn < v4Swap.tokenOut;
+        Leg memory leg = v4Swap.leg;
+        bool zeroForOne = leg.tokenIn < leg.tokenOut;
 
         PoolKey memory key = PoolKey({
-            currency0: Currency.wrap(
-                zeroForOne ? v4Swap.tokenIn : v4Swap.tokenOut
-            ),
-            currency1: Currency.wrap(
-                zeroForOne ? v4Swap.tokenOut : v4Swap.tokenIn
-            ),
+            currency0: Currency.wrap(zeroForOne ? leg.tokenIn : leg.tokenOut),
+            currency1: Currency.wrap(zeroForOne ? leg.tokenOut : leg.tokenIn),
             fee: v4Swap.fee,
             tickSpacing: v4Swap.tickSpacing,
             hooks: IHooks(v4Swap.hook)
         });
 
-        poolManager.sync(Currency.wrap(v4Swap.tokenIn));
-        IERC20(v4Swap.tokenIn)
-            .safeTransfer(address(poolManager), v4Swap.amountIn);
+        poolManager.sync(Currency.wrap(leg.tokenIn));
+        IERC20(leg.tokenIn).safeTransfer(address(poolManager), leg.amountIn);
         // slither-disable-next-line unused-return
         poolManager.settle();
 
@@ -418,7 +373,7 @@ contract TychoFallbackRouter is
             key,
             SwapParams(
                 zeroForOne,
-                -int256(v4Swap.amountIn),
+                -int256(leg.amountIn),
                 zeroForOne
                     ? TickMath.MIN_SQRT_PRICE + 1
                     : TickMath.MAX_SQRT_PRICE - 1
@@ -429,8 +384,8 @@ contract TychoFallbackRouter is
         int128 amountOut = zeroForOne ? delta.amount1() : delta.amount0();
         if (amountOut <= 0) revert TychoFallbackRouter__NoOutput();
         poolManager.take(
-            Currency.wrap(v4Swap.tokenOut),
-            v4Swap.receiver,
+            Currency.wrap(leg.tokenOut),
+            leg.receiver,
             uint256(uint128(amountOut))
         );
         return "";

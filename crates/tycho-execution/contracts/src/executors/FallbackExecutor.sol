@@ -50,7 +50,14 @@ contract FallbackExecutor is IExecutor {
 
         // slither-disable-next-line unused-return
         fallbackRouter.swap(
-            tokenIn, tokenOut, amountIn, receiver, pamm, fallbackSwap
+            ITychoFallbackRouter.Leg({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                amountIn: amountIn,
+                receiver: receiver
+            }),
+            pamm,
+            fallbackSwap
         );
     }
 
