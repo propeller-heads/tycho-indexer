@@ -450,7 +450,8 @@ contract TychoFallbackRouter is
             tstore(_CALLBACK_TOKEN_SLOT, 0)
             tstore(_CALLBACK_AMOUNT_SLOT, 0)
         }
-        if (msg.sender != source || source == address(0)) {
+        // An unset context has source == address(0), which no real sender matches.
+        if (msg.sender != source) {
             revert TychoFallbackRouter__InvalidCallback();
         }
     }
