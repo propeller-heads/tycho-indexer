@@ -17,6 +17,7 @@ import {ITychoFallbackRouter} from "../../interfaces/ITychoFallbackRouter.sol";
 import {
     TychoFallbackRouter,
     TychoFallbackRouter__AddressZero,
+    TychoFallbackRouter__CallbackTokenMismatch,
     TychoFallbackRouter__InvalidSwapLength,
     TychoFallbackRouter__InvalidCallback,
     TychoFallbackRouter__NotPoolManager,
@@ -451,6 +452,26 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
 
         assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
         assertEq(IERC20(SUSDE_ADDR).balanceOf(address(router)), 0);
+    }
+
+    /// A mis-encoded `zero2one` makes the dex request the other side; the
+    /// failure names the cause instead of dying inside Fluid's accounting.
+    function testFluidWrongDirectionNamesCause() public {
+        uint256 amountIn = 10e18;
+        deal(SUSDE_ADDR, address(router), amountIn);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoFallbackRouter__CallbackTokenMismatch.selector,
+                USDT_ADDR,
+                SUSDE_ADDR
+            )
+        );
+        router.swap(
+            FallbackSwaps.leg(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.fluidV1(FLUID_DEX, false)
+        );
     }
 }
 

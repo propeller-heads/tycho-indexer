@@ -32,6 +32,9 @@ import {IFluidV1Dex} from "../executors/FluidV1Executor.sol";
 import {UniswapV2Math} from "../../lib/UniswapV2Math.sol";
 
 error TychoFallbackRouter__AddressZero();
+error TychoFallbackRouter__CallbackTokenMismatch(
+    address requested, address expected
+);
 error TychoFallbackRouter__InvalidCallback();
 error TychoFallbackRouter__InvalidSwapLength(uint256 length);
 error TychoFallbackRouter__InvalidUniswapV2Fee(uint256 feeBps);
@@ -355,14 +358,19 @@ contract TychoFallbackRouter is
         IERC20(tokenIn).safeTransfer(msg.sender, amountIn);
     }
 
-    /// @notice Pays the Fluid liquidity layer. The dex's arguments are ignored, as above.
+    /// @notice Pays the Fluid liquidity layer. The requested token must match the callback
+    /// context -- a mismatch means the encoded `zero2one` contradicts the leg -- but the paid
+    /// amount comes from the context, never from the dex.
     function dexCallback(
-        address, /* token_ */
+        address token_,
         uint256 /* amount_ */
     )
         external
     {
         (address tokenIn, uint256 amountIn) = _consumeCallbackContext();
+        if (token_ != tokenIn) {
+            revert TychoFallbackRouter__CallbackTokenMismatch(token_, tokenIn);
+        }
         IERC20(tokenIn).safeTransfer(fluidLiquidity, amountIn);
     }
 
