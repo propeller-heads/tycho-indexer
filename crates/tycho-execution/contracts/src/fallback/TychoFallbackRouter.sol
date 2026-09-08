@@ -181,21 +181,26 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
             revert TychoFallbackRouter__InvalidSwapLength(encodedSwap.length);
         }
 
-        uint8 venue = uint8(encodedSwap[0]);
+        uint8 venueByte = uint8(encodedSwap[0]);
+        if (venueByte > uint8(type(Venue).max)) {
+            revert TychoFallbackRouter__UnknownVenue(venueByte);
+        }
+        Venue venue = Venue(venueByte);
         bytes calldata venueData = encodedSwap[1:];
 
-        if (venue == uint8(Venue.UniswapV2)) {
+        if (venue == Venue.UniswapV2) {
             _swapUniswapV2(leg, venueData);
-        } else if (venue == uint8(Venue.UniswapV3)) {
+        } else if (venue == Venue.UniswapV3) {
             _swapUniswapV3(leg, venueData);
-        } else if (venue == uint8(Venue.UniswapV4)) {
+        } else if (venue == Venue.UniswapV4) {
             _swapUniswapV4(leg, venueData);
-        } else if (venue == uint8(Venue.Curve)) {
+        } else if (venue == Venue.Curve) {
             _swapCurve(leg, venueData);
-        } else if (venue == uint8(Venue.FluidV1)) {
+        } else if (venue == Venue.FluidV1) {
             _swapFluidV1(leg, venueData);
         } else {
-            revert TychoFallbackRouter__UnknownVenue(venue);
+            // Unreachable today; catches a venue added to the enum without a branch.
+            revert TychoFallbackRouter__UnknownVenue(venueByte);
         }
     }
 
