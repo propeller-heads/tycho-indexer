@@ -123,7 +123,31 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         router = new TychoFallbackRouter(
             ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
+        bytes32 callerRole = router.CALLER_ROLE();
+        vm.prank(ADMIN);
+        router.grantRole(callerRole, address(this));
         pamm = new MockPropAMM();
+    }
+
+    /// Only `CALLER_ROLE` (the TychoRouter) may start a swap; held balances
+    /// are not first-come-first-served.
+    function testSwapRequiresCallerRole() public {
+        _fundRouter(USDC_ADDR, USDC_IN);
+        bytes32 callerRole = router.CALLER_ROLE();
+
+        vm.prank(BOB);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                BOB,
+                callerRole
+            )
+        );
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, USDC_ADDR, USDC_IN, BOB),
+            BOB,
+            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
+        );
     }
 
     function testConstructorRejectsZeroAddress() public {
@@ -354,6 +378,9 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
         router = new TychoFallbackRouter(
             ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
+        bytes32 callerRole = router.CALLER_ROLE();
+        vm.prank(ADMIN);
+        router.grantRole(callerRole, address(this));
         pamm = new MockPropAMM();
     }
 

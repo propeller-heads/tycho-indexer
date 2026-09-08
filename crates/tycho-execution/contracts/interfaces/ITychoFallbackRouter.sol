@@ -14,9 +14,9 @@ interface ITychoFallbackRouter {
 
     /// @notice Runs `pamm` and, only if it fails, `fallbackSwap`. A failing fallback reverts the
     /// swap; there is no third attempt.
-    /// @dev Push-payment: the caller MUST transfer `leg.amountIn` of `leg.tokenIn` here first.
-    /// Native ETH is not supported. `fallbackSwap` is `[venue: uint8][venue data]`, and no venue
-    /// kind is a pAMM.
+    /// @dev Only callers holding `CALLER_ROLE` (the TychoRouter). Push-payment: the caller MUST
+    /// transfer `leg.amountIn` of `leg.tokenIn` here first. Native ETH is not supported.
+    /// `fallbackSwap` is `[venue: uint8][venue data]`, and no venue kind is a pAMM.
     /// @return amountOut The `leg.tokenOut` balance increase measured at `leg.receiver`.
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
         external

@@ -282,6 +282,9 @@ contract TychoRouterTestSetup is
         fallbackRouter =
             new TychoFallbackRouter(ADMIN, poolManager, FLUIDV1_LIQUIDITY);
         fallbackExecutor = new FallbackExecutor(address(fallbackRouter));
+        bytes32 fallbackCallerRole = fallbackRouter.CALLER_ROLE();
+        vm.prank(ADMIN);
+        fallbackRouter.grantRole(fallbackCallerRole, tychoRouterAddr);
 
         address[] memory executors = new address[](skyDeployable ? 29 : 28);
         executors[0] = address(usv2Executor);

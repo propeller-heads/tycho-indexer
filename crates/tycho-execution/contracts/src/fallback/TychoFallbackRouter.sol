@@ -71,6 +71,12 @@ contract TychoFallbackRouter is
         bytes hookData;
     }
 
+    /// @notice May call `swap`. Granted to the TychoRouter, so held balances
+    /// cannot be swept by strangers naming their own pAMM.
+    //keccak256("CALLER_ROLE") : save gas on deployment
+    bytes32 public constant CALLER_ROLE =
+        0x843c3a00fa95510a35f425371231fd3fe4642e719cb4595160763d6d02594b50;
+
     // keccak256("TychoFallbackRouter#CALLBACK_SOURCE")
     bytes32 private constant _CALLBACK_SOURCE_SLOT =
         0xf69ae8e0008b818aeb91c2b052698e485056e760fad9d0aa28144b842debe4f7;
@@ -109,6 +115,7 @@ contract TychoFallbackRouter is
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
         external
         nonReentrant
+        onlyRole(CALLER_ROLE)
         returns (uint256 amountOut)
     {
         // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
