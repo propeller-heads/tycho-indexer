@@ -1,3 +1,11 @@
+## [0.397.0](https://github.com/propeller-heads/tycho/compare/0.396.0...0.397.0) (2026-09-08)
+
+
+### Features
+
+* add metric executor deployment ([f58a55e](https://github.com/propeller-heads/tycho/commit/f58a55eebce95a60cf73792c263d71be50005100))
+* add metric executor deployment ([#1421](https://github.com/propeller-heads/tycho/issues/1421)) ([6e2858d](https://github.com/propeller-heads/tycho/commit/6e2858d5cfe10bf8f7d34856ac4cc18c74380ac7))
+
 ## [0.396.0](https://github.com/propeller-heads/tycho/compare/0.395.0...0.396.0) (2026-09-08)
 
 
