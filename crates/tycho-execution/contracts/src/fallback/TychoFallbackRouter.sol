@@ -24,6 +24,12 @@ import {TickMath} from "@uniswap/v4-core/src/libraries/TickMath.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
 import {IPropAMM} from "@interfaces/IPropAMM.sol";
 import {ITychoFallbackRouter} from "@interfaces/ITychoFallbackRouter.sol";
+import {
+    CryptoPool as ICurveCryptoPool,
+    StablePool as ICurveStablePool
+} from "../executors/CurveExecutor.sol";
+import {IFluidV1Dex} from "../executors/FluidV1Executor.sol";
+import {UniswapV2Math} from "../../lib/UniswapV2Math.sol";
 
 error TychoFallbackRouter__AddressZero();
 error TychoFallbackRouter__InvalidCallback();
@@ -33,28 +39,6 @@ error TychoFallbackRouter__NoOutput();
 error TychoFallbackRouter__NotPoolManager();
 error TychoFallbackRouter__NotSelf();
 error TychoFallbackRouter__UnknownVenue(uint8 venue);
-error TychoFallbackRouter__ZeroReserves();
-
-interface ICurveCryptoPool {
-    function exchange(uint256 i, uint256 j, uint256 dx, uint256 minDy)
-        external
-        payable;
-}
-
-interface ICurveStablePool {
-    function exchange(int128 i, int128 j, uint256 dx, uint256 minDy)
-        external
-        payable;
-}
-
-interface IFluidV1Dex {
-    function swapInWithCallback(
-        bool swap0to1_,
-        uint256 amountIn_,
-        uint256 amountOutMin_,
-        address to_
-    ) external payable returns (uint256 amountOut_);
-}
 
 /// @title TychoFallbackRouter
 /// @notice Runs a primary venue and, only if it fails, the caller's chosen fallback venue.
@@ -99,10 +83,6 @@ contract TychoFallbackRouter is
     // keccak256("TychoFallbackRouter#CALLBACK_AMOUNT")
     bytes32 private constant _CALLBACK_AMOUNT_SLOT =
         0xde66fd0ca9c728ba44ca7bab17a304d328bf9cf5d5c72b8bf8ea7cd13765e542;
-
-    uint160 private constant _MIN_SQRT_RATIO = 4295128739;
-    uint160 private constant _MAX_SQRT_RATIO =
-        1461446703485210103287273052203988822378723970342;
 
     IPoolManager public immutable poolManager;
     /// @notice Where `dexCallback` pays a Fluid dex.
@@ -255,7 +235,7 @@ contract TychoFallbackRouter is
         bool zeroForOne = tokenIn < tokenOut;
         // slither-disable-next-line unused-return
         (uint112 reserve0, uint112 reserve1,) = pair.getReserves();
-        uint256 calculatedAmount = _getAmountOut(
+        uint256 calculatedAmount = UniswapV2Math.getAmountOut(
             amountIn,
             zeroForOne ? reserve0 : reserve1,
             zeroForOne ? reserve1 : reserve0,
@@ -291,7 +271,9 @@ contract TychoFallbackRouter is
                 receiver,
                 zeroForOne,
                 int256(amountIn),
-                zeroForOne ? _MIN_SQRT_RATIO + 1 : _MAX_SQRT_RATIO - 1,
+                zeroForOne
+                    ? TickMath.MIN_SQRT_PRICE + 1
+                    : TickMath.MAX_SQRT_PRICE - 1,
                 ""
             );
         _setCallbackContext(address(0), address(0), 0);
@@ -452,21 +434,6 @@ contract TychoFallbackRouter is
             uint256(uint128(amountOut))
         );
         return "";
-    }
-
-    function _getAmountOut(
-        uint256 amountIn,
-        uint112 reserveIn,
-        uint112 reserveOut,
-        uint256 feeBps
-    ) internal pure returns (uint256 amount) {
-        if (reserveIn == 0 || reserveOut == 0) {
-            revert TychoFallbackRouter__ZeroReserves();
-        }
-        uint256 amountInWithFee = amountIn * (10000 - feeBps);
-        uint256 numerator = amountInWithFee * uint256(reserveOut);
-        uint256 denominator = (uint256(reserveIn) * 10000) + amountInWithFee;
-        amount = numerator / denominator;
     }
 
     function _setCallbackContext(address source, address token, uint256 amount)
