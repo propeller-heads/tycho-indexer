@@ -137,6 +137,8 @@ contract NativeExecutor is IExecutor {
     function _validateOverrideArguments(bytes memory payload) private pure {
         uint256 actualSellerAmount;
         uint256 actualMinOutputAmount;
+        // _decodeData guarantees both fixed 32-byte override words fit in payload.
+        // slither-disable-next-line assembly
         assembly ("memory-safe") {
             actualSellerAmount := mload(
                 add(add(payload, 0x20), _ACTUAL_SELLER_AMOUNT_OFFSET)
@@ -158,6 +160,8 @@ contract NativeExecutor is IExecutor {
         private
         pure
     {
+        // _decodeData guarantees the fixed 32-byte write stays within payload.
+        // slither-disable-next-line assembly
         assembly ("memory-safe") {
             mstore(
                 add(add(payload, 0x20), _ACTUAL_SELLER_AMOUNT_OFFSET),
