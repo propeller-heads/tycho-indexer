@@ -1,3 +1,35 @@
+## [0.395.0](https://github.com/propeller-heads/tycho/compare/0.394.0...0.395.0) (2026-09-08)
+
+
+### Features
+
+* integrate native RFQ protocol ([f7b8b5b](https://github.com/propeller-heads/tycho/commit/f7b8b5bb7ef7df468c23885ff9c240794c0ac49f))
+* integrate native RFQ protocol ([#1244](https://github.com/propeller-heads/tycho/issues/1244)) ([c0ec407](https://github.com/propeller-heads/tycho/commit/c0ec40776103f6aa2175f5db5f4b6cd73d590bc0))
+* **native:** migrate RFQ integration to router v6 ([ed084cb](https://github.com/propeller-heads/tycho/commit/ed084cb69ff3b85d185262fcad95fd2980c88663))
+
+
+### Bug Fixes
+
+* address Native integration review feedback ([9446093](https://github.com/propeller-heads/tycho/commit/944609350cd69b066322c667a624d018f2bf54ba))
+* **execution:** support Native input over-delivery ([a09bdf4](https://github.com/propeller-heads/tycho/commit/a09bdf4225ba89fbd5fbde742750fdbf01869216))
+* harden Native quote and executor handling ([6274323](https://github.com/propeller-heads/tycho/commit/6274323357c31315fecb2a9cab8e7eb217342f9e))
+* **native:** address final review feedback ([d636d1c](https://github.com/propeller-heads/tycho/commit/d636d1cd73252897605a1ee76630ef51a1440b73))
+* **native:** address follow-up review feedback ([507cee3](https://github.com/propeller-heads/tycho/commit/507cee352356d5774d1bfdc3e6c4731018b3ff49))
+* **native:** address maintainer feedback ([3abf9f9](https://github.com/propeller-heads/tycho/commit/3abf9f9b3276a367b340612d303b84368958f90f))
+* **native:** address second-round review feedback ([1fa47db](https://github.com/propeller-heads/tycho/commit/1fa47db36c5c8a9cf7b1708f19ab4e1a9e53e18e))
+* **native:** annotate reviewed assembly for slither ([26e6c66](https://github.com/propeller-heads/tycho/commit/26e6c664af0ed0da6e12cbaa313c6444689418bb))
+* **native:** enable RFQ quickstart ([7c05250](https://github.com/propeller-heads/tycho/commit/7c05250e2c30a9649fa5f23ef27abc9894bd7faa))
+* **native:** enforce directional orderbook minimums ([42123d7](https://github.com/propeller-heads/tycho/commit/42123d7cc4b5deea34fc51cd6719c0a55ae2c4ea))
+* **native:** reject zero polling intervals ([9933db6](https://github.com/propeller-heads/tycho/commit/9933db67b11bb55150b7fb214dda3deafe0644f7))
+* **native:** retain conversion books for TVL normalization ([67b53ab](https://github.com/propeller-heads/tycho/commit/67b53ab4f8f1053450c9ffed904a2fa185baa0eb))
+* **native:** select deterministic tvl conversion source ([e89ba6b](https://github.com/propeller-heads/tycho/commit/e89ba6b9881803603daddcbb9ad4a764d7d2c0cc))
+* **native:** validate derived pricing values ([bc4d08d](https://github.com/propeller-heads/tycho/commit/bc4d08d50af4044324251bee419335131d5d0ad3))
+* **native:** validate firm quote input amount ([e7edfaa](https://github.com/propeller-heads/tycho/commit/e7edfaa734fb6098775a951dcaa4101852e22c1d))
+* **native:** validate orderbook price levels ([f4bf670](https://github.com/propeller-heads/tycho/commit/f4bf670cda4aaf5d1d6728aedc134f16b85dade1))
+* update calldata.txt ([0eaa015](https://github.com/propeller-heads/tycho/commit/0eaa0158a5f5ae9e601bcf7c360124768b923805))
+* update monad deployment config ([cdf9db5](https://github.com/propeller-heads/tycho/commit/cdf9db5ab5878acca1c16c32f48988fb874aa3bc))
+* use safe Native midpoint calculations ([fe680db](https://github.com/propeller-heads/tycho/commit/fe680db10985e47b3376900e4ce090b717c9151a))
+
 ## [0.394.0](https://github.com/propeller-heads/tycho/compare/0.393.1...0.394.0) (2026-09-08)
 
 
