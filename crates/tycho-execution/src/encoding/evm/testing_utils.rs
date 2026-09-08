@@ -136,6 +136,7 @@ pub fn delayed_hashflow_swap(
         ("pool".to_string(), Bytes::from("0x478eca1b93865dca0b9f325935eb123c8a4af011")),
         ("external_account".to_string(), Bytes::zero(20)),
         ("trader".to_string(), Bytes::zero(20)),
+        ("effective_trader".to_string(), Bytes::zero(20)),
         ("base_token".to_string(), token_in.clone()),
         ("quote_token".to_string(), token_out.clone()),
         ("base_token_amount".to_string(), Bytes::from(vec![0u8; 32])),

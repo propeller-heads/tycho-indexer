@@ -17,6 +17,7 @@ contract HashflowUtils is Test {
             quote.pool, // pool (20 bytes)
             quote.externalAccount, // externalAccount (20 bytes)
             quote.trader, // trader (20 bytes)
+            quote.effectiveTrader, // effectiveTrader (20 bytes)
             quote.baseToken, // baseToken (20 bytes)
             quote.quoteToken, // quoteToken (20 bytes)
             quote.baseTokenAmount, // baseTokenAmount (32 bytes)

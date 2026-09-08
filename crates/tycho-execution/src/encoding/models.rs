@@ -494,11 +494,14 @@ impl PartialEq for PermitDetails {
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
+/// * `sender`: The solution's sender — the end user's wallet. RFQ encoders attribute quotes to it
+///   (e.g. Hashflow's effective trader); when absent, quotes are attributed to the router.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
+    pub sender: Option<Bytes>,
 }
 
 #[derive(PartialEq)]

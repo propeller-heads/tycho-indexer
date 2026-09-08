@@ -375,7 +375,7 @@ impl RFQClient for HashflowClient {
                 base_token_amount: Some(params.amount_in.to_string()),
                 quote_token_amount: None,
                 trader: params.receiver.to_string(),
-                effective_trader: None,
+                effective_trader: Some(params.sender.to_string()),
             }],
             calldata: false,
         };
@@ -524,7 +524,13 @@ impl RFQClient for HashflowClient {
                                 })?,
                             );
                         }
+                        let effective_trader = quote
+                            .quote_data
+                            .effective_trader
+                            .clone()
+                            .unwrap_or_else(|| quote.quote_data.trader.clone());
                         quote_attributes.insert("trader".to_string(), quote.quote_data.trader);
+                        quote_attributes.insert("effective_trader".to_string(), effective_trader);
                         quote_attributes
                             .insert("base_token".to_string(), quote.quote_data.base_token);
                         quote_attributes
