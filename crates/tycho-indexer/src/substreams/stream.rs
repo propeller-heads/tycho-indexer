@@ -121,6 +121,14 @@ fn should_retry_unauthenticated(block_received: bool, retries_used: u32) -> bool
     block_received && retries_used < MAX_UNAUTHENTICATED_RETRIES
 }
 
+/// Seconds since the unix epoch, as a gauge value.
+fn unix_timestamp_seconds() -> f64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards!?")
+        .as_secs_f64()
+}
+
 async fn wait_for_next_retry(
     backoff: &mut ExponentialBackoff,
     retry_count: &mut u32,
@@ -197,7 +205,14 @@ fn stream_blocks(
                     let mut stream = Box::pin(stream);
                     loop {
                         let response = match timeout(idle_timeout, stream.next()).await {
-                            Ok(Some(response)) => response,
+                            Ok(Some(response)) => {
+                                // Every other stream gauge is written per block, so a stalled
+                                // endpoint leaves them all at their last healthy value and
+                                // indistinguishable from a live stream. This one ages instead.
+                                gauge!("substreams_last_message_timestamp_seconds", "extractor" => extractor_id.clone())
+                                    .set(unix_timestamp_seconds());
+                                response
+                            },
                             Ok(None) => break,
                             Err(_) => {
                                 warn!(?idle_timeout, "Endpoint went silent, reconnecting");
