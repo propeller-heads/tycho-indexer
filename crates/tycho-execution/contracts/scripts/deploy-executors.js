@@ -94,6 +94,7 @@ const deploy_protocols = {
         "uniswap_v4",
         "ekubo_v3",
         "native_wrapper",
+        "rfq:metric",
     ],
 };
 
