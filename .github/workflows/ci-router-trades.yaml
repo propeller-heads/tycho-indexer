@@ -46,6 +46,9 @@ jobs:
       - name: Unit tests
         run: make test
 
+      - name: Manifest filters
+        run: make check-manifests
+
       - name: Formatting
         run: cargo +nightly-2026-06-28 fmt -- --check
 
@@ -54,6 +57,12 @@ jobs:
 
       - name: WASM build
         run: make build
+
+      - name: Executor table integration
+        run: make test-executors
+
+      - name: Views integration
+        run: make test-views
 
       - name: Pricing integration and outage isolation
         run: |

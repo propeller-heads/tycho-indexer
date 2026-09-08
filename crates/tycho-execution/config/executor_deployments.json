@@ -83,7 +83,7 @@
     },
     "rfq:metric": {
       "contract": "MetricExecutor",
-      "args": ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
+      "args": []
     },
     "sky": {
       "contract": "SkyExecutor",
@@ -120,7 +120,7 @@
     "lunarbase": { "contract": "LunarBaseExecutor", "args": [] },
     "rfq:metric": {
       "contract": "MetricExecutor",
-      "args": ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
+      "args": []
     }
   },
   "unichain": {
@@ -159,10 +159,6 @@
     "native_wrapper": {
       "contract": "NativeWrapExecutor",
       "args": ["0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"]
-    },
-    "rfq:metric": {
-      "contract": "MetricExecutor",
-      "args": ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
     }
   },
   "polygon": {
@@ -178,10 +174,6 @@
     "native_wrapper": {
       "contract": "NativeWrapExecutor",
       "args": ["0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"]
-    },
-    "rfq:metric": {
-      "contract": "MetricExecutor",
-      "args": ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
     }
   },
   "bsc": {
@@ -198,10 +190,6 @@
     "native_wrapper": {
       "contract": "NativeWrapExecutor",
       "args": ["0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c"]
-    },
-    "rfq:metric": {
-      "contract": "MetricExecutor",
-      "args": ["0x681E908B8ab57c49C74D770F369754CCC3E1ae09"]
     }
   },
   "plasma": {
@@ -235,6 +223,10 @@
     "native_wrapper": {
       "contract": "NativeWrapExecutor",
       "args": ["0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"]
+    },
+    "rfq:metric": {
+      "contract": "MetricExecutor",
+      "args": []
     }
   }
 }
