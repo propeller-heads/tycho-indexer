@@ -420,7 +420,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         );
 
         int128 amountOut = zeroForOne ? delta.amount1() : delta.amount0();
-        if (amountOut <= 0) revert TychoFallbackRouter__NoOutput();
+        // A negative delta (hostile hook) wraps to an amount `take` cannot pay, so it reverts
+        // there; a zero delta fails the route-level minAmountOut like any other empty venue.
         poolManager.take(
             Currency.wrap(leg.tokenOut),
             leg.receiver,
