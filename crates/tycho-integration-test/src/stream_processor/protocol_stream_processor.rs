@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::{Stream, StreamExt};
 use miette::{miette, IntoDiagnostic, WrapErr};
@@ -13,6 +13,7 @@ use tycho_simulation::{
     evm::{
         decoder::StreamDecodeError,
         engine_db::tycho_db::PreCachedDB,
+        override_stream::StateOverrideProvider,
         protocol::{
             aerodrome_slipstreams::state::AerodromeSlipstreamsState,
             aerodrome_v1::state::AerodromeV1State,
@@ -55,6 +56,9 @@ pub struct ProtocolStreamProcessor {
     protocols: Option<Vec<String>>,
     partial_blocks: bool,
     no_tls: bool,
+    /// State override providers registered on the stream, keyed by protocol system. Empty leaves
+    /// the builder to install its own defaults.
+    override_providers: HashMap<String, Arc<dyn StateOverrideProvider>>,
 }
 
 impl ProtocolStreamProcessor {
@@ -78,7 +82,19 @@ impl ProtocolStreamProcessor {
             protocols,
             partial_blocks,
             no_tls,
+            override_providers: HashMap::new(),
         })
+    }
+
+    /// Registers `providers` as the pools' state override sources, taking precedence over the
+    /// builder's own defaults so the process opens one Titan connection rather than one per
+    /// consumer.
+    pub fn with_override_providers(
+        mut self,
+        providers: HashMap<String, Arc<dyn StateOverrideProvider>>,
+    ) -> Self {
+        self.override_providers = providers;
+        self
     }
 
     pub async fn run_stream(
@@ -161,6 +177,10 @@ impl ProtocolStreamProcessor {
         for protocol in &protocols_to_enable {
             protocol_stream =
                 self.add_protocol_to_stream(protocol_stream, protocol, &tvl_filter)?;
+        }
+        for (protocol_system, provider) in &self.override_providers {
+            protocol_stream =
+                protocol_stream.with_override_provider(protocol_system, provider.clone());
         }
         if self.partial_blocks {
             protocol_stream = protocol_stream.enable_partial_blocks();
@@ -246,6 +266,16 @@ impl ProtocolStreamProcessor {
                     "ramses_v3".to_string(),
                 ]
             }
+            Chain::Robinhood => {
+                vec![
+                    "uniswap_v2".to_string(),
+                    "uniswap_v3".to_string(),
+                    "uniswap_v4".to_string(),
+                    "sushiswap_v3".to_string(),
+                    "robinswap_v3".to_string(),
+                    "ramses_v3".to_string(),
+                ]
+            }
             Chain::Arbitrum => {
                 vec![
                     "uniswap_v2".to_string(),
@@ -282,6 +312,14 @@ impl ProtocolStreamProcessor {
             }
             "uniswap_v3" => {
                 stream = stream.exchange::<UniswapV3State>("uniswap_v3", tvl_filter.clone(), None);
+            }
+            "sushiswap_v3" => {
+                stream =
+                    stream.exchange::<UniswapV3State>("sushiswap_v3", tvl_filter.clone(), None);
+            }
+            "robinswap_v3" => {
+                stream =
+                    stream.exchange::<UniswapV3State>("robinswap_v3", tvl_filter.clone(), None);
             }
             "pancakeswap_v3" => {
                 stream =

@@ -58,6 +58,7 @@ use tycho_indexer::{
     },
     extractor::{
         factory::ExtractorFactory,
+        protocol_cache::ProtocolMemoryCache,
         runner::ExtractorHandle,
         supervisor::{DCIType, ExtractorConfig, ExtractorSupervisor, ProtocolTypeConfig},
         token_analysis_cron::analyze_tokens,
@@ -580,6 +581,17 @@ async fn build_all_extractors(
         .first()
         .expect("No chain provided");
 
+    // One cache for all extractors: it holds the whole chain's token and component universe
+    // (several GB on large chains), so populating one per extractor multiplies both memory
+    // and the bulk database read by the number of extractors.
+    info!("Building protocol cache");
+    let protocol_cache = ProtocolMemoryCache::new(
+        chain,
+        chrono::Duration::seconds(900),
+        Arc::new(cached_gw.clone()),
+    );
+    protocol_cache.populate().await?;
+
     for extractor_config in config.extractors.values() {
         initialize_accounts(
             extractor_config
@@ -608,6 +620,7 @@ async fn build_all_extractors(
             database_insert_batch_size,
             partial_blocks,
             Some(runtime_handle),
+            protocol_cache.clone(),
         )
         .await?;
 

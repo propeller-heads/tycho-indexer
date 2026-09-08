@@ -152,8 +152,9 @@ where
 /// with a new `ReorgBuffer` and DCI plugin — suitable for restart after failure.
 ///
 /// Reused across restarts:
-/// - `protocol_cache`: populated once at construction; Arc-based so cloning is cheap and all runs
-///   share the same live cache. The TTL mechanism refreshes stale entries automatically.
+/// - `protocol_cache`: one chain-wide instance shared by every extractor, populated once by the
+///   caller; Arc-based so cloning is cheap and all runs share the same live cache. The TTL
+///   mechanism refreshes stale entries automatically.
 /// - `chain_state`: estimated once at construction (block number via RPC); `Copy` so each run gets
 ///   its own copy at no cost.
 /// - `cached_gw`: each `build_runner` call creates a fresh instance via `new_instance()` (fresh
@@ -176,10 +177,12 @@ pub struct ExtractorFactory {
 }
 
 impl ExtractorFactory {
-    /// Creates the factory, making one RPC call to fetch the current block number and populating
-    /// the protocol cache from the database.
+    /// Creates the factory, making one RPC call to fetch the current block number.
     ///
-    /// Both `chain_state` and `protocol_cache` are reused across all subsequent restarts.
+    /// The `protocol_cache` holds the whole chain's token and component universe, so callers
+    /// must pass one shared, already populated instance to every factory on the chain instead
+    /// of populating one per extractor. Both `chain_state` and the cache are reused across all
+    /// subsequent restarts.
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         config: ExtractorConfig,
@@ -193,6 +196,7 @@ impl ExtractorFactory {
         database_insert_batch_size: usize,
         partial_blocks: bool,
         runtime_handle: Option<Handle>,
+        protocol_cache: ProtocolMemoryCache,
     ) -> Result<Self, ExtractionError> {
         let block_number = rpc_client
             .get_block_number()
@@ -203,13 +207,6 @@ impl ExtractorFactory {
             block_number,
             chain.block_time_secs() as i64,
         );
-
-        let protocol_cache = ProtocolMemoryCache::new(
-            config.chain,
-            chrono::Duration::seconds(900),
-            Arc::new(cached_gw.clone()),
-        );
-        protocol_cache.populate().await?;
 
         Ok(Self {
             config,

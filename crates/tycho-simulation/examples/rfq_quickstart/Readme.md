@@ -24,7 +24,7 @@ export LIQUORICE_KEY=<your-liquorice-key>
 export NATIVE_API_KEY=<your-native-api-key>
 
 export METRIC_API_URL=<optional-custom-metric-api-url>
-export METRIC_SECRET_KEY=<optional-metric-secret-key>
+export METRIC_API_KEY=<optional-metric-api-key>
 ```
 
 Then, you can run the example with:
