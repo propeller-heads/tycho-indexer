@@ -195,13 +195,12 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         deal(WETH_ADDR, address(pamm), 100 ether);
         _fundRouter(USDC_ADDR, USDC_IN);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertEq(amountOut, 1 ether);
         assertEq(IERC20(WETH_ADDR).balanceOf(BOB), 1 ether);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(pamm)), USDC_IN);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
@@ -212,14 +211,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     function testFallsBackToUniswapV3() public {
         _fundRouter(USDC_ADDR, USDC_IN);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
         // The failed primary's transfer reverted with it.
         assertEq(IERC20(USDC_ADDR).balanceOf(address(pamm)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
@@ -229,14 +227,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     function testFallsBackToUniswapV2() public {
         _fundRouter(USDC_ADDR, USDC_IN);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
@@ -245,14 +242,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         uint256 amountIn = 1000e18;
         _fundRouter(DAI_ADDR, amountIn);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(DAI_ADDR, USDC_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.curve(TRIPOOL, 1, 0, 1)
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(DAI_ADDR, USDC_ADDR);
         assertEq(IERC20(DAI_ADDR).allowance(address(router), TRIPOOL), 0);
     }
@@ -262,14 +258,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         uint256 amountIn = 100 ether;
         _fundRouter(USDE_ADDR, amountIn);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(USDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(USDT_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(USDE_ADDR, USDT_ADDR);
     }
 
@@ -278,13 +273,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         SilentVenue silent = new SilentVenue();
         _fundRouter(USDC_ADDR, USDC_IN);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(silent),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(amountOut, 0);
+        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(silent)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
@@ -295,14 +290,13 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         GasBurnerPropAMM burner = new GasBurnerPropAMM();
         _fundRouter(USDC_ADDR, USDC_IN);
 
-        uint256 amountOut = router.swap{gas: 2_000_000}(
+        router.swap{gas: 2_000_000}(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(burner),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
@@ -449,14 +443,13 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
         uint256 amountIn = 10e18;
         deal(SUSDE_ADDR, address(router), amountIn);
 
-        uint256 amountOut = router.swap(
+        router.swap(
             FallbackSwaps.leg(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.fluidV1(FLUID_DEX, true)
         );
 
-        assertGt(amountOut, 0);
-        assertEq(IERC20(USDT_ADDR).balanceOf(BOB), amountOut);
+        assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
         assertEq(IERC20(SUSDE_ADDR).balanceOf(address(router)), 0);
     }
 }

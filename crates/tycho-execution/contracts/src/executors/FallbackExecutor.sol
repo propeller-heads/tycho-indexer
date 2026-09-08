@@ -48,7 +48,6 @@ contract FallbackExecutor is IExecutor {
             bytes calldata fallbackSwap
         ) = _decodeData(data);
 
-        // slither-disable-next-line unused-return
         fallbackRouter.swap(
             ITychoFallbackRouter.Leg({
                 tokenIn: tokenIn,

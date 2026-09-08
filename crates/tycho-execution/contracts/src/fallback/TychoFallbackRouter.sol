@@ -123,27 +123,21 @@ contract TychoFallbackRouter is
         external
         nonReentrant
         onlyRole(CALLER_ROLE)
-        returns (uint256 amountOut)
     {
         // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
         // is the caller's chosen venue, so its revert is the swap's revert. The gas cap keeps a
         // pAMM that fails by consuming gas from starving the fallback -- an uncapped call returns
         // only 1/64 of the gas it burns (EIP-150).
         // slither-disable-next-line reentrancy-events
-        try this.executePropAMM{gas: pammGasCap}(leg, pamm) returns (
-            uint256 pammAmountOut
-        ) {
-            return pammAmountOut;
+        try this.executePropAMM{gas: pammGasCap}(leg, pamm) {
+            return;
         } catch {}
 
-        return _executeFallback(leg, fallbackSwap);
+        _executeFallback(leg, fallbackSwap);
     }
 
     /// @notice Runs the pAMM. External only so `swap` can try/catch it.
-    function executePropAMM(Leg calldata leg, address pamm)
-        external
-        returns (uint256 amountOut)
-    {
+    function executePropAMM(Leg calldata leg, address pamm) external {
         if (msg.sender != address(this)) {
             revert TychoFallbackRouter__NotSelf();
         }
@@ -162,20 +156,18 @@ contract TychoFallbackRouter is
                 block.timestamp
             );
 
-        return _delivered(leg.tokenOut, leg.receiver, balanceBefore);
+        _requireOutput(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
     /// @dev The fallback is venue-tagged; a pAMM is not among the kinds, so the venue the primary
-    /// slot exists to retry can never also be the rescue.
+    /// slot exists to retry can never also be the rescue. No output measurement here: the
+    /// Dispatcher's balance-diff at the receiver is the single source of truth for the leg.
     function _executeFallback(Leg calldata leg, bytes calldata encodedSwap)
         internal
-        returns (uint256 amountOut)
     {
         if (encodedSwap.length == 0) {
             revert TychoFallbackRouter__InvalidSwapLength(encodedSwap.length);
         }
-
-        uint256 balanceBefore = IERC20(leg.tokenOut).balanceOf(leg.receiver);
 
         uint8 venue = uint8(encodedSwap[0]);
         bytes calldata venueData = encodedSwap[1:];
@@ -193,19 +185,18 @@ contract TychoFallbackRouter is
         } else {
             revert TychoFallbackRouter__UnknownVenue(venue);
         }
-
-        return _delivered(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
-    /// @dev Zero delivered counts as a failure, so a venue that fills with nothing still falls
-    /// through to the fallback.
-    function _delivered(
+    /// @dev Reverts on zero delivered, so a pAMM that fills with nothing still falls through to
+    /// the fallback.
+    function _requireOutput(
         address tokenOut,
         address receiver,
         uint256 balanceBefore
-    ) internal view returns (uint256 amountOut) {
-        amountOut = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
-        if (amountOut == 0) revert TychoFallbackRouter__NoOutput();
+    ) internal view {
+        if (IERC20(tokenOut).balanceOf(receiver) <= balanceBefore) {
+            revert TychoFallbackRouter__NoOutput();
+        }
     }
 
     /// @notice Sets the gas forwarded to the pAMM try.

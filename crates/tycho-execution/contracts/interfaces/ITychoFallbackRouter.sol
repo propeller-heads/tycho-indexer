@@ -17,8 +17,8 @@ interface ITychoFallbackRouter {
     /// @dev Only callers holding `CALLER_ROLE` (the TychoRouter). Push-payment: the caller MUST
     /// transfer `leg.amountIn` of `leg.tokenIn` here first. Native ETH is not supported.
     /// `fallbackSwap` is `[venue: uint8][venue data]`, and no venue kind is a pAMM.
-    /// @return amountOut The `leg.tokenOut` balance increase measured at `leg.receiver`.
+    /// No output is returned: the caller measures its own `leg.tokenOut` balance diff at
+    /// `leg.receiver`, which is how the Dispatcher verifies every leg.
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
-        external
-        returns (uint256 amountOut);
+        external;
 }
