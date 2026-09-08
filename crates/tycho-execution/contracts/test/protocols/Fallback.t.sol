@@ -92,6 +92,16 @@ library FallbackSwaps {
     }
 }
 
+error RevertingPool__Nope();
+
+/// @notice A "pool" that always reverts with its own error, so a test can assert the fallback
+/// slot's failure escapes `swap` unchanged.
+contract RevertingPool {
+    fallback() external {
+        revert RevertingPool__Nope();
+    }
+}
+
 /// @notice Accepts `tokenIn` and reports success without paying anything.
 contract SilentVenue {
     function swap(
@@ -333,15 +343,17 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         assertEq(router.pammGasCap(), 2_000_000);
     }
 
-    /// A failing fallback reverts the swap. There is no third attempt.
+    /// A failing fallback reverts the swap with the venue's own error -- no try/catch around the
+    /// fallback slot, and no third attempt.
     function testFallbackFailureReverts() public {
+        RevertingPool pool = new RevertingPool();
         deal(USDC_ADDR, address(router), USDC_IN);
 
-        vm.expectRevert();
+        vm.expectRevert(RevertingPool__Nope.selector);
         router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
-            FallbackSwaps.uniswapV3(makeAddr("not a pool"))
+            FallbackSwaps.uniswapV3(address(pool))
         );
     }
 
@@ -562,7 +574,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
 
         vm.startPrank(ALICE);
         IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
-        vm.expectRevert();
+        vm.expectPartialRevert(TychoRouter__NegativeSlippage.selector);
         tychoRouter.singleSwap(
             amountIn,
             USDC_ADDR,
