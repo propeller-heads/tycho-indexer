@@ -42,18 +42,22 @@ infer_chain() {
     esac
 }
 
+# The per-protocol loop below exports RPC_URL for the package it is about to run, so keep the
+# generic endpoint in a separate variable that stays intact across iterations.
+GENERIC_RPC_URL="${RPC_URL:-}"
+
 # Return the appropriate RPC URL for the given protocol.
 # Chain-specific URLs fall back to the generic RPC_URL if not set.
 get_rpc_url() {
     local protocol="$1"
     case "$protocol" in
-        base-*)     echo "${BASE_RPC_URL:-$RPC_URL}" ;;
-        arbitrum-*) echo "${ARBITRUM_RPC_URL:-$RPC_URL}" ;;
-        unichain-*) echo "${UNICHAIN_RPC_URL:-$RPC_URL}" ;;
-        bsc-*)      echo "${BSC_RPC_URL:-$RPC_URL}" ;;
-        polygon-*)  echo "${POLYGON_RPC_URL:-$RPC_URL}" ;;
+        base-*)     echo "${BASE_RPC_URL:-$GENERIC_RPC_URL}" ;;
+        arbitrum-*) echo "${ARBITRUM_RPC_URL:-$GENERIC_RPC_URL}" ;;
+        unichain-*) echo "${UNICHAIN_RPC_URL:-$GENERIC_RPC_URL}" ;;
+        bsc-*)      echo "${BSC_RPC_URL:-$GENERIC_RPC_URL}" ;;
+        polygon-*)  echo "${POLYGON_RPC_URL:-$GENERIC_RPC_URL}" ;;
         robinhood-*) echo "${ROBINHOOD_RPC_URL:?ROBINHOOD_RPC_URL must be set to an archive RPC to test a robinhood-* package}" ;;
-        *)          echo "$RPC_URL" ;;
+        *)          echo "$GENERIC_RPC_URL" ;;
     esac
 }
 
