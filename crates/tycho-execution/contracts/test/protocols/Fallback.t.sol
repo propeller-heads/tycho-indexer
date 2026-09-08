@@ -90,16 +90,6 @@ library FallbackSwaps {
             uint8(TychoFallbackRouter.Venue.FluidV1), dex, zero2one
         );
     }
-
-    /// Executor swap data: `[tokenIn][tokenOut][primaryLen][primarySwap][fallback]`.
-    function swapData(
-        address tokenIn,
-        address tokenOut,
-        address pamm,
-        bytes memory fallbackSwap
-    ) internal pure returns (bytes memory) {
-        return abi.encodePacked(tokenIn, tokenOut, pamm, fallbackSwap);
-    }
 }
 
 /// @notice Accepts `tokenIn` and reports success without paying anything.
@@ -617,9 +607,10 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
-    /// A pAMM with no price, then a Uniswap V3 retry.
+    /// A pAMM with no price, then a Uniswap V3 retry. Executor swap data is
+    /// `[tokenIn: 20][tokenOut: 20][pamm: 20][fallback]`.
     function _swapData() internal view returns (bytes memory) {
-        return FallbackSwaps.swapData(
+        return abi.encodePacked(
             USDC_ADDR,
             WETH_ADDR,
             address(pamm),
