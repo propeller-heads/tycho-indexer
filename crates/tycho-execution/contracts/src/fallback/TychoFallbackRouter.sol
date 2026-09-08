@@ -39,6 +39,7 @@ error TychoFallbackRouter__NoOutput();
 error TychoFallbackRouter__NotPoolManager();
 error TychoFallbackRouter__NotSelf();
 error TychoFallbackRouter__UnknownVenue(uint8 venue);
+error TychoFallbackRouter__ZeroGasCap();
 
 /// @title TychoFallbackRouter
 /// @notice Runs a primary venue and, only if it fails, the caller's chosen fallback venue.
@@ -91,9 +92,15 @@ contract TychoFallbackRouter is
     /// @notice Where `dexCallback` pays a Fluid dex.
     address public immutable fluidLiquidity;
 
+    /// @notice Gas forwarded to the pAMM try. Bounds what a gas-burning pAMM
+    /// can consume, so the fallback always keeps enough to fill; a pAMM
+    /// needing more than this falls back instead of filling.
+    uint256 public pammGasCap = 1_000_000;
+
     event Rescued(
         address indexed token, address indexed receiver, uint256 amount
     );
+    event PammGasCapUpdated(uint256 oldCap, uint256 newCap);
 
     constructor(
         address admin,
@@ -119,9 +126,13 @@ contract TychoFallbackRouter is
         returns (uint256 amountOut)
     {
         // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
-        // is the caller's chosen venue, so its revert is the swap's revert.
+        // is the caller's chosen venue, so its revert is the swap's revert. The gas cap keeps a
+        // pAMM that fails by consuming gas from starving the fallback -- an uncapped call returns
+        // only 1/64 of the gas it burns (EIP-150).
         // slither-disable-next-line reentrancy-events
-        try this.executePropAMM(leg, pamm) returns (uint256 pammAmountOut) {
+        try this.executePropAMM{gas: pammGasCap}(leg, pamm) returns (
+            uint256 pammAmountOut
+        ) {
             return pammAmountOut;
         } catch {}
 
@@ -195,6 +206,18 @@ contract TychoFallbackRouter is
     ) internal view returns (uint256 amountOut) {
         amountOut = IERC20(tokenOut).balanceOf(receiver) - balanceBefore;
         if (amountOut == 0) revert TychoFallbackRouter__NoOutput();
+    }
+
+    /// @notice Sets the gas forwarded to the pAMM try.
+    function setPammGasCap(uint256 newCap)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        if (newCap == 0) {
+            revert TychoFallbackRouter__ZeroGasCap();
+        }
+        emit PammGasCapUpdated(pammGasCap, newCap);
+        pammGasCap = newCap;
     }
 
     /// @notice Sends out a balance a Curve exchange rounded into this contract.

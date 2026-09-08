@@ -21,7 +21,8 @@ import {
     TychoFallbackRouter__InvalidCallback,
     TychoFallbackRouter__NotPoolManager,
     TychoFallbackRouter__UnknownVenue,
-    TychoFallbackRouter__NotSelf
+    TychoFallbackRouter__NotSelf,
+    TychoFallbackRouter__ZeroGasCap
 } from "../../src/fallback/TychoFallbackRouter.sol";
 
 /// @notice Builds the venue entries `TychoFallbackRouter` decodes.
@@ -105,6 +106,27 @@ contract SilentVenue {
         returns (uint256 amountOut)
     {
         return 0;
+    }
+}
+
+/// @notice Fails by consuming all forwarded gas -- the failure mode the pAMM gas cap exists for.
+contract GasBurnerPropAMM {
+    function swap(
+        address, /* tokenIn */
+        address, /* tokenOut */
+        uint256, /* amountIn */
+        uint256, /* minAmountOut */
+        address, /* recipient */
+        uint256 /* deadline */
+    )
+        external
+        pure
+        returns (uint256 amountOut)
+    {
+        // slither-disable-next-line assembly
+        assembly {
+            for {} 1 {} {}
+        }
     }
 }
 
@@ -265,6 +287,45 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         assertGt(amountOut, 0);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(silent)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
+    }
+
+    /// A pAMM that fails by consuming gas burns only the cap. With a realistic
+    /// 2M budget an uncapped try would leave the fallback ~1/64 and starve it.
+    function testGasBurningPropAMMFallsBack() public {
+        GasBurnerPropAMM burner = new GasBurnerPropAMM();
+        _fundRouter(USDC_ADDR, USDC_IN);
+
+        uint256 amountOut = router.swap{gas: 2_000_000}(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(burner),
+            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
+        );
+
+        assertGt(amountOut, 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), amountOut);
+        _assertRouterDrained(USDC_ADDR, WETH_ADDR);
+    }
+
+    function testSetPammGasCap() public {
+        assertEq(router.pammGasCap(), 1_000_000);
+
+        vm.prank(BOB);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector,
+                BOB,
+                bytes32(0)
+            )
+        );
+        router.setPammGasCap(2_000_000);
+
+        vm.prank(ADMIN);
+        vm.expectRevert(TychoFallbackRouter__ZeroGasCap.selector);
+        router.setPammGasCap(0);
+
+        vm.prank(ADMIN);
+        router.setPammGasCap(2_000_000);
+        assertEq(router.pammGasCap(), 2_000_000);
     }
 
     /// A failing fallback reverts the swap. There is no third attempt.
