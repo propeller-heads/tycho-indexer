@@ -1,3 +1,23 @@
+## [0.394.0](https://github.com/propeller-heads/tycho/compare/0.393.1...0.394.0) (2026-09-08)
+
+
+### Features
+
+* add Robinhood manifest and integration test for Ekubo V3 ([4acd2f1](https://github.com/propeller-heads/tycho/commit/4acd2f1afb4f1fb54bb2ab026eddb9213dd40852))
+* pass the Ve33 address to Ekubo V3 substreams via module params ([c956670](https://github.com/propeller-heads/tycho/commit/c956670b3e92925781054f951a368f8f3bf05667))
+* support Ekubo V3 Ve33 pools ([0877143](https://github.com/propeller-heads/tycho/commit/08771437bba0d835eeff6da915b290971086df2b))
+* support Ekubo V3 Ve33 pools ([#1337](https://github.com/propeller-heads/tycho/issues/1337)) ([bc2d4db](https://github.com/propeller-heads/tycho/commit/bc2d4db197edb210e30b63c9cb1f102d65ba419c))
+* **testing:** decode ekubo_v3 with its native state ([3818b51](https://github.com/propeller-heads/tycho/commit/3818b51b48369d68768d8a945831c8931007dc4f))
+* **testing:** make robinhood-ekubo-v3 testable ([1b20a89](https://github.com/propeller-heads/tycho/commit/1b20a896e945134ca44cb5a04623f36c1909b344))
+* **testing:** pick the executor for the chain under test ([d28bdfa](https://github.com/propeller-heads/tycho/commit/d28bdfa59e005fca7c4f8b65dd072fc90ffe2136))
+
+
+### Bug Fixes
+
+* adapt testVe33Swap to merged Ve33 ABI constraints ([7073a54](https://github.com/propeller-heads/tycho/commit/7073a54fde23448736c522b008b42e0f000bb2ef))
+* resolve EkuboPoolQuote at enum_delegate expansion sites ([b0044ae](https://github.com/propeller-heads/tycho/commit/b0044ae0b732a2a5f9c72cb6867ea434a9262e67))
+* **testing:** keep the generic RPC URL across multi-package runs ([8a723a5](https://github.com/propeller-heads/tycho/commit/8a723a5d82ee3f276cfdaae53d2ef93fede25453))
+
 ## [0.393.1](https://github.com/propeller-heads/tycho/compare/0.393.0...0.393.1) (2026-09-07)
 
 
