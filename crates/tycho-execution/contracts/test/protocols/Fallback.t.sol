@@ -47,11 +47,14 @@ library FallbackSwaps {
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(uint8(0), pair, feeBps);
+        return abi.encodePacked(
+            uint8(TychoFallbackRouter.Venue.UniswapV2), pair, feeBps
+        );
     }
 
     function uniswapV3(address pool) internal pure returns (bytes memory) {
-        return abi.encodePacked(uint8(1), pool);
+        return
+            abi.encodePacked(uint8(TychoFallbackRouter.Venue.UniswapV3), pool);
     }
 
     function uniswapV4(
@@ -61,7 +64,11 @@ library FallbackSwaps {
         bytes memory hookData
     ) internal pure returns (bytes memory) {
         return abi.encodePacked(
-            uint8(2), bytes3(fee), tickSpacing, hook, hookData
+            uint8(TychoFallbackRouter.Venue.UniswapV4),
+            bytes3(fee),
+            tickSpacing,
+            hook,
+            hookData
         );
     }
 
@@ -70,7 +77,9 @@ library FallbackSwaps {
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(uint8(3), pool, poolType, i, j);
+        return abi.encodePacked(
+            uint8(TychoFallbackRouter.Venue.Curve), pool, poolType, i, j
+        );
     }
 
     function fluidV1(address dex, bool zero2one)
@@ -78,7 +87,9 @@ library FallbackSwaps {
         pure
         returns (bytes memory)
     {
-        return abi.encodePacked(uint8(4), dex, zero2one);
+        return abi.encodePacked(
+            uint8(TychoFallbackRouter.Venue.FluidV1), dex, zero2one
+        );
     }
 
     /// Executor swap data: `[tokenIn][tokenOut][primaryLen][primarySwap][fallback]`.
@@ -171,6 +182,16 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
             BOB,
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
+    }
+
+    /// The enum ordinals are the wire format the encoder emits (the venue
+    /// table in CLAUDE.md); reordering the enum must fail here, not silently.
+    function testVenueWireFormatIsStable() public pure {
+        assertEq(uint8(TychoFallbackRouter.Venue.UniswapV2), 0);
+        assertEq(uint8(TychoFallbackRouter.Venue.UniswapV3), 1);
+        assertEq(uint8(TychoFallbackRouter.Venue.UniswapV4), 2);
+        assertEq(uint8(TychoFallbackRouter.Venue.Curve), 3);
+        assertEq(uint8(TychoFallbackRouter.Venue.FluidV1), 4);
     }
 
     function testConstructorRejectsZeroAddress() public {
