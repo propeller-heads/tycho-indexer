@@ -274,6 +274,25 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         assertEq(IERC20(DAI_ADDR).allowance(address(router), TRIPOOL), 0);
     }
 
+    /// A crypto pool takes the `uint256` exchange signature -- the dispatch
+    /// branch the stable-pool test never reaches.
+    function testFallsBackToCurveCryptoPool() public {
+        uint256 amountIn = 1 ether;
+        deal(WETH_ADDR, address(router), amountIn);
+
+        router.swap(
+            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.curve(TRICRYPTO_POOL, 0, 2, 0)
+        );
+
+        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        _assertRouterDrained(WETH_ADDR, USDC_ADDR);
+        assertEq(
+            IERC20(WETH_ADDR).allowance(address(router), TRICRYPTO_POOL), 0
+        );
+    }
+
     /// V4 runs inside `unlockCallback`, where this contract syncs, transfers and settles.
     function testFallsBackToUniswapV4() public {
         uint256 amountIn = 100 ether;
