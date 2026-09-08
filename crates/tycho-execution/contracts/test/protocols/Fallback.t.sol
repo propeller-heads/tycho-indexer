@@ -165,7 +165,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// Only `CALLER_ROLE` (the TychoRouter) may start a swap; held balances
     /// are not first-come-first-served.
     function testSwapRequiresCallerRole() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
         bytes32 callerRole = router.CALLER_ROLE();
 
         vm.prank(BOB);
@@ -214,7 +214,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         // the asserted amount can only have come from the pAMM.
         pamm.setPrice(USDC_ADDR, WETH_ADDR, 1e26);
         deal(WETH_ADDR, address(pamm), 100 ether);
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -230,7 +230,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// The pAMM has no price, so `quote` reverts. Uniswap V3 pays inside its callback, reachable
     /// only because this contract still holds the USDC.
     function testFallsBackToUniswapV3() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -246,7 +246,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
 
     /// The fallback starts from the full `amountIn`, whatever the primarySwap consumed.
     function testFallsBackToUniswapV2() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -261,7 +261,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// Curve pays the caller, so the swap forwards the output itself.
     function testFallsBackToCurve() public {
         uint256 amountIn = 1000e18;
-        _fundRouter(DAI_ADDR, amountIn);
+        deal(DAI_ADDR, address(router), amountIn);
 
         router.swap(
             FallbackSwaps.leg(DAI_ADDR, USDC_ADDR, amountIn, BOB),
@@ -277,7 +277,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// V4 runs inside `unlockCallback`, where this contract syncs, transfers and settles.
     function testFallsBackToUniswapV4() public {
         uint256 amountIn = 100 ether;
-        _fundRouter(USDE_ADDR, amountIn);
+        deal(USDE_ADDR, address(router), amountIn);
 
         router.swap(
             FallbackSwaps.leg(USDE_ADDR, USDT_ADDR, amountIn, BOB),
@@ -292,7 +292,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// Zero output counts as a failure and takes back the `tokenIn` already sent.
     function testVenuePayingNothingFallsThrough() public {
         SilentVenue silent = new SilentVenue();
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -309,7 +309,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     /// 2M budget an uncapped try would leave the fallback ~1/64 and starve it.
     function testGasBurningPropAMMFallsBack() public {
         GasBurnerPropAMM burner = new GasBurnerPropAMM();
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap{gas: 2_000_000}(
             FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -345,7 +345,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
 
     /// A failing fallback reverts the swap. There is no third attempt.
     function testFallbackFailureReverts() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         vm.expectRevert();
         router.swap(
@@ -356,7 +356,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     }
 
     function testUnknownFallbackVenueReverts() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -371,7 +371,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
     }
 
     function testEmptyFallbackReverts() public {
-        _fundRouter(USDC_ADDR, USDC_IN);
+        deal(USDC_ADDR, address(router), USDC_IN);
 
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -425,10 +425,6 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         vm.prank(ADMIN);
         router.rescue(USDC_ADDR, BOB, 1e6);
         assertEq(IERC20(USDC_ADDR).balanceOf(BOB), 1e6);
-    }
-
-    function _fundRouter(address token, uint256 amount) internal {
-        deal(token, address(router), amount);
     }
 
     /// Holds no funds once a leg is done.
