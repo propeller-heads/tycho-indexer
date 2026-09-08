@@ -274,16 +274,16 @@ contract TychoRouterTestSetup is
             );
         }
 
-        address nativeRouterV4 = getNativeRouterV4();
-        bool supportsNative = nativeRouterV4 != address(0);
+        address nativeRouterV6 = getNativeRouterV6();
+        bool supportsNative = nativeRouterV6 != address(0);
         if (supportsNative) {
-            // Some protocol tests use fork blocks from before Native V4 was
+            // Some protocol tests use fork blocks from before Native V6 was
             // deployed. The executor is not exercised in those tests, but its
             // constructor still requires the configured Router to have code.
-            if (nativeRouterV4.code.length == 0) {
-                vm.etch(nativeRouterV4, bytes("1"));
+            if (nativeRouterV6.code.length == 0) {
+                vm.etch(nativeRouterV6, bytes("1"));
             }
-            nativeExecutor = new NativeExecutor(nativeRouterV4);
+            nativeExecutor = new NativeExecutor(nativeRouterV6);
         }
 
         address[] memory executors = new address[](
@@ -327,11 +327,11 @@ contract TychoRouterTestSetup is
         return executors;
     }
 
-    function getNativeRouterV4() internal view returns (address) {
-        if (block.chainid == 1) return NATIVE_ROUTER_V4_ETHEREUM;
-        if (block.chainid == 8453) return NATIVE_ROUTER_V4_BASE;
-        if (block.chainid == 42161) return NATIVE_ROUTER_V4_ARBITRUM;
-        if (block.chainid == 56) return NATIVE_ROUTER_V4_BSC;
+    function getNativeRouterV6() internal view returns (address) {
+        if (block.chainid == 1) return NATIVE_ROUTER_V6_ETHEREUM;
+        if (block.chainid == 8453) return NATIVE_ROUTER_V6_BASE;
+        if (block.chainid == 42161) return NATIVE_ROUTER_V6_ARBITRUM;
+        if (block.chainid == 56) return NATIVE_ROUTER_V6_BSC;
         return address(0);
     }
 

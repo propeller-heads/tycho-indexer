@@ -29,21 +29,21 @@ contract MockNativeRouter {
 
 contract NativeExecutorUnitTest is Test, Constants {
     NativeExecutor executor;
-    MockNativeRouter mockV4;
+    MockNativeRouter mockV6;
 
     address constant BAD_TARGET = address(0xdead);
     uint256 constant ACTUAL_SELLER_AMOUNT_OFFSET = 36;
     uint256 constant ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET = 68;
 
     function setUp() public {
-        mockV4 = new MockNativeRouter();
-        executor = new NativeExecutor(address(mockV4));
+        mockV6 = new MockNativeRouter();
+        executor = new NativeExecutor(address(mockV6));
     }
 
     // Constructor tests
 
     function test_Constructor_StoresAddresses() public view {
-        assertEq(executor.nativeRouterV4(), address(mockV4));
+        assertEq(executor.nativeRouterV6(), address(mockV6));
     }
 
     function test_Constructor_Reverts_ZeroAddress() public {
@@ -69,7 +69,7 @@ contract NativeExecutorUnitTest is Test, Constants {
     function test_GetTransferData_ERC20() public view {
         bytes memory payload = _tradePayload();
         bytes memory data =
-            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV4), payload);
+            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV6), payload);
 
         (
             TransferManager.TransferType transferType,
@@ -83,7 +83,7 @@ contract NativeExecutorUnitTest is Test, Constants {
             uint8(transferType),
             uint8(TransferManager.TransferType.ProtocolWillDebit)
         );
-        assertEq(receiver, address(mockV4));
+        assertEq(receiver, address(mockV6));
         assertEq(tokenIn, USDC_ADDR);
         assertEq(tokenOut, ETH_ADDR);
         assertTrue(outputToRouter);
@@ -92,7 +92,7 @@ contract NativeExecutorUnitTest is Test, Constants {
     function test_GetTransferData_NativeETH() public view {
         bytes memory payload = _tradePayload();
         bytes memory data =
-            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV4), payload);
+            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV6), payload);
 
         (
             TransferManager.TransferType transferType,
@@ -125,7 +125,7 @@ contract NativeExecutorUnitTest is Test, Constants {
         bytes memory payload =
             abi.encodePacked(executor.TRADE_RFQT_SELECTOR(), new bytes(95));
         bytes memory data =
-            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV4), payload);
+            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV6), payload);
 
         vm.expectRevert(NativeExecutor__InvalidDataLength.selector);
         executor.getTransferData(data);
@@ -136,33 +136,33 @@ contract NativeExecutorUnitTest is Test, Constants {
     function test_Swap_ERC20_SendsZeroEth() public {
         bytes memory payload = _tradePayload();
         bytes memory data =
-            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV4), payload);
+            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV6), payload);
 
         executor.swap(1000000, data, address(0));
 
-        assertTrue(mockV4.called());
-        assertEq(mockV4.lastValue(), 0);
-        assertEq(mockV4.lastCaller(), address(executor));
-        assertEq(_wordAt(mockV4.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET), 0);
+        assertTrue(mockV6.called());
+        assertEq(mockV6.lastValue(), 0);
+        assertEq(mockV6.lastCaller(), address(executor));
+        assertEq(_wordAt(mockV6.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET), 0);
     }
 
     function test_Swap_ETH_ForwardsAmountIn() public {
         bytes memory payload = _tradePayload();
         bytes memory data =
-            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV4), payload);
+            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV6), payload);
 
         vm.deal(address(this), 1 ether);
         executor.swap{value: 1 ether}(1 ether, data, address(0));
 
-        assertTrue(mockV4.called());
-        assertEq(mockV4.lastValue(), 1 ether);
-        assertEq(_wordAt(mockV4.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET), 0);
+        assertTrue(mockV6.called());
+        assertEq(mockV6.lastValue(), 1 ether);
+        assertEq(_wordAt(mockV6.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET), 0);
     }
 
     function test_Swap_ETH_Reverts_ZeroAmountIn() public {
         bytes memory payload = _tradePayload();
         bytes memory data =
-            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV4), payload);
+            _encodeExecutorData(ETH_ADDR, USDC_ADDR, address(mockV6), payload);
 
         vm.expectRevert(NativeExecutor__InvalidAmountIn.selector);
         executor.swap(0, data, address(0));
@@ -170,7 +170,7 @@ contract NativeExecutorUnitTest is Test, Constants {
 
     function test_Swap_Reverts_ZeroSignedAmountIn() public {
         bytes memory data = _encodeExecutorData(
-            USDC_ADDR, ETH_ADDR, address(mockV4), 0, _tradePayload()
+            USDC_ADDR, ETH_ADDR, address(mockV6), 0, _tradePayload()
         );
 
         vm.expectRevert(NativeExecutor__InvalidAmountIn.selector);
@@ -187,10 +187,11 @@ contract NativeExecutorUnitTest is Test, Constants {
     }
 
     function test_Swap_Reverts_InvalidSelector() public {
-        bytes4 badSelector = 0x12345678;
+        // V4's tradeRFQT selector must not be accepted by the V6 executor.
+        bytes4 badSelector = 0x0947c2d9;
         bytes memory payload = abi.encodeWithSelector(badSelector, hex"1234");
         bytes memory data =
-            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV4), payload);
+            _encodeExecutorData(USDC_ADDR, ETH_ADDR, address(mockV6), payload);
 
         vm.expectRevert(NativeExecutor__InvalidPayload.selector);
         executor.swap(1000000, data, address(0));
@@ -207,19 +208,19 @@ contract NativeExecutorUnitTest is Test, Constants {
         bytes memory data = _encodeExecutorData(
             USDC_ADDR,
             ETH_ADDR,
-            address(mockV4),
+            address(mockV6),
             signedAmountIn,
             _tradePayload()
         );
 
         executor.swap(actualAmountIn, data, address(0));
 
-        assertTrue(mockV4.called());
+        assertTrue(mockV6.called());
         assertEq(
-            _wordAt(mockV4.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
+            _wordAt(mockV6.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
             actualAmountIn
         );
-        assertEq(mockV4.lastValue(), 0);
+        assertEq(mockV6.lastValue(), 0);
     }
 
     function test_Swap_ETH_OverridesAmountAndForwardsActualValue() public {
@@ -228,7 +229,7 @@ contract NativeExecutorUnitTest is Test, Constants {
         bytes memory data = _encodeExecutorData(
             ETH_ADDR,
             USDC_ADDR,
-            address(mockV4),
+            address(mockV6),
             signedAmountIn,
             _tradePayload()
         );
@@ -237,10 +238,10 @@ contract NativeExecutorUnitTest is Test, Constants {
         executor.swap{value: actualAmountIn}(actualAmountIn, data, address(0));
 
         assertEq(
-            _wordAt(mockV4.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
+            _wordAt(mockV6.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
             actualAmountIn
         );
-        assertEq(mockV4.lastValue(), actualAmountIn);
+        assertEq(mockV6.lastValue(), actualAmountIn);
     }
 
     function test_Swap_ERC20_OverridesAmountOnOverDelivery() public {
@@ -249,27 +250,27 @@ contract NativeExecutorUnitTest is Test, Constants {
         bytes memory data = _encodeExecutorData(
             USDC_ADDR,
             ETH_ADDR,
-            address(mockV4),
+            address(mockV6),
             signedAmountIn,
             _tradePayload()
         );
 
         executor.swap(actualAmountIn, data, address(0));
 
-        assertTrue(mockV4.called());
+        assertTrue(mockV6.called());
         assertEq(
-            _wordAt(mockV4.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
+            _wordAt(mockV6.lastCalldata(), ACTUAL_SELLER_AMOUNT_OFFSET),
             actualAmountIn
         );
         assertEq(
-            _wordAt(mockV4.lastCalldata(), ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET), 0
+            _wordAt(mockV6.lastCalldata(), ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET), 0
         );
-        assertEq(mockV4.lastValue(), 0);
+        assertEq(mockV6.lastValue(), 0);
     }
 
     function test_Swap_Reverts_PresetActualSellerAmount() public {
         bytes memory data = _encodeExecutorData(
-            USDC_ADDR, ETH_ADDR, address(mockV4), 1_000_000, _tradePayload(1, 0)
+            USDC_ADDR, ETH_ADDR, address(mockV6), 1_000_000, _tradePayload(1, 0)
         );
 
         vm.expectRevert(NativeExecutor__UnexpectedOverride.selector);
@@ -278,7 +279,7 @@ contract NativeExecutorUnitTest is Test, Constants {
 
     function test_Swap_Reverts_PresetActualMinOutputAmount() public {
         bytes memory data = _encodeExecutorData(
-            USDC_ADDR, ETH_ADDR, address(mockV4), 1_000_000, _tradePayload(0, 1)
+            USDC_ADDR, ETH_ADDR, address(mockV6), 1_000_000, _tradePayload(0, 1)
         );
 
         vm.expectRevert(NativeExecutor__UnexpectedOverride.selector);
@@ -346,20 +347,20 @@ contract NativeExecutorUnitTest is Test, Constants {
 // Integration Tests
 
 contract NativeExecutorForkTest is Test, Constants {
-    uint256 private constant FORK_BLOCK = 25747646;
+    uint256 private constant FORK_BLOCK = 25930213;
     uint32 private constant ACTUAL_SELLER_AMOUNT_OFFSET = 36;
     uint32 private constant ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET = 68;
     uint32 private constant SIGNED_SELLER_AMOUNT_OFFSET = 260;
     uint32 private constant SIGNED_MIN_OUTPUT_AMOUNT_OFFSET = 324;
     uint256 private constant SIGNED_AMOUNT_IN = 1_000_000;
-    uint256 private constant SIGNED_MINIMUM_OUTPUT = 532_738_054_721_938;
-    uint256 private constant QUOTE_TIMESTAMP = 1_786_642_807;
+    uint256 private constant SIGNED_MINIMUM_OUTPUT = 402_408_818_842_972;
+    uint256 private constant QUOTE_TIMESTAMP = 1_788_841_206;
 
     NativeExecutor nativeExecutor;
 
     function setUp() public {
         vm.createSelectFork(vm.rpcUrl("mainnet"), FORK_BLOCK);
-        nativeExecutor = new NativeExecutor(NATIVE_ROUTER_V4_ETHEREUM);
+        nativeExecutor = new NativeExecutor(NATIVE_ROUTER_V6_ETHEREUM);
     }
 
     function _recordedQuotePayload()
@@ -370,7 +371,7 @@ contract NativeExecutorForkTest is Test, Constants {
         // Recorded from Native's firm-quote API for signedAmountIn and this recipient.
         // Pinning the fork and timestamp keeps it deterministic and CI independent from the API.
         payload =
-            hex"0947c2d9000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c419e67388df0c0cfad15584fc5fc7e67a234c17000000000000000000000000129b3d9a0a6e4beab88f5cb1e57995d72a6e24f1000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000f42400000000000000000000000000000000000000000000000000001e485be8291920000000000000000000000000000000000000000000000000001e485be829192000000000000000000000000000000000000000000000000000000006a7e01780000000000000000000000000000000000000000000000001515091293fe9336000000000000000000000000000000000000000000000000000000006a7e012f000000000000000000000000000000000000000000000000000000006a7e0157000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000000003c6ceafc34ce4a73ab5b91ee96b7cdb000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002800000000000000000000000006044eef7179034319e2c8636ea885b37cbfa9aba00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000004109dcf6acddf595c5a2914635e3e1b92b4c258b9152e735170680e8630b1caa50063f0ce8e6671436c04ce3b2cf28a843a41058bda799e76ca76477f694d261371b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041f0eaef9eed6596ed3964c1d57686c75f8e1a98e1d406d366c477d63948cabcc940afad951e0d03942e12e1ca0c94692a13d32641c8e75f125db6cc7be456f0d31b00000000000000000000000000000000000000000000000000000000000000";
+            hex"7083527c000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ef435b99c2108d0309211d0cc05b70d202c0b5df000000000000000000000000129b3d9a0a6e4beab88f5cb1e57995d72a6e24f1000000000000000000000000cd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000c02aaa39b223fe8d0a0e5c4f27ead9083c756cc200000000000000000000000000000000000000000000000000000000000f424000000000000000000000000000000000000000000000000000016dfd1ab39d5c00000000000000000000000000000000000000000000000000016dfd1ab39d5c000000000000000000000000000000000000000000000000000000006a9f8d3c00000000000000000000000000000000000000000000000035a49220053ede33000000000000000000000000000000000000000000000000000000006a9f8cf5000000000000000000000000000000000000000000000000000000006a9f8d1d00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ec6e372d2326451e8711e06e0d8b78f9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000000003600000000000000000000000006044eef7179034319e2c8636ea885b37cbfa9aba000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003e00000000000000000000000000000000000000000000000000000000000000041dc6662535476055fdc70cbf26235a36548260584b63670d587fff026324eacff3a91e0b6cb791bd8059d8701ad7065a8944385d96b4c6dd6910d74f9d06364a91c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000041fbb4628ced3cdc79524c223e42adae7c302475dbac6ac3eb119293a41c3f3cf5482d18a6fa8c2bcdc07ae6551068dfa1dba9cff189cc56f8bc6c26f8783c8d261c00000000000000000000000000000000000000000000000000000000000000";
     }
 
     function _recordedQuoteData(bytes memory payload)
@@ -381,7 +382,7 @@ contract NativeExecutorForkTest is Test, Constants {
         return abi.encodePacked(
             bytes20(USDC_ADDR),
             bytes20(WETH_ADDR),
-            bytes20(NATIVE_ROUTER_V4_ETHEREUM),
+            bytes20(NATIVE_ROUTER_V6_ETHEREUM),
             bytes32(SIGNED_AMOUNT_IN),
             payload
         );
@@ -400,7 +401,7 @@ contract NativeExecutorForkTest is Test, Constants {
     function _fundAndApprove(uint256 amountIn) private {
         deal(USDC_ADDR, address(nativeExecutor), amountIn);
         vm.prank(address(nativeExecutor));
-        IERC20(USDC_ADDR).approve(NATIVE_ROUTER_V4_ETHEREUM, amountIn);
+        IERC20(USDC_ADDR).approve(NATIVE_ROUTER_V6_ETHEREUM, amountIn);
     }
 
     function _executeRecordedQuote(uint256 actualAmountIn)
@@ -474,16 +475,22 @@ contract NativeExecutorForkTest is Test, Constants {
 }
 
 contract TychoRouterNativeIntegrationTest is TychoRouterTestSetup {
+    function setUp() public override {
+        super.setUp();
+        // Execute within the recorded V6 quotes' validity window.
+        vm.warp(1_788_841_206);
+    }
+
     function getForkBlock() public pure override returns (uint256) {
         // The two firm quotes below were recorded against this block for the
         // deterministic Tycho Router address deployed by TychoRouterTestSetup.
-        return 25816459;
+        return 25930213;
     }
 
     function test_RecordedQuoteERC20InputThroughTychoRouter() public {
         IERC20 USDC = IERC20(USDC_ADDR);
         uint256 amountIn = 3000000000;
-        uint256 amountOut = 1_255_650_775_965_669_400;
+        uint256 amountOut = 1_207_228_929_311_270_300;
 
         deal(address(USDC), ALICE, amountIn);
         uint256 balanceBefore = BOB.balance;
@@ -507,7 +514,7 @@ contract TychoRouterNativeIntegrationTest is TychoRouterTestSetup {
     function test_RecordedQuoteNativeInputThroughTychoRouter() public {
         IERC20 USDC = IERC20(USDC_ADDR);
         uint256 amountIn = 1 ether;
-        uint256 amountOut = 2_388_254_994;
+        uint256 amountOut = 2_483_340_204;
 
         deal(ALICE, amountIn);
 

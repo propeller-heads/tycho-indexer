@@ -22,7 +22,7 @@ use crate::encoding::{
 #[derive(Clone)]
 pub struct NativeSwapEncoder {
     executor_address: Bytes,
-    router_v4: Address,
+    router_v6: Address,
     runtime_handle: Handle,
     #[allow(dead_code)]
     runtime: SafeRuntime,
@@ -50,23 +50,23 @@ impl SwapEncoder for NativeSwapEncoder {
     ) -> Result<Self, EncodingError> {
         let config = config
             .ok_or_else(|| EncodingError::FatalError("Native config is empty".to_string()))?;
-        let router_v4 = config
-            .get("router_v4")
+        let router_v6 = config
+            .get("router_v6")
             .ok_or_else(|| {
-                EncodingError::FatalError("Missing router_v4 in Native config".to_string())
+                EncodingError::FatalError("Missing router_v6 in Native config".to_string())
             })?
             .parse::<Address>()
             .map_err(|e| {
-                EncodingError::FatalError(format!("Invalid router_v4 in Native config: {e}"))
+                EncodingError::FatalError(format!("Invalid router_v6 in Native config: {e}"))
             })?;
-        if router_v4 == Address::ZERO {
+        if router_v6 == Address::ZERO {
             return Err(EncodingError::FatalError(
-                "Native router_v4 cannot be the zero address".to_string(),
+                "Native router_v6 cannot be the zero address".to_string(),
             ));
         }
 
         let (runtime_handle, runtime) = create_encoding_runtime()?;
-        Ok(Self { executor_address, router_v4, runtime_handle, runtime })
+        Ok(Self { executor_address, router_v6, runtime_handle, runtime })
     }
 
     fn encode_swap(
@@ -122,7 +122,7 @@ impl SwapEncoder for NativeSwapEncoder {
             ))?;
 
         let target = bytes_to_address(target_bytes)?;
-        if target != self.router_v4 {
+        if target != self.router_v6 {
             return Err(EncodingError::InvalidInput(format!(
                 "Native quote target {target} is not configured for this chain"
             )));
@@ -184,7 +184,7 @@ impl SwapEncoder for NativeSwapEncoder {
 
         // Encode packed data for the executor
         // Format: tokenIn | tokenOut | target | signedAmountIn | native_calldata[..]
-        // 20 + 20 + 20 + 32 bytes + dynamic length. Native V4's mutable ABI
+        // 20 + 20 + 20 + 32 bytes + dynamic length. Native V6's mutable ABI
         // argument positions are fixed by tradeRFQT's selector and are therefore
         // not accepted from quote metadata.
         // We pack tokenIn and tokenOut at the very beginning so the Solidity NativeExecutor
@@ -222,8 +222,8 @@ mod test {
 
     fn native_config() -> Option<HashMap<String, String>> {
         Some(HashMap::from([(
-            "router_v4".to_string(),
-            "0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00".to_string(),
+            "router_v6".to_string(),
+            "0x4777A6B3A9A889ABfd4C7666Bdd2a7AB633293be".to_string(),
         )]))
     }
 
@@ -282,9 +282,9 @@ mod test {
             ..Default::default()
         };
 
-        let target_address = "0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00";
+        let target_address = "0x4777A6B3A9A889ABfd4C7666Bdd2a7AB633293be";
         let target_bytes = Bytes::from_str(target_address).unwrap();
-        let calldata_hex = format!("0947c2d9{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8);
+        let calldata_hex = format!("7083527c{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8);
         let calldata_bytes = Bytes::from(hex::decode(&calldata_hex).unwrap());
         let native_quote_data = vec![
             ("target".to_string(), target_bytes.clone()),
@@ -354,9 +354,9 @@ mod test {
 
     #[test]
     fn test_encode_native_rejects_expired_quote() {
-        let target = Bytes::from_str("0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00").unwrap();
+        let target = Bytes::from_str("0x4777A6B3A9A889ABfd4C7666Bdd2a7AB633293be").unwrap();
         let calldata = Bytes::from(
-            hex::decode(format!("0947c2d9{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8)).unwrap(),
+            hex::decode(format!("7083527c{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8)).unwrap(),
         );
         let native_state = MockRFQState {
             quote_amount_in: None,
@@ -402,13 +402,14 @@ mod test {
 
     #[test]
     fn test_encode_native_rejects_unconfigured_quote_target() {
-        let target_bytes = Bytes::from_str("0xb2d1F342D2049684Fb2f8c4eF320633415598333").unwrap();
+        // Even a valid V4 router is no longer an allowed execution target.
+        let target_bytes = Bytes::from_str("0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00").unwrap();
         let native_state = MockRFQState {
             quote_amount_in: None,
             quote_amount_out: BigUint::from(1_000_000u64),
             quote_data: HashMap::from([
                 ("target".to_string(), target_bytes),
-                ("calldata".to_string(), Bytes::from(vec![0x09, 0x47, 0xc2, 0xd9])),
+                ("calldata".to_string(), Bytes::from(vec![0x70, 0x83, 0x52, 0x7c])),
             ]),
             ..Default::default()
         };
@@ -453,21 +454,21 @@ mod test {
         ));
 
         let mut config = native_config().unwrap();
-        config.remove("router_v4");
+        config.remove("router_v6");
         assert!(matches!(
             NativeSwapEncoder::new(executor.clone(), Chain::Ethereum, Some(config)),
-            Err(EncodingError::FatalError(message)) if message.contains("Missing router_v4")
+            Err(EncodingError::FatalError(message)) if message.contains("Missing router_v6")
         ));
 
         let mut config = native_config().unwrap();
         config.insert(
-            "router_v4".to_string(),
+            "router_v6".to_string(),
             "0x0000000000000000000000000000000000000000".to_string(),
         );
         assert!(matches!(
             NativeSwapEncoder::new(executor, Chain::Ethereum, Some(config)),
             Err(EncodingError::FatalError(message)) if message.contains(
-                "router_v4 cannot be the zero address"
+                "router_v6 cannot be the zero address"
             )
         ));
     }

@@ -40,8 +40,8 @@ static NATIVE_HTTP_CLIENT: LazyLock<Client> = LazyLock::new(Client::new);
 const MAX_QUOTE_ATTEMPTS: u32 = 3;
 const TRANSIENT_RETRY_DELAY: Duration = Duration::from_millis(100);
 const NATIVE_API_RETRY_DELAY: Duration = Duration::from_secs(1);
-// tradeRFQT(RFQTQuote,uint256,uint256): 4-byte selector plus three ABI head words.
-const TRADE_RFQT_SELECTOR: [u8; 4] = [0x09, 0x47, 0xc2, 0xd9];
+// V6 tradeRFQT: a dynamic quote tuple and two uint256 overrides, i.e. three ABI head words.
+const TRADE_RFQT_SELECTOR: [u8; 4] = [0x70, 0x83, 0x52, 0x7c];
 const MIN_TRADE_RFQT_CALLDATA_LEN: usize = 4 + 3 * 32;
 const ACTUAL_SELLER_AMOUNT_OFFSET: usize = 4 + 32;
 const ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET: usize = 4 + 2 * 32;
@@ -378,6 +378,13 @@ impl NativeClient {
             )));
         }
 
+        if quote_response.router_version != "6" {
+            return Err(RFQError::ParsingError(format!(
+                "Unexpected Native router version: expected 6, got {}",
+                quote_response.router_version
+            )));
+        }
+
         // Ensure we actually got an order
         let order = quote_response
             .orders
@@ -512,21 +519,21 @@ impl NativeClient {
 
         if calldata[..TRADE_RFQT_SELECTOR.len()] != TRADE_RFQT_SELECTOR {
             return Err(RFQError::ParsingError(format!(
-                "Unexpected Native V4 selector: expected 0x{}, got 0x{}",
+                "Unexpected Native V6 selector: expected 0x{}, got 0x{}",
                 hex::encode(TRADE_RFQT_SELECTOR),
                 hex::encode(&calldata[..TRADE_RFQT_SELECTOR.len()]),
             )));
         }
 
-        // These offsets are fixed by the V4 tradeRFQT(RFQTQuote,uint256,uint256)
-        // ABI. Rejecting any other value catches an incompatible or malformed
+        // These offsets are fixed by V6's tradeRFQT ABI (a dynamic quote tuple and
+        // two uint256 overrides). Rejecting any other value catches an incompatible or malformed
         // API response before it reaches the encoder; the executor independently
         // hardcodes the same positions rather than trusting route data.
         if quote_response.amount_in_offset as usize != ACTUAL_SELLER_AMOUNT_OFFSET ||
             quote_response.amount_out_minimum_offset as usize != ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET
         {
             return Err(RFQError::ParsingError(format!(
-                "Unexpected Native V4 override offsets: expected {}/{} but got {}/{}",
+                "Unexpected Native V6 override offsets: expected {}/{} but got {}/{}",
                 ACTUAL_SELLER_AMOUNT_OFFSET,
                 ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET,
                 quote_response.amount_in_offset,
@@ -771,8 +778,8 @@ impl RFQClient for NativeClient {
             amount_wei: params.amount_in.to_string(),
             token_in: token_in.to_string(),
             token_out: token_out.to_string(),
-            version: 4,
-            allow_multihop: false, // Multihop not implemented yet
+            version: 6,
+            allow_multihop: false,
         };
         let mut last_error = None;
 
@@ -843,7 +850,7 @@ mod tests {
     use crate::rfq::protocols::native::client_builder::NativeClientBuilder;
 
     fn successful_quote_json(amount_in: &str) -> serde_json::Value {
-        let calldata = format!("0x0947c2d9{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8);
+        let calldata = format!("0x7083527c{:064x}{:064x}{:064x}", 0x60u8, 0u8, 0u8);
         serde_json::json!({
             "success": true,
             "orders": [{
@@ -882,13 +889,13 @@ mod tests {
             "fallbackSwapDataArray": null,
             "tokenTransferFeeOnPercent": 0.0,
             "txRequest": {
-                "target": "0x8a2ddc0461Fcf96F81a05529Bed540d4f1eb2a00",
+                "target": "0x4777A6B3A9A889ABfd4C7666Bdd2a7AB633293be",
                 "calldata": calldata,
                 "value": "0"
             },
             "source": [6],
             "errorMessage": "",
-            "router_version": "4",
+            "router_version": "6",
             "toWrap": false,
             "toUnwrap": false,
             "amountInOffset": 36,
@@ -1445,7 +1452,7 @@ mod tests {
     fn rejects_truncated_trade_calldata() {
         let params = create_test_quote_params();
         let mut response = successful_quote_response(&params.amount_in.to_string());
-        response.tx_request.calldata = format!("0x0947c2d9{}", "00".repeat(95));
+        response.tx_request.calldata = format!("0x7083527c{}", "00".repeat(95));
 
         let result = NativeClient::process_quote_response(response, &params);
 
@@ -1466,7 +1473,8 @@ mod tests {
                 .trim_start_matches("0x"),
         )
         .unwrap();
-        calldata[0] ^= 0xff;
+        // V4 also exposes tradeRFQT, but its quote tuple has a different ABI.
+        calldata[..4].copy_from_slice(&[0x09, 0x47, 0xc2, 0xd9]);
         response.tx_request.calldata = format!("0x{}", hex::encode(calldata));
 
         let result = NativeClient::process_quote_response(response, &params);
@@ -1474,6 +1482,20 @@ mod tests {
         assert!(matches!(
             result,
             Err(RFQError::ParsingError(message)) if message.contains("selector")
+        ));
+    }
+
+    #[rstest]
+    #[case::v4("4")]
+    #[case::unknown("7")]
+    fn rejects_quote_with_wrong_router_version(#[case] version: &str) {
+        let params = create_test_quote_params();
+        let mut response = successful_quote_response(&params.amount_in.to_string());
+        response.router_version = version.to_string();
+
+        assert!(matches!(
+            NativeClient::process_quote_response(response, &params),
+            Err(RFQError::ParsingError(message)) if message.contains("Unexpected Native router version")
         ));
     }
 
@@ -1494,7 +1516,7 @@ mod tests {
         assert!(matches!(
             result,
             Err(RFQError::ParsingError(message)) if message.contains(
-                "Unexpected Native V4 override offsets"
+                "Unexpected Native V6 override offsets"
             )
         ));
     }
@@ -1625,6 +1647,61 @@ mod tests {
         .unwrap();
         client.endpoint = endpoint;
         client
+    }
+
+    #[tokio::test]
+    async fn requests_v6_firm_quote() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut reader = BufReader::new(stream);
+            let mut request_line = String::new();
+            reader
+                .read_line(&mut request_line)
+                .await
+                .unwrap();
+            let body = successful_quote_json("1").to_string();
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            reader
+                .into_inner()
+                .write_all(response.as_bytes())
+                .await
+                .unwrap();
+            request_line
+        });
+        let client = create_test_client(format!("http://{address}"));
+        let params = create_test_quote_params();
+
+        let quote = client
+            .request_binding_quote(&params)
+            .await
+            .unwrap();
+        let request = server.await.unwrap();
+        let url = reqwest::Url::parse(&format!(
+            "http://{address}{}",
+            request
+                .split_whitespace()
+                .nth(1)
+                .unwrap()
+        ))
+        .unwrap();
+        let query: HashMap<_, _> = url.query_pairs().into_owned().collect();
+
+        assert_eq!(url.path(), "/firm-quote");
+        assert_eq!(query.get("version").map(String::as_str), Some("6"));
+        assert_eq!(
+            query
+                .get("allow_multihop")
+                .map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(quote.amount_in, params.amount_in);
     }
 
     #[tokio::test]

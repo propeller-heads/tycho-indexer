@@ -17,11 +17,11 @@ error NativeExecutor__NotAContract();
 contract NativeExecutor is IExecutor {
     using Address for address;
 
-    address public immutable nativeRouterV4;
+    address public immutable nativeRouterV6;
 
-    // Native Router entrypoint:
-    // tradeRFQT(RFQTQuote quote, uint256 actualSellerAmount, uint256 actualMinOutputAmount)
-    bytes4 public constant TRADE_RFQT_SELECTOR = 0x0947c2d9;
+    // Native Router V6 tradeRFQT: a dynamic quote tuple followed by
+    // uint256 actualSellerAmount and uint256 actualMinOutputAmount.
+    bytes4 public constant TRADE_RFQT_SELECTOR = 0x7083527c;
     uint256 private constant _FIXED_HEADER_LENGTH = 92;
     uint256 private constant _MIN_TRADE_RFQT_CALLDATA_LENGTH = 4 + 3 * 32;
     // These positions are fixed by the pinned tradeRFQT selector: the selector
@@ -29,14 +29,14 @@ contract NativeExecutor is IExecutor {
     uint256 private constant _ACTUAL_SELLER_AMOUNT_OFFSET = 4 + 32;
     uint256 private constant _ACTUAL_MIN_OUTPUT_AMOUNT_OFFSET = 4 + 2 * 32;
 
-    constructor(address _nativeRouterV4) {
-        if (_nativeRouterV4 == address(0)) {
+    constructor(address _nativeRouterV6) {
+        if (_nativeRouterV6 == address(0)) {
             revert NativeExecutor__ZeroAddress();
         }
-        if (_nativeRouterV4.code.length == 0) {
+        if (_nativeRouterV6.code.length == 0) {
             revert NativeExecutor__NotAContract();
         }
-        nativeRouterV4 = _nativeRouterV4;
+        nativeRouterV6 = _nativeRouterV6;
     }
 
     function fundsExpectedAddress(
@@ -167,7 +167,7 @@ contract NativeExecutor is IExecutor {
     }
 
     function _isValidTarget(address target) private view returns (bool) {
-        return target == nativeRouterV4;
+        return target == nativeRouterV6;
     }
 
     function getTransferData(bytes calldata data)
