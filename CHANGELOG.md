@@ -1,3 +1,17 @@
+## [0.396.0](https://github.com/propeller-heads/tycho/compare/0.395.0...0.396.0) (2026-09-08)
+
+
+### Features
+
+* **integration-test:** add --test-every-n-updates, alias the old flag ([07c64fe](https://github.com/propeller-heads/tycho/commit/07c64fe33090984aaffff5629d6c3f4119f1e39a))
+* **integration-test:** allow --test-every-n-blocks with --partial-blocks ([2903018](https://github.com/propeller-heads/tycho/commit/290301886d477ffc7d2bbef96152fc85486a9785))
+* **integration-test:** sample every Nth protocol update, not block ([3005f03](https://github.com/propeller-heads/tycho/commit/3005f03aa46b62ff0b04b305221356fdf006bc71))
+
+
+### Bug Fixes
+
+* **integration-test:** mark protocols skipped when the RPC poll times out ([36421b0](https://github.com/propeller-heads/tycho/commit/36421b0075e5e8ac28a5c3bd9fca78b32bb9c6f8))
+
 ## [0.395.0](https://github.com/propeller-heads/tycho/compare/0.394.0...0.395.0) (2026-09-08)
 
 
