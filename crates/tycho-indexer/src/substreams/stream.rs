@@ -103,11 +103,20 @@ impl SubstreamsStream {
 /// gives up, and until then the extractor sits in `substreams.next()` with a stale head.
 const STREAM_IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 
-static DEFAULT_BACKOFF: Lazy<ExponentialBackoff> =
-    Lazy::new(|| ExponentialBackoff::from_millis(500).max_delay(Duration::from_secs(45)));
+/// Delay between reconnect attempts: 1s, 2s, 4s, ... capped at 45s. Reset by any message
+/// from the endpoint.
+///
+/// The ramp matters because most reconnects follow a transient rejection — an endpoint
+/// shutting down a node, a broken pipe mid-stream — and clear on the next attempt. A ladder
+/// that reaches its cap in one step makes the common case wait the worst case out.
+static DEFAULT_BACKOFF: Lazy<ExponentialBackoff> = Lazy::new(|| {
+    ExponentialBackoff::from_millis(2)
+        .factor(500)
+        .max_delay(Duration::from_secs(45))
+});
 
 /// Consecutive `Unauthenticated` retries allowed once the endpoint has proven the credential by
-/// delivering a block. With `DEFAULT_BACKOFF` these span about three minutes.
+/// delivering a block. With `DEFAULT_BACKOFF` these span about half a minute.
 const MAX_UNAUTHENTICATED_RETRIES: u32 = 5;
 
 /// Whether an `Unauthenticated` status from the endpoint should be retried.
@@ -532,6 +541,27 @@ mod tests {
         assert_eq!(
             requests[1].start_cursor, "cursor-1",
             "the reconnect should resume from the last cursor"
+        );
+    }
+
+    #[test]
+    fn test_reconnect_backoff_ramps_up_to_the_cap() {
+        let delays: Vec<Duration> = DEFAULT_BACKOFF
+            .clone()
+            .take(7)
+            .collect();
+
+        assert_eq!(
+            delays,
+            vec![
+                Duration::from_secs(1),
+                Duration::from_secs(2),
+                Duration::from_secs(4),
+                Duration::from_secs(8),
+                Duration::from_secs(16),
+                Duration::from_secs(32),
+                Duration::from_secs(45),
+            ]
         );
     }
 
