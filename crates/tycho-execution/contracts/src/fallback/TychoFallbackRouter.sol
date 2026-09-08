@@ -252,7 +252,7 @@ contract TychoFallbackRouter is
                     : TickMath.MAX_SQRT_PRICE - 1,
                 ""
             );
-        _setCallbackContext(address(0), address(0), 0);
+        _clearCallbackContext();
     }
 
     /// @dev Venue data: `[fee: 3][tickSpacing: 3][hook: 20][hookData: rest]`. One pool, never a
@@ -318,7 +318,7 @@ contract TychoFallbackRouter is
         // slither-disable-next-line unused-return
         IFluidV1Dex(dex)
             .swapInWithCallback(zero2one, leg.amountIn, 0, leg.receiver);
-        _setCallbackContext(address(0), address(0), 0);
+        _clearCallbackContext();
     }
 
     /// @notice Pays a Uniswap V3 pool.
@@ -389,6 +389,10 @@ contract TychoFallbackRouter is
             uint256(uint128(amountOut))
         );
         return "";
+    }
+
+    function _clearCallbackContext() internal {
+        _setCallbackContext(address(0), address(0), 0);
     }
 
     function _setCallbackContext(address source, address token, uint256 amount)
