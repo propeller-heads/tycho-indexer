@@ -319,16 +319,23 @@ other side's price from the trade. See `substreams/README.md`.
 4. `substreams/pricing/preferred_tokens.sql` — the native sentinel row plus at least one pinned
    stablecoin, or the chain has no USD anchor and every trade stays unpriced. Pin by address and
    verify the implied price; symbols are duplicated by fake tokens.
-5. `substreams/scripts/gen_tables.py` re-run, so `src/executors_table.rs` names the new chain's
-   executors.
-6. `substreams/docker-compose.yaml` and, in `helm-configuration`, the `$chains` list plus a
-   `TYCHO_<CHAIN>_DATABASE_URL` entry in
-   `helmwave/dev/values/tycho/router-trades/router-trades.yml`.
+5. `substreams/executors.sql` — a row per executor on the new chain, so a hop carries a protocol
+   name and not only an address. Kept by hand; needs no release.
+6. `substreams/docker-compose.yaml`, a released `.spkg` for the chain, and in
+   `helm-configuration` the `$chains` list plus the `spkgs` pin and a `TYCHO_<CHAIN>_DATABASE_URL`
+   entry in `helmwave/dev/values/tycho/router-trades/router-trades.yml`.
+
+**The `.spkg` packages are released separately from the image** by `substreams/release.sh` to
+`s3://repo.propellerheads-propellerheads/substreams/tycho-router-trades/<chain>-<version>.spkg`,
+and each sink container fetches the key it is pinned to. So the image build carries no module hash
+and rebuilding it is safe, while changing what a chain indexes takes three steps: bump
+`tycho-router-trades/Cargo.toml`, run the **Release Router Trades Substreams** workflow, and pin
+the new key under `spkgs` in helm. Releases are immutable; a rollback is a pin back.
 
 **Changing a manifest or the Rust source changes the module hash**, which the sink cursors are
-keyed by; the affected containers then exit until their `cursors_<chain>` row is cleared, and
-because the sink writes plain `INSERT`s, any chain that re-reads written blocks needs its rows
-deleted too. See "Updating a deployed sink" in `substreams/README.md`.
+keyed by; a chain pinned to the new package then exits until its `cursors_<chain>` row is cleared,
+and because the sink writes plain `INSERT`s, any chain that re-reads written blocks needs its rows
+deleted too. See "Releasing a package" and "Updating a deployed sink" in `substreams/README.md`.
 
 ## Build & Test
 
