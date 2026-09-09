@@ -45,7 +45,6 @@ error TychoFallbackRouter__ZeroGasCap();
 
 /// @title TychoFallbackRouter
 /// @notice Runs a pAMM and, only if it fails, the caller's chosen fallback venue.
-/// The fallback is never a pAMM.
 /// @dev Exists because an executor cannot fall back: the Dispatcher transfers a leg's input before
 /// it delegatecalls `swap()`, so a reverting pAMM has already been paid and a Uniswap V3 retry,
 /// which pays in a callback, cannot be funded. Here the tokens stay in this contract.
@@ -56,9 +55,7 @@ error TychoFallbackRouter__ZeroGasCap();
 contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
-    /// @notice Fallback venue tag. The ordinal is the first byte of the fallback swap data, so it
-    /// is wire format an off-chain encoder must match; `testVenueWireFormatIsStable` pins it. Each
-    /// variant's payload layout is documented on its `_swap*` function.
+    /// @notice The venue kinds a fallback may use.
     enum Venue {
         UniswapV2,
         UniswapV3,
@@ -138,21 +135,14 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     /// @dev Permissionless: the caller names every parameter, so a balance sitting in this
     /// contract can be taken by anyone and is considered lost. Push-payment: the caller MUST
     /// transfer `leg.amountIn` of `leg.tokenIn` here first. Native ETH is not supported.
-    /// `fallbackSwap` is `[venue: uint8][venue data]`, and no venue kind is a pAMM.
+    /// `fallbackSwap` names one of Uniswap V2, V3 or V4, Curve, or Fluid V1.
     /// No output is returned: the caller measures its own `leg.tokenOut` balance diff at
     /// `leg.receiver`, which is how the Dispatcher verifies every leg.
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
         external
         nonReentrant
     {
-        // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
-        // is the caller's chosen venue, so its revert is the swap's revert. The gas cap keeps a
-        // pAMM that fails by consuming gas from starving the fallback -- an uncapped call returns
-        // only 1/64 of the gas it burns (EIP-150).
-        //
-        // The reentrancy-events finding reports that `FellBack` is emitted after an untrusted
-        // call. `nonReentrant` means no reentrant frame can interleave and observe it out of
-        // order, so the ordering the detector warns about cannot occur.
+        // Reentrancy cannot happen: the function is nonReentrant.
         // slither-disable-next-line reentrancy-events
         try this.executePropAMM{gas: pammGasCap}(leg, pamm) {
             return;
@@ -170,7 +160,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         }
         uint256 balanceBefore = IERC20(leg.tokenOut).balanceOf(leg.receiver);
 
-        // Push-payment, so the transfer comes first.
         IERC20(leg.tokenIn).safeTransfer(pamm, leg.amountIn);
         // slither-disable-next-line unused-return
         IPropAMM(pamm)
@@ -186,10 +175,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         _requireOutput(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
-    /// @dev Decodes `[venue: uint8][venue data]` and runs the tagged venue, which pays
-    /// `leg.receiver` directly. A pAMM is not among the venue kinds, so the venue the pAMM slot
-    /// exists to retry can never also be the rescue. No output measurement here: the Dispatcher's
-    /// balance-diff at the receiver is the single source of truth for the leg.
+    /// @dev Runs the tagged venue, which pays `leg.receiver` directly. No output measurement
+    /// here: the Dispatcher's balance-diff at the receiver is the single source of truth.
     function _executeFallback(Leg calldata leg, bytes calldata encodedSwap)
         internal
     {
@@ -215,7 +202,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         } else if (venue == Venue.FluidV1) {
             _swapFluidV1(leg, venueData);
         } else {
-            // Unreachable today; catches a venue added to the enum without a branch.
             revert TychoFallbackRouter__UnknownVenue(venueByte);
         }
     }
@@ -244,8 +230,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         pammGasCap = newCap;
     }
 
-    /// @dev Venue data: `[pair: 20][feeBps: 1]`. Uniswap V2's `swap` takes explicit output
-    /// amounts, so this computes the output from the reserves.
+    /// @dev Uniswap V2's `swap` takes explicit output amounts, so this computes the output from
+    /// the reserves.
     function _swapUniswapV2(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
@@ -274,7 +260,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         }
     }
 
-    /// @dev Venue data: `[pool: 20]`.
     function _swapUniswapV3(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 20) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
@@ -297,8 +282,9 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         _clearCallbackContext();
     }
 
-    /// @dev Venue data: `[fee: 3][tickSpacing: 3][hook: 20][hookData: rest]`. One pool, never a
-    /// path: the currencies come from the sort order of `tokenIn` and `tokenOut`.
+    /// @dev One pool, never a path: the currencies come from the sort order of `tokenIn` and
+    /// `tokenOut`. Any hook the caller names is used -- there is no allowlist, so a hook that
+    /// takes a fee or refuses the swap is the caller's problem to price into `minAmountOut`.
     function _swapUniswapV4(Leg calldata leg, bytes calldata data) internal {
         if (data.length < 26) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
@@ -316,8 +302,7 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         poolManager.unlock(abi.encode(v4Swap));
     }
 
-    /// @dev Venue data: `[pool: 20][poolType: 1][i: 1][j: 1]`. Curve pays the caller, so this
-    /// forwards to `receiver`.
+    /// @dev Curve pays the caller, so this forwards to `receiver`.
     function _swapCurve(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 23) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
@@ -347,10 +332,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         IERC20(leg.tokenOut).safeTransfer(leg.receiver, received);
     }
 
-    /// @dev Venue data: `[dex: 20][zero2one: 1]`. `zero2one` is the dex's token order, not the
-    /// address sort order, so it cannot be derived. A `zero2one` that contradicts the leg fails
-    /// one of two ways: the dex asks `dexCallback` for the other token, which names the cause, or
-    /// the dex prices `amountIn` against the other side's reserves and reverts inside itself.
+    /// @dev `zero2one` is the dex's token order, not the address sort order, so it cannot be
+    /// derived.
     function _swapFluidV1(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
