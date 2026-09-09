@@ -265,10 +265,13 @@ contract TychoRouterTestSetup is
             new RingSwapV2Executor(RING_FEW_FACTORY, RING_SWAP_FACTORY);
         propAMMExecutor = new PropAMMExecutor();
         propAMMFallbackExecutor = new PropAMMFallbackExecutor();
-        // The Sky venues exist only on mainnet, and the executor's constructor
-        // reads their token wiring, so it cannot deploy on forks where the
-        // venues have no code. Deployed last, so skipping it does not shift
-        // the other executors' deterministic addresses.
+        // Every executor's address here is deterministic from its deploy order, and the
+        // Rust-generated calldata.txt hardcodes those addresses, so inserting a deployment
+        // invalidates every entry after it. Add new deployments at the end of this block.
+        //
+        // The Sky venues exist only on mainnet, and the executor's constructor reads their token
+        // wiring, so it cannot deploy on forks where the venues have no code. Only the two
+        // deployments below it shift when it is skipped, and neither has a calldata.txt entry yet.
         bool skyDeployable = SKY_DAI_USDS_CONVERTER.code.length != 0;
         if (skyDeployable) {
             skyExecutor = new SkyExecutor(
@@ -276,9 +279,6 @@ contract TychoRouterTestSetup is
             );
         }
 
-        // Deployed after Sky for the same reason Sky is deployed last: adding a contract earlier
-        // shifts every later deterministic address and invalidates the pre-generated Permit2
-        // signatures.
         fallbackRouter =
             new TychoFallbackRouter(ADMIN, poolManager, FLUIDV1_LIQUIDITY);
         fallbackExecutor = new FallbackExecutor(address(fallbackRouter));
