@@ -772,6 +772,43 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
+    /// With fees active the leg's receiver is redirected to the router itself,
+    /// the configuration every fee-charging production swap runs in.
+    function testSingleSwapWithRouterFee() public {
+        vm.startPrank(FEE_SETTER);
+        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
+        feeCalculator.setRouterFeeOnOutput(1_000_000); // 1%
+        vm.stopPrank();
+
+        uint256 amountIn = 10_000e6;
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1 ether,
+            1 ether,
+            ALICE,
+            noClientFee(),
+            encodeSingleSwap(address(fallbackExecutor), _swapData())
+        );
+        vm.stopPrank();
+
+        assertGt(amountOut, 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
+        // fee == gross / 100, where gross == amountOut + fee.
+        uint256 fee = tychoRouter.balanceOf(
+            routerFeeReceiver, uint256(uint160(WETH_ADDR))
+        );
+        assertEq(fee, (amountOut + fee) / 100);
+        // The fee stays in the router as the vault balance's backing.
+        assertEq(IERC20(WETH_ADDR).balanceOf(tychoRouterAddr), fee);
+        assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
+    }
+
     /// A fallback venue that reports success but pays nothing is caught by the
     /// route-level minAmountOut -- the backstop that replaces any in-slot
     /// output check in the fallback slot.
