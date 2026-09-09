@@ -750,6 +750,13 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
 contract FallbackExecutorTest is TychoRouterTestSetup {
     MockPropAMM pamm;
 
+    /// Measured at getForkBlock() against the pools each test names, so the
+    /// value check is independent of the router's minAmountOut check.
+    uint256 constant SINGLE_WETH_OUT = 3_611_998_638_539_827_447;
+    uint256 constant SEQUENTIAL_DAI_OUT = 9_916_791_090_861_983_461_371;
+    uint256 constant FEE_WETH_OUT = 3_575_878_652_154_429_173;
+    uint256 constant SPLIT_WETH_OUT = 3_612_457_039_884_311_273;
+
     function getForkBlock() public pure override returns (uint256) {
         return 22689128;
     }
@@ -813,7 +820,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
 
-        assertGt(amountOut, 1 ether);
+        assertEq(amountOut, SINGLE_WETH_OUT);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(fallbackRouter)), 0);
@@ -866,7 +873,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
 
-        assertGt(amountOut, 1000e18);
+        assertEq(amountOut, SEQUENTIAL_DAI_OUT);
         assertEq(IERC20(DAI_ADDR).balanceOf(ALICE), amountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
@@ -896,7 +903,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
 
-        assertGt(amountOut, 0);
+        assertEq(amountOut, FEE_WETH_OUT);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
         // fee == gross / 100, where gross == amountOut + fee.
         uint256 fee = tychoRouter.balanceOf(
@@ -947,7 +954,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         );
         vm.stopPrank();
 
-        assertGt(amountOut, 1 ether);
+        assertEq(amountOut, SPLIT_WETH_OUT);
         assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
         assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(fallbackRouter)), 0);
