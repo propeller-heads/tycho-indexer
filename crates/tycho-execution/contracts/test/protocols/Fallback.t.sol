@@ -29,13 +29,13 @@ import {UniswapV2Math__ZeroReserves} from "../../lib/UniswapV2Math.sol";
 
 /// @notice Builds the venue entries `TychoFallbackRouter` decodes.
 library FallbackSwaps {
-    function leg(
+    function swap(
         address tokenIn,
         address tokenOut,
         uint256 amountIn,
         address receiver
-    ) internal pure returns (TychoFallbackRouter.Leg memory) {
-        return TychoFallbackRouter.Leg({
+    ) internal pure returns (TychoFallbackRouter.Swap memory) {
+        return TychoFallbackRouter.Swap({
             tokenIn: tokenIn,
             tokenOut: tokenOut,
             amountIn: amountIn,
@@ -110,7 +110,7 @@ contract EmptyReservePair {
     }
 }
 
-/// @notice A V3-shaped "pool" that reports success without paying, so the leg delivers nothing
+/// @notice A V3-shaped "pool" that reports success without paying, so the swap delivers nothing
 /// and the route-level `minAmountOut` must be what catches it.
 contract SilentPool {
     function swap(
@@ -191,7 +191,7 @@ abstract contract TychoFallbackRouterTestBase is Constants, TestUtils {
         pamm = new MockPropAMM();
     }
 
-    /// Holds no funds once a leg is done.
+    /// Holds no funds once a swap is done.
     function _assertRouterDrained(address tokenIn, address tokenOut)
         internal
         view
@@ -249,14 +249,14 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             )
         );
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 31)
         );
 
         // The boundary itself is accepted and fills.
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
@@ -270,7 +270,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
 
         vm.expectRevert(UniswapV2Math__ZeroReserves.selector);
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(address(pair), 30)
         );
@@ -289,8 +289,8 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         entries[3] = FallbackSwaps.curve(TRIPOOL, 1, 0, 1);
         entries[4] = FallbackSwaps.fluidV1(FLUIDV1_LIQUIDITY, true);
 
-        TychoFallbackRouter.Leg memory leg =
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB);
+        TychoFallbackRouter.Swap memory swap_ =
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB);
 
         for (uint256 i = 0; i < entries.length; i++) {
             // The first byte is the venue tag, so the guarded width is one less.
@@ -301,7 +301,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
                     TychoFallbackRouter__InvalidSwapLength.selector, width - 1
                 )
             );
-            router.swap(leg, address(pamm), _truncate(entries[i]));
+            router.swap(swap_, address(pamm), _truncate(entries[i]));
 
             bool isUniswapV4 = i == uint256(TychoFallbackRouter.Venue.UniswapV4);
             if (!isUniswapV4) {
@@ -312,7 +312,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
                     )
                 );
                 router.swap(
-                    leg, address(pamm), bytes.concat(entries[i], hex"00")
+                    swap_, address(pamm), bytes.concat(entries[i], hex"00")
                 );
             }
         }
@@ -357,7 +357,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -377,7 +377,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             address(pamm), USDC_ADDR, WETH_ADDR, USDC_IN
         );
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -391,7 +391,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
 
         vm.recordLogs();
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -410,7 +410,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -427,7 +427,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(WETH_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(WETH_ADDR, USDC_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -441,7 +441,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
@@ -457,7 +457,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(WETH_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(WETH_ADDR, USDC_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
@@ -472,7 +472,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(DAI_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(DAI_ADDR, USDC_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(DAI_ADDR, USDC_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.curve(TRIPOOL, 1, 0, 1)
         );
@@ -489,7 +489,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(WETH_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(WETH_ADDR, USDC_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.curve(TRICRYPTO_POOL, 0, 2, 0)
         );
@@ -507,7 +507,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDE_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(USDE_ADDR, USDT_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(USDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
         );
@@ -523,7 +523,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDT_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(USDT_ADDR, USDE_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(USDT_ADDR, USDE_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
         );
@@ -538,7 +538,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(silent),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -555,7 +555,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap{gas: 2_000_000}(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(burner),
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
@@ -594,7 +594,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
 
         vm.expectRevert(RevertingPool__Nope.selector);
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             FallbackSwaps.uniswapV3(address(pool))
         );
@@ -609,7 +609,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             )
         );
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             abi.encodePacked(uint8(9), USDC_WETH_USV3)
         );
@@ -624,7 +624,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             )
         );
         router.swap(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
             address(pamm),
             bytes("")
         );
@@ -634,7 +634,8 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
     function testExecutePropAMMRejectsExternalCaller() public {
         vm.expectRevert(TychoFallbackRouter__NotSelf.selector);
         router.executePropAMM(
-            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB), address(pamm)
+            FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm)
         );
     }
 
@@ -684,7 +685,7 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
         deal(SUSDE_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.fluidV1(FLUID_DEX, true)
         );
@@ -694,13 +695,13 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
     }
 
     /// `zero2one = false` consistently encoded: the dex requests USDT, which
-    /// is the leg's tokenIn, so the swap fills in the reverse direction.
+    /// is the swap's tokenIn, so the swap fills in the reverse direction.
     function testFallsBackToFluidV1Reverse() public {
         uint256 amountIn = 10e6;
         deal(USDT_ADDR, address(router), amountIn);
 
         router.swap(
-            FallbackSwaps.leg(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.fluidV1(FLUID_DEX, false)
         );
@@ -709,7 +710,7 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
         _assertRouterDrained(USDT_ADDR, SUSDE_ADDR);
     }
 
-    /// `zero2one = true` means the dex pulls sUSDE, but the leg pays USDT, so
+    /// `zero2one = true` means the dex pulls sUSDE, but the swap pays USDT, so
     /// `dexCallback` is asked for the wrong token and names the cause.
     function testFluidWrongDirectionNamesCause() public {
         uint256 amountIn = 10e18;
@@ -723,7 +724,7 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
             )
         );
         router.swap(
-            FallbackSwaps.leg(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.fluidV1(FLUID_DEX, true)
         );
@@ -738,14 +739,14 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
 
         vm.expectPartialRevert(FluidDexError.selector);
         router.swap(
-            FallbackSwaps.leg(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
+            FallbackSwaps.swap(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),
             FallbackSwaps.fluidV1(FLUID_DEX, false)
         );
     }
 }
 
-/// @notice The same claim through the whole TychoRouter: the leg's input lands at the fallback
+/// @notice The same claim through the whole TychoRouter: the swap's input lands at the fallback
 /// router, not at a pool, which is what makes the retry fundable.
 contract FallbackExecutorTest is TychoRouterTestSetup {
     MockPropAMM pamm;
@@ -801,7 +802,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         new FallbackExecutor(address(0));
     }
 
-    /// The whole leg: a dead pAMM still settles, at the Uniswap V3 price.
+    /// The whole swap: a dead pAMM still settles, at the Uniswap V3 price.
     function testSingleSwap() public {
         uint256 amountIn = 10_000e6;
         deal(USDC_ADDR, ALICE, amountIn);
@@ -826,7 +827,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(USDC_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
-    /// The TychoRouter's `minAmountOut` is the leg's only price check.
+    /// The TychoRouter's `minAmountOut` is the swap's only price check.
     function testSingleSwapMinAmountOutBinds() public {
         uint256 amountIn = 10_000e6;
         deal(USDC_ADDR, ALICE, amountIn);
@@ -847,7 +848,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         vm.stopPrank();
     }
 
-    /// The fallback leg funds the next hop's pool directly.
+    /// The fallback swap funds the next hop's pool directly.
     function testSequentialSwap() public {
         uint256 amountIn = 10_000e6;
         deal(USDC_ADDR, ALICE, amountIn);
@@ -878,7 +879,7 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
-    /// With fees active the leg's receiver is redirected to the router itself,
+    /// With fees active the swap's receiver is redirected to the router itself,
     /// the configuration every fee-charging production swap runs in.
     function testSingleSwapWithRouterFee() public {
         vm.startPrank(FEE_SETTER);
@@ -915,9 +916,9 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
-    /// A split leg sends a fraction of the input, the one place a
+    /// A split swap sends a fraction of the input, the one place a
     /// TransferType.Transfer executor is funded with less than the router's
-    /// whole balance. 60% goes through the fallback leg, the rest through
+    /// whole balance. 60% goes through the fallback swap, the rest through
     /// Uniswap V2 directly.
     function testSplitSwap() public {
         uint256 amountIn = 10_000e6;

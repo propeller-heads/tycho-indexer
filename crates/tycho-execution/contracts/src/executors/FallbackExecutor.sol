@@ -9,7 +9,7 @@ error FallbackExecutor__AddressZero();
 error FallbackExecutor__InvalidDataLength();
 
 /// @title FallbackExecutor
-/// @notice Runs one leg through `TychoFallbackRouter`.
+/// @notice Runs one swap through `TychoFallbackRouter`.
 /// @dev `TransferType.Transfer` sends `amountIn` to the fallback router, which then owns the
 /// tokens and pays each venue itself. The router address is immutable, so no swap data can select
 /// a call target outside it.
@@ -49,7 +49,7 @@ contract FallbackExecutor is IExecutor {
         ) = _decodeData(data);
 
         fallbackRouter.swap(
-            TychoFallbackRouter.Leg({
+            TychoFallbackRouter.Swap({
                 tokenIn: tokenIn,
                 tokenOut: tokenOut,
                 amountIn: amountIn,
