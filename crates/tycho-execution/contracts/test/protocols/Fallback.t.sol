@@ -19,11 +19,13 @@ import {
     TychoFallbackRouter__CallbackTokenMismatch,
     TychoFallbackRouter__InvalidSwapLength,
     TychoFallbackRouter__InvalidCallback,
+    TychoFallbackRouter__InvalidUniswapV2Fee,
     TychoFallbackRouter__NotPoolManager,
     TychoFallbackRouter__UnknownVenue,
     TychoFallbackRouter__NotSelf,
     TychoFallbackRouter__ZeroGasCap
 } from "../../src/fallback/TychoFallbackRouter.sol";
+import {UniswapV2Math__ZeroReserves} from "../../lib/UniswapV2Math.sol";
 
 /// @notice Builds the venue entries `TychoFallbackRouter` decodes.
 library FallbackSwaps {
@@ -93,6 +95,17 @@ library FallbackSwaps {
 }
 
 error RevertingPool__Nope();
+
+/// @notice A V2-shaped pair with nothing in it, for the zero-reserve guard.
+contract EmptyReservePair {
+    function getReserves()
+        external
+        pure
+        returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)
+    {
+        return (0, 0, 0);
+    }
+}
 
 /// @notice A V3-shaped "pool" that reports success without paying, so the leg delivers nothing
 /// and the route-level `minAmountOut` must be what catches it.
@@ -209,6 +222,45 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         assertEq(uint8(TychoFallbackRouter.Venue.UniswapV4), 2);
         assertEq(uint8(TychoFallbackRouter.Venue.Curve), 3);
         assertEq(uint8(TychoFallbackRouter.Venue.FluidV1), 4);
+    }
+
+    /// 30 bps is the highest accepted fee; 31 reverts naming the value. The
+    /// bound is the only guard between a caller-supplied fee and the pricing
+    /// math.
+    function testUniswapV2FeeBoundary() public {
+        deal(USDC_ADDR, address(router), USDC_IN);
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                TychoFallbackRouter__InvalidUniswapV2Fee.selector, uint256(31)
+            )
+        );
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV2(USDC_WETH_USV2, 31)
+        );
+
+        // The boundary itself is accepted and fills.
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
+        );
+        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+    }
+
+    /// A pair with no reserves cannot price the trade.
+    function testUniswapV2ZeroReservesReverts() public {
+        EmptyReservePair pair = new EmptyReservePair();
+        deal(USDC_ADDR, address(router), USDC_IN);
+
+        vm.expectRevert(UniswapV2Math__ZeroReserves.selector);
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV2(address(pair), 30)
+        );
     }
 
     /// Every venue pins its payload width: truncated and over-long payloads
