@@ -77,6 +77,7 @@ static CLONE_TO_BASE_PROTOCOL: LazyLock<HashMap<&str, &str>> = LazyLock::new(|| 
         ("unichain-curve", "ethereum-curve"),
         ("robinhood-ramses-v3", "polygon-ramses-v3"),
         ("robinhood-ekubo-v3", "ethereum-ekubo-v3"),
+        ("robinhood-up-v3", "base-aerodrome-slipstreams"),
     ])
 });
 

@@ -210,6 +210,11 @@ impl SwapEncoderRegistry {
             "velodrome_slipstreams" => {
                 Ok(Box::new(SlipstreamsSwapEncoder::new(executor_address, self.chain, config)?))
             }
+            // UP on Robinhood Chain deploys the Slipstream contracts verbatim, and its pools price
+            // swaps through a dynamic fee module, so it encodes like the other Slipstream forks.
+            "up_v3" => {
+                Ok(Box::new(SlipstreamsSwapEncoder::new(executor_address, self.chain, config)?))
+            }
             // Ramses V3 reuses the standard Uniswap V3 executor unchanged, encoded via the
             // Slipstreams encoder. Three things make this sound:
             //   1. ABI match: the Ramses pool exposes the identical
