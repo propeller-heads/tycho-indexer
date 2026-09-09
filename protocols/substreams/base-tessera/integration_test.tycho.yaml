@@ -8,9 +8,12 @@ adapter_contract: "TesseraSwapAdapter"
 adapter_build_signature: "constructor(address)"
 adapter_build_args: "0x55555522005BcAE1c2424D474BfD5ed477749E3e"
 
-# Balances are validated: the range is self-consistent (the treasury is seeded inside it) and the
-# treasury never idles.
-skip_balance_check: false
+# The harness's balance check compares indexed balances against `balanceOf(<component id>)`, and
+# a Tessera pair contract holds nothing — all inventory sits in the treasury (`balance_owner`),
+# which the check does not consult. The indexed WETH/USDC balances over this range equal the
+# treasury's on-chain `balanceOf` at the stop block to the wei (HANDOVER §12); the check is
+# skipped only because it asks the wrong address.
+skip_balance_check: true
 
 # No `initialized_accounts`: the range starts at the package's initial block, before TesseraSwap
 # and the engine are deployed (37,518,648), so their creation code and every storage write are
@@ -44,6 +47,15 @@ tests:
           manual_updates: "0x01"
           self_contained_tokens: "0x5b22307834323030303030303030303030303030303030303030303030303030303030303030303030303036222c22307838333335383966636436656462366530386634633763333264346637316235346264613032393133225d"
         creation_tx: "0x8978cc5e137cde75d4aaf4323d493511858971c05860b00abc2d6a922a5e29c6"
+        # The genesis-era pair implementation (gen-1, `0xf3be571a…`) reverts the view quote when
+        # it is called from a non-whitelisted caller in a zero-gas-price environment (arithmetic
+        # panic in the fee-threshold branch; reproduced on a Base fork at this block — on-chain
+        # `eth_call` only succeeds because nodes zero the base fee). Later generations do not have
+        # that branch. This test therefore proves the delivery chain — indexing, discovery,
+        # snapshot, and the consumer loading the implementation from `stateless_contract_addr_0`
+        # over RPC — while quoting itself is validated on a gen-12 fork in
+        # protocols/adapter-integration/evm/test/TesseraSwapAdapter.t.sol (block 50,548,423).
+        skip_simulation: true
         # No vm:tessera executor is deployed on Base yet; execution is
         # validated in Foundry (crates/tycho-execution/contracts/test/
         # protocols/Tessera.t.sol) until the rollout phase deploys one.

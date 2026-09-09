@@ -448,3 +448,23 @@ remains as the alert.
   ~97 USDC/WETH — the venue's test-phase price). No `initialized_accounts` — the production
   path. Run it in CI with
   `gh workflow run ci-substreams-integration.yaml --ref <branch> -f protocols=base-tessera`.
+- **Genesis-range result (local, Tenderly gateway; CI run pending at time of writing)**: indexing
+  → component discovery (`0xf524…` matches id, tokens, static attributes, creation tx) → snapshot
+  → consumer loads `stateless_contract_addr_0` (`0xf3be571a…`) over RPC all pass; indexed WETH and
+  USDC balances equal the genesis treasury's (`0xc2ca2485…`) on-chain `balanceOf` to the wei. The
+  harness's own balance check compares against `balanceOf(<component id>)` — the pair, which holds
+  nothing — so it is skipped with that justification. **Quoting on the gen-1 implementation does
+  not work in a VM**: `getLimits` → `tesseraSwapViewAmounts` → engine → pair → gen-1 impl reverts
+  (arithmetic panic 0x11 after reading the fee threshold and the caller whitelist flag, both zero,
+  under gas price 0; reproduced by etching the harness's exact adapter runtime into a forge fork
+  at 37,519,400, and the VM run fails in the same `getLimits` call with an empty revert). On-chain
+  `eth_call` at the same block succeeds only because nodes zero the base fee when no gas price is
+  given. gen-12 has no such branch (the adapter's 12 fork tests at 50,548,423 pass). The test
+  declares `skip_simulation: true` for this reason. Note the harness tolerates decode failures
+  (`skip_state_decode_failures(true)`) and reported "passed" with 0 decoded pools before the flag
+  was set — a green run with no simulation is possible and should be read with `Decoded N
+  snapshots` in mind.
+- What remains unverified end-to-end: a gen-12-era tycho-simulation quote through the Tycho
+  delivery path. It needs either a Base node with `debug_storageRangeAt` (none available, see
+  above) or slot-list support for `initialized_accounts`; the rollout phase's live sync + markout
+  run covers it.
