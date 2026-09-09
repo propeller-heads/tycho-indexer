@@ -809,6 +809,51 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
     }
 
+    /// A split leg sends a fraction of the input, the one place a
+    /// TransferType.Transfer executor is funded with less than the router's
+    /// whole balance. 60% goes through the fallback leg, the rest through
+    /// Uniswap V2 directly.
+    function testSplitSwap() public {
+        uint256 amountIn = 10_000e6;
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        bytes[] memory swaps = new bytes[](2);
+        swaps[0] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            (0xffffff * 60) / 100, // 60%
+            address(fallbackExecutor),
+            _swapData()
+        );
+        swaps[1] = encodeSplitSwap(
+            uint8(0),
+            uint8(1),
+            uint24(0), // remainder
+            address(usv2Executor),
+            encodeUniswapV2Swap(USDC_WETH_USV2, USDC_ADDR, WETH_ADDR)
+        );
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+        uint256 amountOut = tychoRouter.splitSwap(
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1 ether,
+            1 ether,
+            2,
+            ALICE,
+            noClientFee(),
+            pleEncode(swaps)
+        );
+        vm.stopPrank();
+
+        assertGt(amountOut, 1 ether);
+        assertEq(IERC20(WETH_ADDR).balanceOf(ALICE), amountOut);
+        assertEq(IERC20(USDC_ADDR).balanceOf(tychoRouterAddr), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(address(fallbackRouter)), 0);
+    }
+
     /// A fallback venue that reports success but pays nothing is caught by the
     /// route-level minAmountOut -- the backstop that replaces any in-slot
     /// output check in the fallback slot.
