@@ -66,7 +66,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for CurveState {
 
         // Load proxy/implementation contracts so getter delegatecalls resolve (persists into the
         // shared DB for later delta_transition rebuilds).
-        load_stateless_contracts(&engine, &value.state.attributes).await?;
+        load_stateless_contracts(&engine, &value.state.attributes)?;
 
         let pool_alloy = AlloyAddress::from_slice(pool_address.as_ref());
         // Ensure the pool's actual MATH() contract is loaded — the indexed math address can be

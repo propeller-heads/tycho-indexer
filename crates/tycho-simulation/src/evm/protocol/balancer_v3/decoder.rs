@@ -58,7 +58,6 @@ impl TryFromWithBlock<ComponentWithState, tycho_client::feed::BlockHeader> for B
         // That implementation is published as a stateless contract on the component, so its code
         // has to be in the engine before any getter runs.
         load_stateless_contracts(&engine, &value.state.attributes)
-            .await
             .map_err(|e| InvalidSnapshotError::ValueError(e.to_string()))?;
 
         // The component's token list is the pool's registration order, which its balances, rates

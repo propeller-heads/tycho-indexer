@@ -228,6 +228,16 @@ pub(crate) async fn get_code_for_contract(
     address: &str,
     connection_string: Option<String>,
 ) -> Result<Bytecode, SimulationError> {
+    fetch_code_for_contract(address, connection_string)
+}
+
+/// Synchronous form of [`get_code_for_contract`], for callers that are not `async` (the
+/// `ProtocolSim::delta_transition` path). The RPC round-trip itself blocks in place on the
+/// current tokio runtime either way.
+pub(crate) fn fetch_code_for_contract(
+    address: &str,
+    connection_string: Option<String>,
+) -> Result<Bytecode, SimulationError> {
     // Get the connection string, defaulting to the RPC_URL environment variable
     let connection_string = connection_string.or_else(|| env::var("RPC_URL").ok());
 
@@ -440,7 +450,7 @@ pub fn json_deserialize_be_bigint_list(input: &[u8]) -> Result<Vec<BigInt>, Simu
 /// Addresses may be static (`0x…`) or dynamic (`call:0x<factory>:method()`), and code is fetched
 /// via RPC unless provided inline as `stateless_contract_code_{i}`. The engine shares its DB with
 /// `SHARED_TYCHO_DB`, so accounts loaded here persist for later `delta_transition` rebuilds.
-pub(crate) async fn load_stateless_contracts<D: EngineDatabaseInterface + Clone + Debug>(
+pub(crate) fn load_stateless_contracts<D: EngineDatabaseInterface + Clone + Debug>(
     engine: &SimulationEngine<D>,
     attributes: &HashMap<String, tycho_common::Bytes>,
 ) -> Result<(), SimulationError>
@@ -450,51 +460,63 @@ where
 {
     let mut index = 0;
     while let Some(encoded) = attributes.get(&format!("stateless_contract_addr_{index}")) {
-        let address = String::from_utf8(encoded.to_vec()).map_err(|e| {
-            SimulationError::FatalError(format!("stateless contract address is not UTF-8: {e}"))
-        })?;
         let inline_code = attributes
             .get(&format!("stateless_contract_code_{index}"))
             .map(|value| value.to_vec());
+        init_stateless_contract(engine, encoded, inline_code)?;
         index += 1;
-
-        let (account, code) = match inline_code {
-            Some(bytecode) => (address, Bytecode::new_raw(bytecode.into())),
-            None => {
-                let resolved = if address.starts_with("call") {
-                    resolve_call_address(engine, &address)?
-                } else {
-                    address
-                };
-                let code = get_code_for_contract(&resolved, None).await?;
-                (resolved, code)
-            }
-        };
-        let account: Address = account.parse().map_err(|_| {
-            SimulationError::FatalError(format!(
-                "stateless contract has an invalid address {account}"
-            ))
-        })?;
-        engine
-            .state
-            .init_account(
-                account,
-                AccountInfo {
-                    balance: U256::ZERO,
-                    nonce: 0,
-                    code_hash: code.hash_slow(),
-                    code: Some(code),
-                },
-                None,
-                false,
-            )
-            .map_err(|e| {
-                SimulationError::FatalError(format!(
-                    "stateless contract init_account failed: {e:?}"
-                ))
-            })?;
     }
     Ok(())
+}
+
+/// Load one stateless contract into the engine's DB from a `stateless_contract_addr_{i}` value
+/// (the UTF-8 `0x…` address, or a `call:0x<factory>:method()` directive) and, if given, the inline
+/// `stateless_contract_code_{i}` bytecode; the code is fetched via RPC otherwise. Re-running it for
+/// an address already loaded replaces that account's code, which is how a pool follows an
+/// implementation upgrade published as an attribute update.
+pub(crate) fn init_stateless_contract<D: EngineDatabaseInterface + Clone + Debug>(
+    engine: &SimulationEngine<D>,
+    encoded_address: &tycho_common::Bytes,
+    inline_code: Option<Vec<u8>>,
+) -> Result<(), SimulationError>
+where
+    <D as DatabaseRef>::Error: Debug,
+    <D as EngineDatabaseInterface>::Error: Debug,
+{
+    let address = String::from_utf8(encoded_address.to_vec()).map_err(|e| {
+        SimulationError::FatalError(format!("stateless contract address is not UTF-8: {e}"))
+    })?;
+    let (account, code) = match inline_code {
+        Some(bytecode) => (address, Bytecode::new_raw(bytecode.into())),
+        None => {
+            let resolved = if address.starts_with("call") {
+                resolve_call_address(engine, &address)?
+            } else {
+                address
+            };
+            let code = fetch_code_for_contract(&resolved, None)?;
+            (resolved, code)
+        }
+    };
+    let account: Address = account.parse().map_err(|_| {
+        SimulationError::FatalError(format!("stateless contract has an invalid address {account}"))
+    })?;
+    engine
+        .state
+        .init_account(
+            account,
+            AccountInfo {
+                balance: U256::ZERO,
+                nonce: 0,
+                code_hash: code.hash_slow(),
+                code: Some(code),
+            },
+            None,
+            false,
+        )
+        .map_err(|e| {
+            SimulationError::FatalError(format!("stateless contract init_account failed: {e:?}"))
+        })
 }
 
 /// Resolve a dynamic `call:0x<address>:method()` directive to a concrete implementation address by

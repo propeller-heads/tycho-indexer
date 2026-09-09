@@ -31,6 +31,7 @@ use super::{
     erc20_token::{Overwrites, TokenProxyOverwriteFactory},
     models::Capability,
     tycho_simulation_contract::TychoSimulationContract,
+    utils::init_stateless_contract,
 };
 use crate::evm::{
     engine_db::{engine_db_interface::EngineDatabaseInterface, tycho_db::PreCachedDB},
@@ -1213,6 +1214,21 @@ where
         // change here turns into a miss on the next read. Spot prices are deliberately allowed
         // to go stale when `update_pool_state` is skipped below — the `manual_updates` contract.
 
+        // A proxy pool whose delegatecall target is replaced after the snapshot (e.g. a Tessera
+        // pair implementation upgrade) publishes the new address as a `stateless_contract_addr_{i}`
+        // update. Its indexed storage already points at the new code, so without loading it here
+        // every simulation would fail on a missing account until the consumer restarted.
+        for (key, encoded_address) in &delta.updated_attributes {
+            let Some(index) = key.strip_prefix("stateless_contract_addr_") else {
+                continue;
+            };
+            let inline_code = delta
+                .updated_attributes
+                .get(&format!("stateless_contract_code_{index}"))
+                .map(|code| code.to_vec());
+            init_stateless_contract(&self.adapter_contract.engine, encoded_address, inline_code)?;
+        }
+
         if self.manual_updates {
             // Directly check for "update_marker" in `updated_attributes`
             if let Some(marker) = delta
@@ -1981,6 +1997,71 @@ mod tests {
             pool_state.block_overrides,
             Some(BlockEnvOverrides { number: Some(123), timestamp: Some(456) })
         );
+    }
+
+    #[tokio::test]
+    async fn test_delta_transition_loads_updated_stateless_contract() {
+        let mut pool_state = setup_pool_state().await;
+        pool_state.manual_updates = true;
+        let new_implementation =
+            Address::from_str("0x1111111111111111111111111111111111111111").unwrap();
+        let code = vec![0x60, 0x01, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
+
+        let delta = ProtocolStateDelta {
+            component_id: pool_state.id.clone(),
+            updated_attributes: HashMap::from([
+                (
+                    "stateless_contract_addr_0".to_string(),
+                    Bytes::from(
+                        new_implementation
+                            .to_string()
+                            .into_bytes(),
+                    ),
+                ),
+                ("stateless_contract_code_0".to_string(), Bytes::from(code.clone())),
+            ]),
+            deleted_attributes: HashSet::new(),
+        };
+
+        pool_state
+            .delta_transition(delta, &HashMap::new(), &Balances::default())
+            .unwrap();
+
+        let account = pool_state
+            .adapter_contract
+            .engine
+            .state
+            .basic_ref(new_implementation)
+            .unwrap()
+            .expect("the updated stateless contract must be loaded into the engine DB");
+        assert_eq!(
+            account
+                .code
+                .unwrap()
+                .original_bytes()
+                .to_vec(),
+            code
+        );
+    }
+
+    #[tokio::test]
+    async fn test_delta_transition_rejects_non_utf8_stateless_address() {
+        let mut pool_state = setup_pool_state().await;
+        pool_state.manual_updates = true;
+
+        let delta = ProtocolStateDelta {
+            component_id: pool_state.id.clone(),
+            updated_attributes: HashMap::from([(
+                "stateless_contract_addr_0".to_string(),
+                Bytes::from(vec![0xff, 0xfe, 0xfd]),
+            )]),
+            deleted_attributes: HashSet::new(),
+        };
+
+        let err = pool_state
+            .delta_transition(delta, &HashMap::new(), &Balances::default())
+            .unwrap_err();
+        assert!(matches!(err, TransitionError::SimulationError(_)), "got {err:?}");
     }
 
     #[tokio::test]
