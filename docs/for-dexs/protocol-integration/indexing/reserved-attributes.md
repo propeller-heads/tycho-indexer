@@ -95,6 +95,8 @@ The value for `stateless_contract_addr_{index}` can be provided in two ways:
 1. **Direct Contract Address**: A static contract address can be specified directly.
 2. **Dynamic Address Resolution**: Alternatively, you can define a function or method that dynamically resolves and retrieves the stateless contract address at runtime. This can be particularly useful in complex contract architectures, such as those using a dynamic proxy pattern. It is important to note that the called contract must be indexed by the Substreams module.
 
+The attribute stays updatable after creation. When a proxy's implementation changes, emit the new address as an update to the same `stateless_contract_addr_{index}` (for example, from the write to the proxy's EIP-1967 implementation slot): `tycho-simulation` loads the new contract's code as soon as the update arrives, so the component keeps simulating without a restart. Only the component's own contracts and its stateless contracts reach consumers — an implementation that the Substreams module indexes as a plain contract change, without listing it on a component or as a stateless contract, never does.
+
 #### Type
 
 This attribute value must be provided as a UTF-8 encoded string in bytes.
