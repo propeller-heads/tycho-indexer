@@ -190,7 +190,9 @@ The venue data always occupies the tail of the swap data, so any venue can be va
 one that is today.
 
 Swap direction for Uniswap V2/V3/V4 comes from the sort order of `tokenIn` and `tokenOut`, so it is not encoded. Fluid's
-`zero2one` is the dex's own token order, which is not the address sort order, so it is.
+`zero2one` is the dex's own token order, which is not the address sort order, so it is. A `zero2one` that contradicts
+the leg reverts either `TychoFallbackRouter__CallbackTokenMismatch`, when the dex asks `dexCallback` for the other
+token, or `FluidDexError`, when the dex prices `amountIn` against the other side's reserves first.
 
 Constraints:
 

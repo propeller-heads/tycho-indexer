@@ -96,6 +96,9 @@ library FallbackSwaps {
 
 error RevertingPool__Nope();
 
+/// @notice Fluid's own error, raised with an internal error id.
+error FluidDexError(uint256 errorId);
+
 /// @notice A V2-shaped pair with nothing in it, for the zero-reserve guard.
 contract EmptyReservePair {
     function getReserves()
@@ -653,19 +656,34 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
         _assertRouterDrained(USDT_ADDR, SUSDE_ADDR);
     }
 
-    /// A mis-encoded `zero2one` makes the dex request the other side; the
-    /// failure names the cause instead of dying inside Fluid's accounting.
+    /// `zero2one = true` means the dex pulls sUSDE, but the leg pays USDT, so
+    /// `dexCallback` is asked for the wrong token and names the cause.
     function testFluidWrongDirectionNamesCause() public {
         uint256 amountIn = 10e18;
-        deal(SUSDE_ADDR, address(router), amountIn);
+        deal(USDT_ADDR, address(router), amountIn);
 
         vm.expectRevert(
             abi.encodeWithSelector(
                 TychoFallbackRouter__CallbackTokenMismatch.selector,
-                USDT_ADDR,
-                SUSDE_ADDR
+                SUSDE_ADDR,
+                USDT_ADDR
             )
         );
+        router.swap(
+            FallbackSwaps.leg(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.fluidV1(FLUID_DEX, true)
+        );
+    }
+
+    /// The other mis-encoding never reaches `dexCallback`: the dex prices the
+    /// amount against its own reserves first, and 10e18 is far past what the
+    /// USDT side holds, so Fluid's own error is the swap's error.
+    function testFluidWrongDirectionRevertsInsideDex() public {
+        uint256 amountIn = 10e18;
+        deal(SUSDE_ADDR, address(router), amountIn);
+
+        vm.expectPartialRevert(FluidDexError.selector);
         router.swap(
             FallbackSwaps.leg(SUSDE_ADDR, USDT_ADDR, amountIn, BOB),
             address(pamm),

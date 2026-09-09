@@ -334,7 +334,9 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     }
 
     /// @dev Venue data: `[dex: 20][zero2one: 1]`. `zero2one` is the dex's token order, not the
-    /// address sort order, so it cannot be derived.
+    /// address sort order, so it cannot be derived. A `zero2one` that contradicts the leg fails
+    /// one of two ways: the dex asks `dexCallback` for the other token, which names the cause, or
+    /// the dex prices `amountIn` against the other side's reserves and reverts inside itself.
     function _swapFluidV1(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
