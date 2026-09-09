@@ -67,6 +67,12 @@ pub fn address_from_word(word: &[u8]) -> Vec<u8> {
     address.to_vec()
 }
 
+/// The value of a `stateless_contract_addr_{i}` attribute: the address as a UTF-8 `0x…` string,
+/// which is how `tycho-simulation` decodes it before fetching the contract's code over RPC.
+pub fn stateless_contract_address(address: &[u8]) -> Vec<u8> {
+    format!("0x{}", hex::encode(address)).into_bytes()
+}
+
 /// Store key indexing a pair component by its contract address.
 pub fn pair_store_key(pair: &[u8]) -> String {
     format!("pair:{}", hex::encode(pair))
@@ -153,6 +159,16 @@ mod tests {
         assert_eq!(
             hex::encode(engine_pair_slot(&zora, &usdt, 8)),
             "8c09028ad8dbd6bcc77e9754c4adad03da90e13f78e0e2912906cf8ae58033fb"
+        );
+    }
+
+    #[test]
+    fn stateless_contract_address_is_a_utf8_0x_string() {
+        let impl_addr = hex::decode("6d9dd143e42b6338f4f6a7c0c26d124658f641cb").unwrap();
+        let value = stateless_contract_address(&impl_addr);
+        assert_eq!(
+            String::from_utf8(value).unwrap(),
+            "0x6d9dd143e42b6338f4f6a7c0c26d124658f641cb"
         );
     }
 

@@ -1,7 +1,7 @@
 specVersion: v0.1.0
 package:
   name: "base_tessera"
-  version: v0.1.0
+  version: v0.2.0
   url: "https://github.com/propeller-heads/tycho/tree/main/protocols/substreams/base-tessera"
 
 protobuf:
@@ -20,13 +20,13 @@ binaries:
 network: base
 
 # Deployment config (addresses + storage slots) is passed as params so the module can be
-# re-pointed at another Tessera deployment (e.g. BSC) or a new pair-implementation generation
-# without code changes. Hex, no `0x` prefix. `tracked` is the concatenated 20-byte addresses of
-# the code-only satellites (pair implementation generations, pricing libs, the write-path
-# contract) — they are deployed top-level by rotating EOAs and cannot be discovered at creation
-# time; a new generation is appended here and the spkg re-released (HANDOVER §9.3).
+# re-pointed at another Tessera deployment (e.g. BSC) or a pair-implementation generation with
+# a different storage layout without code changes. Hex, no `0x` prefix. Only stable addresses
+# appear here: the pair implementation, pricing lib and write-path contract rotate roughly
+# monthly and are published from the pair's own storage as `stateless_contract_addr_{0,1,2}`
+# attributes, so an upgrade never requires a params change (HANDOVER §12).
 params:
-  map_components: &config "tesseraswap=55555522005bcae1c2424d474bfd5ed477749e3e&engine=31e99e05fee3dce580af777c3fd63ee1b3b40c17&tracked=f3be571a3a73201033b43bec1d1a566d45f5909510182fdad9f530332eb0ccd28edefc83a23b2c426d9dd143e42b6338f4f6a7c0c26d124658f641cbfdb7fa3f95e47624b7423b48462564107aa4e6849f924c0765815851d9f4982c7030e2189a7828a97034c5c74f66d3337777772c2964db31765db23e&treasury_slot=1&treasury=3dbe077e7986657e95e1cc50089f17a5a4af0aae&pair_map_slot=8&pair_base_token_slot=48&pair_quote_token_slot=49&pair_lib_slot=51"
+  map_components: &config "tesseraswap=55555522005bcae1c2424d474bfd5ed477749e3e&engine=31e99e05fee3dce580af777c3fd63ee1b3b40c17&treasury_slot=1&treasury=3dbe077e7986657e95e1cc50089f17a5a4af0aae&pair_map_slot=8&pair_base_token_slot=48&pair_quote_token_slot=49&pair_lib_slot=51&pair_write_path_slot=52"
   store_treasury: *config
   map_relative_balances: *config
   map_protocol_changes: *config

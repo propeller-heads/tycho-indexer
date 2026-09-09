@@ -59,6 +59,11 @@ fn discover(
     let mut tx_components = Vec::new();
     for tx in block.transactions() {
         // First pass over the tx: engine mapping writes and per-address init writes.
+        // Init writes are collected from ANY address on purpose: the pair is CREATEd by the
+        // engine inside this same tx, so its address is unknowable up front, and gating on call
+        // topology (caller == engine) would hard-code an assumption the registry check in the
+        // second pass makes redundant — that check is the actual filter, and it requires the
+        // engine's own cooperation, which unrelated proxy inits can never fake.
         // engine slot key -> value's low 20 bytes.
         let mut engine_writes: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
         let mut candidates: HashMap<Vec<u8>, InitWrites> = HashMap::new();
@@ -103,6 +108,13 @@ fn discover(
             }
         }
 
+        // A component requires the engine registry write, so a tx the engine never wrote in can
+        // be dropped before deriving mapping slots for the unrelated proxy inits that routinely
+        // land in `candidates` on Base.
+        if engine_writes.is_empty() {
+            continue;
+        }
+
         let mut components = Vec::new();
         for (pair, writes) in candidates {
             let (Some(base_token), Some(quote_token)) = (writes.base_token, writes.quote_token)
@@ -124,12 +136,12 @@ fn discover(
             // bookkeeping instead of delegating to an implementation another VM protocol
             // indexed for the same token.
             let self_contained = json_serialize_address_list(&tokens);
-            // Only contracts that exist on-chain at creation time may be referenced here: the
-            // storage layer resolves every entry against known accounts and fails the flush on
-            // a miss. The code-only satellites (pair implementations, pricing libs, the
-            // write-path contract) are deployed at unrelated blocks, so they are delivered as
-            // plain account changes through the tracked-contract predicate instead (and via
-            // `initialized_accounts` bootstrap for ranges that start after their deployment).
+            // Only the stateful contracts belong here: this list is fixed for the component's
+            // lifetime and every entry must already exist as an indexed account. The contracts
+            // the pair delegatecalls into (implementation, pricing lib, write-path) are
+            // code-only and rotate roughly monthly, so they are published as
+            // `stateless_contract_addr_{i}` attributes instead — see
+            // `map_protocol_changes::extract_delegate_targets`.
             let contracts = vec![config.tesseraswap.clone(), config.engine.clone(), pair.clone()];
             components.push(
                 ProtocolComponent::new(&component_id(&pair))
@@ -160,10 +172,9 @@ mod tests {
 
     const PARAMS: &str = "tesseraswap=55555522005bcae1c2424d474bfd5ed477749e3e\
                           &engine=31e99e05fee3dce580af777c3fd63ee1b3b40c17\
-                          &tracked=\
                           &treasury_slot=1&treasury=3dbe077e7986657e95e1cc50089f17a5a4af0aae\
                           &pair_map_slot=8&pair_base_token_slot=48&pair_quote_token_slot=49\
-                          &pair_lib_slot=51";
+                          &pair_lib_slot=51&pair_write_path_slot=52";
     const ENGINE: [u8; 20] = hex!("31e99e05fee3dce580af777c3fd63ee1b3b40c17");
     // The NVDAc pair creation (Base block 50,526,653) as ground truth.
     const PAIR: [u8; 20] = hex!("ede940cdf2a9c5620cbf97e45947594723e29c14");

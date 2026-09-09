@@ -12,7 +12,10 @@ use tycho_substreams::{
 };
 
 use crate::{
-    common::{address_from_word, all_pairs, is_zero, pair_store_key, slot_key, EIP1967_IMPL_SLOT},
+    common::{
+        address_from_word, all_pairs, is_zero, pair_store_key, slot_key,
+        stateless_contract_address, EIP1967_IMPL_SLOT,
+    },
     config::DeploymentConfig,
 };
 
@@ -59,19 +62,16 @@ pub fn map_protocol_changes(
                 });
         });
 
-    // Full storage + code of the venue contracts. The set is dynamic: the stable addresses and
-    // the code-only satellites come from params; each pair contract is discovered at component
-    // creation and resolved through the components store (visible in-block, so a pair's
-    // creation code and init storage are captured in its creation transaction).
-    let tracked = config.tracked_addresses();
+    // Full storage + code of the stateful venue contracts: the two stable addresses from
+    // params, plus every pair contract, discovered at component creation and resolved through
+    // the components store (visible in-block, so a pair's creation code and init storage are
+    // captured in its creation transaction). The contracts a pair delegatecalls into are
+    // code-only and are not indexed at all — see `extract_delegate_targets`.
     extract_contract_changes_builder(
         &block,
         |addr| {
             addr == config.tesseraswap.as_slice() ||
                 addr == config.engine.as_slice() ||
-                tracked
-                    .iter()
-                    .any(|t| t.as_slice() == addr) ||
                 components_store
                     .get_last(pair_store_key(addr))
                     .is_some()
@@ -86,13 +86,14 @@ pub fn map_protocol_changes(
         &pairs_store,
         &mut transaction_changes,
     );
-    extract_admin_mutations(
+    extract_engine_changes(
         &block,
         &config,
         &components_store,
         &pairs_store,
         &mut transaction_changes,
     );
+    extract_delegate_targets(&block, &config, &components_store, &mut transaction_changes);
     mark_pairs_updated(&config, &components_store, &pairs_store, &mut transaction_changes);
 
     Ok(BlockChanges {
@@ -193,16 +194,11 @@ fn extract_treasury_changes(
     }
 }
 
-/// Surfaces the admin mutations that can silently break simulation, as attributes for
-/// monitoring to alert on (the runbook then adds the new address to `params` and re-releases
-/// the spkg — see HANDOVER §9.3):
-///
-/// * an engine hot-swap (TesseraSwap `slot0` write) → `engine` attribute on every pair;
-/// * a pair implementation upgrade (EIP-1967 slot write on a tracked pair) → `pair_impl` attribute
-///   on that pair;
-/// * a pricing-lib (re)assignment (pair lib-slot write) → `pair_lib` attribute on that pair — a lib
-///   generation not in the `tracked` params would otherwise break that pair with no signal.
-fn extract_admin_mutations(
+/// Surfaces an engine hot-swap (TesseraSwap `slot0` write) as an `engine` attribute on every
+/// pair. The engine is a stateful contract that is part of every component's contract list, so
+/// a replacement cannot be followed dynamically — this attribute exists for monitoring to alert
+/// on (never observed on Base; `changeTesseraEngine` has not been called since deployment).
+fn extract_engine_changes(
     block: &eth::v2::Block,
     config: &DeploymentConfig,
     components_store: &StoreGetProto<ProtocolComponent>,
@@ -210,7 +206,6 @@ fn extract_admin_mutations(
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
     let engine_slot = slot_key(ENGINE_SLOT);
-    let lib_slot = slot_key(config.pair_lib_slot);
     let mut pairs: Option<Vec<String>> = None;
     for tx in block.transactions() {
         for call in tx
@@ -219,108 +214,128 @@ fn extract_admin_mutations(
             .filter(|c| !c.state_reverted)
         {
             for change in &call.storage_changes {
-                if change.address == config.tesseraswap &&
-                    change.key == engine_slot &&
-                    !is_zero(&change.old_value)
+                // old_value == 0 is the constructor write, before any pair exists.
+                if change.address != config.tesseraswap ||
+                    change.key != engine_slot ||
+                    is_zero(&change.old_value)
                 {
-                    // old_value == 0 is the constructor write, before any pair exists.
-                    let engine = address_from_word(&change.new_value);
-                    let pairs = pairs.get_or_insert_with(|| {
-                        all_pairs(components_store, pairs_store)
-                            .into_iter()
-                            .map(|c| c.id)
-                            .collect()
+                    continue;
+                }
+                let engine = address_from_word(&change.new_value);
+                let pairs = pairs.get_or_insert_with(|| {
+                    all_pairs(components_store, pairs_store)
+                        .into_iter()
+                        .map(|c| c.id)
+                        .collect()
+                });
+                let transaction: Transaction = tx.into();
+                let builder = transaction_changes
+                    .entry(transaction.index)
+                    .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
+                for pair in pairs.iter() {
+                    builder.add_entity_change(&EntityChanges {
+                        component_id: pair.clone(),
+                        attributes: vec![Attribute {
+                            name: "engine".to_string(),
+                            value: engine.clone(),
+                            change: ChangeType::Update.into(),
+                        }],
                     });
-                    let transaction: Transaction = tx.into();
-                    let builder = transaction_changes
-                        .entry(transaction.index)
-                        .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
-                    for pair in pairs.iter() {
-                        builder.add_entity_change(&EntityChanges {
-                            component_id: pair.clone(),
-                            attributes: vec![Attribute {
-                                name: "engine".to_string(),
-                                value: engine.clone(),
-                                change: ChangeType::Update.into(),
-                            }],
-                        });
-                        builder.mark_component_as_updated(pair);
-                    }
-                } else if change.key == EIP1967_IMPL_SLOT.as_slice() && !is_zero(&change.old_value)
-                {
-                    // old_value == 0 is pair init, already covered by component creation.
-                    emit_pair_attribute(
-                        "pair_impl",
-                        change,
-                        tx,
-                        components_store,
-                        transaction_changes,
-                    );
-                } else if change.key == lib_slot && !is_zero(&change.new_value) {
-                    // Includes the post-creation first assignment: the lib is not part of the
-                    // component's static attributes, so every write is surfaced.
-                    emit_pair_attribute(
-                        "pair_lib",
-                        change,
-                        tx,
-                        components_store,
-                        transaction_changes,
-                    );
+                    builder.mark_component_as_updated(pair);
                 }
             }
         }
     }
 }
 
-/// Emits a monitoring attribute (an address-valued update) on the pair the storage change
-/// belongs to, and marks it for re-simulation. No-op for addresses that are not a known pair.
-fn emit_pair_attribute(
-    name: &str,
-    change: &eth::v2::StorageChange,
-    tx: &eth::v2::TransactionTrace,
+/// Publishes the contracts a pair delegatecalls into as `stateless_contract_addr_{i}` attributes:
+///
+/// * `_0` — the pair implementation (EIP-1967 slot), written at pair init and on every upgrade;
+/// * `_1` — the pricing lib (`pair_lib_slot`), assigned after creation and on lib upgrades;
+/// * `_2` — the write-path contract (`pair_write_path_slot`), assigned after creation.
+///
+/// These contracts are code-only: they are deployed top-level by rotating EOAs at blocks unrelated
+/// to any pair, so their creation cannot be witnessed here, and a component's contract list is
+/// fixed at creation, so they could not be attached to the component later even if it were. The
+/// attribute path sidesteps both: the consumer fetches the code via `eth_getCode` when it loads
+/// the pool (and, in `tycho-simulation`, again whenever one of these attributes changes), so an
+/// implementation upgrade is followed with no params change, spkg release or re-sync.
+///
+/// Consumers read the indices contiguously, so `_2` only becomes visible once `_1` has been
+/// assigned. On Base the lib is always assigned before the write-path contract, and a pair
+/// without a lib cannot quote anyway.
+fn extract_delegate_targets(
+    block: &eth::v2::Block,
+    config: &DeploymentConfig,
     components_store: &StoreGetProto<ProtocolComponent>,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    let Some(component) = components_store.get_last(pair_store_key(&change.address)) else {
-        return;
-    };
-    let transaction: Transaction = tx.into();
-    let builder = transaction_changes
-        .entry(transaction.index)
-        .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
-    builder.add_entity_change(&EntityChanges {
-        component_id: component.id.clone(),
-        attributes: vec![Attribute {
-            name: name.to_string(),
-            value: address_from_word(&change.new_value),
-            change: ChangeType::Update.into(),
-        }],
-    });
-    builder.mark_component_as_updated(&component.id);
+    let lib_slot = slot_key(config.pair_lib_slot);
+    let write_path_slot = slot_key(config.pair_write_path_slot);
+    for tx in block.transactions() {
+        for call in tx
+            .calls
+            .iter()
+            .filter(|c| !c.state_reverted)
+        {
+            for change in &call.storage_changes {
+                if is_zero(&change.new_value) {
+                    continue;
+                }
+                let name = if change.key == EIP1967_IMPL_SLOT.as_slice() {
+                    "stateless_contract_addr_0"
+                } else if change.key == lib_slot {
+                    "stateless_contract_addr_1"
+                } else if change.key == write_path_slot {
+                    "stateless_contract_addr_2"
+                } else {
+                    continue;
+                };
+                let Some(component) = components_store.get_last(pair_store_key(&change.address))
+                else {
+                    continue;
+                };
+                // A zero → non-zero write is the slot's first assignment (pair init for the
+                // implementation slot, the follow-up admin transaction for the other two).
+                let change_type = if is_zero(&change.old_value) {
+                    ChangeType::Creation
+                } else {
+                    ChangeType::Update
+                };
+                let transaction: Transaction = tx.into();
+                let builder = transaction_changes
+                    .entry(transaction.index)
+                    .or_insert_with(|| TransactionChangesBuilder::new(&transaction));
+                builder.add_entity_change(&EntityChanges {
+                    component_id: component.id.clone(),
+                    attributes: vec![Attribute {
+                        name: name.to_string(),
+                        value: stateless_contract_address(&address_from_word(&change.new_value)),
+                        change: change_type.into(),
+                    }],
+                });
+                builder.mark_component_as_updated(&component.id);
+            }
+        }
+    }
 }
 
 /// Marks pairs for re-simulation from tracked-contract changes: a change to a shared contract
-/// (TesseraSwap, engine, any code-only satellite) marks every pair; a change to a pair
-/// contract marks that pair. Prices post into each pair every block, so in steady state every
-/// pair re-simulates every block — that is the venue repricing, not noise.
+/// (TesseraSwap, engine) marks every pair; a change to a pair contract marks that pair. Prices
+/// post into each pair every block, so in steady state every pair re-simulates every block —
+/// that is the venue repricing, not noise.
 fn mark_pairs_updated(
     config: &DeploymentConfig,
     components_store: &StoreGetProto<ProtocolComponent>,
     pairs_store: &StoreGetString,
     transaction_changes: &mut HashMap<u64, TransactionChangesBuilder>,
 ) {
-    let tracked = config.tracked_addresses();
     let mut pairs: Option<Vec<String>> = None;
     for builder in transaction_changes.values_mut() {
         let mut mark_all = false;
         let mut mark_ids: Vec<String> = Vec::new();
         for addr in builder.changed_contracts() {
-            if addr == config.tesseraswap.as_slice() ||
-                addr == config.engine.as_slice() ||
-                tracked
-                    .iter()
-                    .any(|t| t.as_slice() == addr)
-            {
+            if addr == config.tesseraswap.as_slice() || addr == config.engine.as_slice() {
                 mark_all = true;
                 break;
             }

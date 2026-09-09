@@ -31,12 +31,12 @@ has its **own store contract** (an EIP-1967 proxy), all pointing at one shared i
 | `0x31e99e05fee3dce580af777c3fd63ee1b3b40c17` | engine — pricing + book registry (TesseraSwap `slot0`) | no | 15.6 KB, **not** a proxy |
 | `0x3dbe077e7986657e95e1cc50089f17a5a4af0aae` | treasury — all inventory (TesseraSwap `slot1`) | no | 4.0 KB |
 | `0xdbd31ea3de20a2b36a5bd36c7167699f2450b5c6` | owner (TesseraSwap `slot2`) — a **Gnosis Safe**, admin surface | — | 4.0 KB |
-| `0x6d9dd143e42b6338f4f6a7c0c26d124658f641cb` | store implementation, **generation 3** (deployed 49,879,701) | no | 18.7 KB |
-| `0xfdb7fa3f95e47624b7423b48462564107aa4e684` | per-book pricing lib (WETH, cbBTC books), code-only | no | 1.2 KB |
-| `0x9f924c0765815851d9f4982c7030e2189a7828a9` | per-book pricing lib (EURC, VIRTUAL, AERO, VVV, deSPXA), code-only | no | 1.0 KB |
-| `0x7034c5c74f66d3337777772c2964db31765db23e` | write-path-only contract (1 slot per swap) — **identity open** | no | 4.4 KB |
+| `0x6d9dd143e42b6338f4f6a7c0c26d124658f641cb` | pair implementation, **generation 12** (deployed 49,879,701; full list §9.6) — `stateless_contract_addr_0` | no | 18.7 KB |
+| `0xfdb7fa3f95e47624b7423b48462564107aa4e684` | per-pair pricing lib (WETH, cbBTC pairs), pair slot 51 — `stateless_contract_addr_1` | no | 1.2 KB |
+| `0x9f924c0765815851d9f4982c7030e2189a7828a9` | per-pair pricing lib (all other pairs), pair slot 51 — `stateless_contract_addr_1` | no | 1.0 KB |
+| `0x7034c5c74f66d3337777772c2964db31765db23e` | write-path contract, pair slot 52 (reads 1 slot per swap, always zero; identity open) — `stateless_contract_addr_2` | no | 4.4 KB |
 | `0x505352DA2918C6a06f12F3d59FFb79905d43439f` | pair-list helper `getTesseraPairs() → address[][]` (view-only convenience) | no | 3.2 KB |
-| `0x3b9e5466713910489db4b30e5b7c26c4545bf62f` | impl deployer EOA (top-level deploy of gen-3 impl) | — | EOA |
+| `0x3b9e5466713910489db4b30e5b7c26c4545bf62f` | one of ≥5 rotating deployer EOAs (deployed the gen-12 impl; see §12) | — | EOA |
 
 ### Per-book stores (live books, 2026-08-28)
 
@@ -215,10 +215,11 @@ revert `T33` — **venue not configured/live on BSC** (2026-08-28). Re-check bef
 2. **Freshness gate exists** (relative, §4). No `override_block_timestamp` machinery needed, but
    the adapter/harness must simulate with block env = indexed block (default behavior — assert it
    in tests). Add per-book post-liveness monitoring (store slot0 vs head).
-3. **Impl-generation bootstrap risk**: a gen-4 impl will be deployed *before* any store references
-   it; a fixed predicate would miss its creation code. Mitigations, in order: (a) track top-level
-   creations from the impl-deployer EOA `0x3b9e5466…` as candidate contracts; (b) runbook — on
-   impl-slot change alert, add the address to params and re-sync. Decide in Phase 2.
+3. ~~**Impl-generation bootstrap risk**~~ **RESOLVED (2026-09-09, §12)**: the implementation,
+   pricing lib and write-path contract are no longer indexed at all. Their addresses are read from
+   the pair's own storage slots and published as `stateless_contract_addr_{0,1,2}` attributes;
+   the consumer fetches their code over RPC. Neither the deployer-EOA idea (there are ≥5 rotating
+   deployer keys) nor the params runbook is needed.
 
 ## 9.5 Adversarial-review findings (2026-08-28, addressed in-package)
 
@@ -226,10 +227,9 @@ An independent review of the Phase 2–4 diff found and the package now fixes:
 
 1. **Components must not reference not-yet-deployed contracts** (sync-breaking): the storage
    layer resolves every `contracts` entry against known accounts and fails the flush on a miss.
-   Components now carry only `[TesseraSwap, engine, own store]`; the code-only satellites are
-   delivered as plain account changes via the tracked predicate (production syncs from
-   initialBlock, so their creations are witnessed) and via `initialized_accounts` in the
-   integration-test yaml.
+   Components carry only `[TesseraSwap, engine, own pair]`. (The follow-up in this item —
+   delivering the code-only contracts as plain account changes via a `tracked` params list —
+   turned out never to reach consumers at all; superseded by §12.)
 2. **Seed-skip granularity** (balance drift): snapshot suppression of event deltas is per
    `(token, component)` — a new book's USDC seed no longer swallows same-block USDC deltas on
    the other books.
@@ -240,11 +240,55 @@ An independent review of the Phase 2–4 diff found and the package now fixes:
 4. **Store re-deploy resilience**: `all_books` dedupes by component id so a store re-deploy for
    an existing base token cannot double the USDC fan-out (which would panic the balance store on
    duplicate ordinals).
-5. **Pricing-lib alert**: writes to the store's lib slot (51) now emit a `book_lib` attribute
-   (like `engine` / `store_impl`) so a new lib generation missing from `tracked` params alerts
-   instead of silently breaking that book.
+5. **Pricing-lib visibility**: writes to the pair's lib slot (51) are surfaced as an attribute
+   (originally `book_lib`, a monitoring alert; since §12 it is `stateless_contract_addr_1`, which
+   the consumer acts on directly).
 6. Balance deltas sort by `(tx index, ordinal)` so one transaction's deltas stay contiguous for
    the downstream aggregation; `store_treasury` uses the padded word decoder.
+
+## 9.6 Upgrade cadence — CORRECTED 2026-09-01 (was materially wrong)
+
+Earlier revisions of this document said "3 implementation generations in 10 months, ~every 4-5
+months". That came from a sampling error: a binary search for the *first* change plus deploy-block
+lookups for three addresses already known from recent access lists, treated as the full set.
+
+A complete enumeration (coarse sampling + per-segment bisection of the EIP-1967 slot on the WETH
+and cbBTC pairs, whose transition blocks match exactly ⇒ fleet-wide `upgradeAllTo`) gives:
+
+**12 implementation generations, 11 upgrades in 286 days — a mean interval of 26 days**, shortest
+2 days:
+
+| block | date | implementation |
+|---|---|---|
+| 37,518,780 | 2025-10-30 | `0xf3be571a…` (creation) |
+| 38,955,210 | 2025-12-02 | `0x0bd16207…` |
+| 39,081,165 | 2025-12-05 | `0x3c3b4275…` |
+| 40,761,403 | 2026-01-13 | `0x5bb9486e…` |
+| 42,118,215 | 2026-02-13 | `0x69c980d4…` |
+| 42,930,200 | 2026-03-04 | `0x42d0e058…` |
+| 43,278,147 | 2026-03-12 | `0xa01f5e35…` |
+| 43,528,991 | 2026-03-18 | `0x32a0bcc0…` |
+| 43,833,660 | 2026-03-25 | `0x10182fda…` |
+| 48,155,369 | 2026-07-03 | `0xffeeb848…` |
+| 49,533,036 | 2026-08-04 | `0x995d3dfb…` |
+| 49,880,623 | 2026-08-12 | `0x6d9dd143…` (current) |
+
+**The pricing lib is mutable too** — slot 51 starts at zero and has taken four non-zero values,
+including non-zero→non-zero transitions, and the per-pair grouping itself changes:
+`0xbb3f6e64…` (2026-03-18) → `0xd4e32939…` (2026-03-25) → `0x9f924c07…` (2026-04-12) →
+`0xfdb7fa3f…` (2026-04-28, WETH/cbBTC only; the other pairs stay on `0x9f924c07…`).
+
+**Consequences (as assessed 2026-09-01).**
+
+1. The then-current `tracked` params were missing **9 implementation generations and 2 lib
+   generations**, and the manual "append to params, re-release the spkg, re-sync" runbook, sized
+   against a 4-5 month cadence, is not viable at 26 days.
+2. The failure mode is safe: a missing implementation means no code at the delegate target, the
+   simulation errors on the missing account, and the pair drops out of routing. Down, not
+   mispriced.
+
+**Resolution (2026-09-09): §12.** The `tracked` params are gone; upgrades are followed through
+`stateless_contract_addr_{i}` attributes with no operator action.
 
 ## 10. Open questions (not blocking Phase 2)
 
@@ -323,3 +367,61 @@ prove the venue is not single-quote by construction; only ~half the registry is 
    `NotImplemented` (no on-chain token→pair enumeration exists).
 5. Attributes renamed: `store_impl` → `pair_impl`; `price_store` dropped (redundant with the id);
    `book_lib` → `pair_lib`; protocol type `tessera_book` → `tessera_pair`.
+
+## 12. Delegate targets as `stateless_contract_addr_{i}` (2026-09-09)
+
+### What changed
+
+The pair implementation (EIP-1967 slot), pricing lib (pair slot 51) and write-path contract (pair
+slot 52) are no longer indexed. Every write to one of those slots on a known pair is published as
+an attribute on that pair's component — `stateless_contract_addr_0` / `_1` / `_2`, value = the
+address as a UTF-8 `0x…` string — and `tycho-simulation` fetches the code over `RPC_URL`
+(`vm/decoder.rs` → `state_builder.rs` on snapshot; `state.rs::delta_transition` on update). The
+`tracked` params list, its runbook, and the satellite entries in `initialized_accounts` are gone.
+Package version 0.1.0 → 0.2.0 (attribute names changed: `pair_impl` → `_0`, `pair_lib` → `_1`).
+
+### Why the previous design could not have worked
+
+The `tracked` list did put the implementation's code into the **indexer** DB, but nothing ever
+carried it to a **consumer**. `tycho-client` fetches exactly the accounts in the components'
+`contract_addresses` (`feed/synchronizer.rs`, `fetch_snapshot` and the live path) and drops
+account deltas outside that set; a component's contract list is written once at creation
+(`postgres/protocol.rs::add_protocol_components`) and only DCI can extend it. Our components list
+`[TesseraSwap, engine, pair]`, so the implementation was never delivered, and `PreCachedDB` has no
+RPC fallback (`tycho_db.rs::basic_ref` → `MissingAccount`). This was not caught because the
+protocol-testing harness resolves accounts the same way and its end-to-end run had not been done;
+the adapter fork tests run directly against a fork and never touch the Tycho delivery path.
+
+### Alternatives measured and rejected
+
+- **Witness the deploy via a deployer-EOA predicate**: the six resolvable satellites were deployed
+  by four distinct EOAs (`0x61e9…`, `0x5745…`, `0xbf2c…`, `0x60a8…`), plus `0x3b9e…` for gen-12 —
+  rotating keys, nothing to key on.
+- **Witness the deploy via a bytecode fingerprint**: the four engine→pair selectors (`4c7c47b7`,
+  `4a036fcb`, `c55dae63`, `217a4b70`) are present in 12/12 implementation generations, so this
+  *would* identify a new implementation at its deployment block. It only fixes the indexer side,
+  which — per the previous section — is not the side that was broken. Kept on record in case DCI
+  or an indexer-side delivery mechanism ever makes indexer-held code reachable.
+- **DCI**: would follow upgrades automatically (re-trace on slot change) but needs
+  `debug_traceCall`, which our Base RPC does not offer.
+
+### Behaviour on an upgrade
+
+1. Owner Safe → engine `upgradeAllTo(newImpl)`; each pair's EIP-1967 slot flips.
+2. Substreams: the slot write is a storage change on an indexed pair → `stateless_contract_addr_0`
+   update on every pair in that block, plus `update_marker`.
+3. Consumer already running: `delta_transition` sees the attribute, `eth_getCode(newImpl)`, loads
+   the account, re-simulates. Consumer starting later: the snapshot carries the new attribute and
+   the decoder loads it. No restart, no params change, no spkg release.
+4. Failure modes stay fail-safe: RPC unreachable → `RecoverableError`, pool errors until the next
+   attribute or restart; never a stale price.
+
+Attribute indices are read contiguously by the consumer, so `_2` is invisible until `_1` exists.
+On Base the lib is always assigned before the write-path contract (NVDAc: 50,527,583 vs
+50,527,613) and a pair without a lib cannot quote, so this ordering costs nothing.
+
+### What still cannot be followed dynamically
+
+Only the engine (`changeTesseraEngine`). It is stateful and sits in every component's contract
+list, so a replacement is a re-index. It has never been called on Base; the `engine` attribute
+remains as the alert.
