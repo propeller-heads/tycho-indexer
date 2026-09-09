@@ -134,7 +134,7 @@ contract RevertingPool {
 }
 
 /// @notice Accepts `tokenIn` and reports success without paying anything.
-contract SilentVenue {
+contract SilentPropAMM {
     function swap(
         address, /* tokenIn */
         address, /* tokenOut */
@@ -334,7 +334,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
     }
 
     /// A live pAMM fills and the fallback is never touched.
-    function testPropAMMFillsPrimary() public {
+    function testPropAMMFills() public {
         // 1 WETH for the whole 10 000 USDC, far off the Uniswap V3 price of roughly 4 WETH, so
         // the asserted amount can only have come from the pAMM.
         pamm.setPrice(USDC_ADDR, WETH_ADDR, 1e26);
@@ -364,7 +364,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         );
 
         assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
-        // The failed primary's transfer reverted with it.
+        // The transfer to the pAMM reverted with it.
         assertEq(IERC20(USDC_ADDR).balanceOf(address(pamm)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
@@ -384,7 +384,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         _assertRouterDrained(WETH_ADDR, USDC_ADDR);
     }
 
-    /// The fallback starts from the full `amountIn`, whatever the primarySwap consumed.
+    /// The fallback starts from the full `amountIn`: the pAMM's transfer reverted with it.
     function testFallsBackToUniswapV2() public {
         deal(USDC_ADDR, address(router), USDC_IN);
 
@@ -482,7 +482,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
 
     /// Zero output counts as a failure and takes back the `tokenIn` already sent.
     function testVenuePayingNothingFallsThrough() public {
-        SilentVenue silent = new SilentVenue();
+        SilentPropAMM silent = new SilentPropAMM();
         deal(USDC_ADDR, address(router), USDC_IN);
 
         router.swap(

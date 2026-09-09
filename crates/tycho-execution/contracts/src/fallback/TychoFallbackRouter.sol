@@ -44,8 +44,8 @@ error TychoFallbackRouter__UnknownVenue(uint8 venue);
 error TychoFallbackRouter__ZeroGasCap();
 
 /// @title TychoFallbackRouter
-/// @notice Runs a primary venue and, only if it fails, the caller's chosen fallback venue.
-/// The primary is always a pAMM; the fallback never is.
+/// @notice Runs a pAMM and, only if it fails, the caller's chosen fallback venue.
+/// The fallback is never a pAMM.
 /// @dev Exists because an executor cannot fall back: the Dispatcher transfers a leg's input before
 /// it delegatecalls `swap()`, so a reverting pAMM has already been paid and a Uniswap V3 retry,
 /// which pays in a callback, cannot be funded. Here the tokens stay in this contract.
@@ -173,7 +173,7 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     }
 
     /// @dev Decodes `[venue: uint8][venue data]` and runs the tagged venue, which pays
-    /// `leg.receiver` directly. A pAMM is not among the venue kinds, so the venue the primary slot
+    /// `leg.receiver` directly. A pAMM is not among the venue kinds, so the venue the pAMM slot
     /// exists to retry can never also be the rescue. No output measurement here: the Dispatcher's
     /// balance-diff at the receiver is the single source of truth for the leg.
     function _executeFallback(Leg calldata leg, bytes calldata encodedSwap)

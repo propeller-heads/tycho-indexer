@@ -151,14 +151,14 @@ longer be funded.
 `TychoFallbackRouter` owns the tokens for the leg instead:
 
 ```
-TychoRouterV3 --TransferType.Transfer--> TychoFallbackRouter --> primary  (reverts, rolled back)
+TychoRouterV3 --TransferType.Transfer--> TychoFallbackRouter --> pAMM     (reverts, rolled back)
                                                              --> fallback (fills, pays receiver)
 ```
 
 `FallbackExecutor` declares `TransferType.Transfer` with the fallback router as receiver and `outputToRouter = false`,
 then calls `TychoFallbackRouter.swap()`.
 
-**A pAMM primary and one caller-chosen fallback.** The pAMM runs inside `executePropAMM`, an external self-call
+**One pAMM and one caller-chosen fallback.** The pAMM runs inside `executePropAMM`, an external self-call
 wrapped in try/catch, so its transfer reverts with it and the fallback starts from the same balance. The fallback then
 runs in the outer frame: it gets no try/catch, so its revert is the swap's revert and there is no third attempt. The
 contract never picks a venue itself -- the encoder decides which fallback to use and supplies its pool address.
@@ -167,7 +167,7 @@ A pAMM that reports success but delivers nothing reverts `TychoFallbackRouter__N
 through to the fallback. The fallback slot measures nothing: the Dispatcher's balance-diff at the receiver is the
 single source of truth there, and a fallback that pays nothing fails the route-level `minAmountOut`.
 
-**The fallback can never be a pAMM.** A pAMM is the thing the primary slot exists to retry, so retrying it with another
+**The fallback can never be a pAMM.** A pAMM is the thing the pAMM slot exists to retry, so retrying it with another
 one defeats the purpose. This needs no runtime check: pAMM is not one of the enumerated fallback venue kinds.
 
 Swap encoding -- `FallbackExecutor` swap data is `[tokenIn: 20][tokenOut: 20][pamm: 20][fallback]`. The pAMM is a
