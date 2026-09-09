@@ -1,0 +1,31 @@
+substreams_yaml_path: ./substreams.yaml
+protocol_system: "etherfi"
+protocol_type_names:
+  - "ethereum_etherfi_pool"
+module_name: "map_protocol_changes"
+skip_balance_check: true
+initialized_accounts:
+tests:
+  - name: test_weeth
+    start_block: 17664336
+    stop_block: 18607409
+    expected_components:
+      - id: "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee"
+        tokens:
+          - "0xCd5fE23C85820F7B72D0926FC9b05b43E359b7ee" # weeth
+          - "0x35fA164735182de50811E8e2E824cFb9B6118ac2" # eeth
+        creation_tx: "0xa034bdf7ec3b407125fcfbb786d908b0bcfd9976f2fbaf489776ba58b9db61ac"
+        skip_simulation: false
+        skip_execution: true
+
+  - name: test_eeth
+    start_block: 17664317
+    stop_block: 23943798 # target tx: 0x2eba9bb171810f2c5f9925917fbc3b58d1e59d2a7cbf6c38a9e6738a6aa1c35b
+    expected_components:
+      - id: "0x35fA164735182de50811E8e2E824cFb9B6118ac2"
+        tokens:
+          - "0x35fA164735182de50811E8e2E824cFb9B6118ac2" # eeth
+          - "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE" # eth
+        creation_tx: "0x491b823bc15ced4c54f0ed5a235d39e478f8aae3ad02eb553924b40ad9859e10"
+        skip_simulation: false
+        skip_execution: true
