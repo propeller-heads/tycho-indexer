@@ -211,6 +211,59 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         assertEq(uint8(TychoFallbackRouter.Venue.FluidV1), 4);
     }
 
+    /// Every venue pins its payload width: truncated and over-long payloads
+    /// revert `InvalidSwapLength` naming the offending length. Uniswap V4 is a
+    /// lower bound (variable hookData), so only truncation applies to it.
+    function testVenueDataLengthGuards() public {
+        deal(USDC_ADDR, address(router), USDC_IN);
+
+        bytes[] memory entries = new bytes[](5);
+        entries[0] = FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30);
+        entries[1] = FallbackSwaps.uniswapV3(USDC_WETH_USV3);
+        entries[2] = FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""));
+        entries[3] = FallbackSwaps.curve(TRIPOOL, 1, 0, 1);
+        entries[4] = FallbackSwaps.fluidV1(FLUIDV1_LIQUIDITY, true);
+
+        TychoFallbackRouter.Leg memory leg =
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB);
+
+        for (uint256 i = 0; i < entries.length; i++) {
+            // The first byte is the venue tag, so the guarded width is one less.
+            uint256 width = entries[i].length - 1;
+
+            vm.expectRevert(
+                abi.encodeWithSelector(
+                    TychoFallbackRouter__InvalidSwapLength.selector, width - 1
+                )
+            );
+            router.swap(leg, address(pamm), _truncate(entries[i]));
+
+            bool isUniswapV4 = i == uint256(TychoFallbackRouter.Venue.UniswapV4);
+            if (!isUniswapV4) {
+                vm.expectRevert(
+                    abi.encodeWithSelector(
+                        TychoFallbackRouter__InvalidSwapLength.selector,
+                        width + 1
+                    )
+                );
+                router.swap(
+                    leg, address(pamm), bytes.concat(entries[i], hex"00")
+                );
+            }
+        }
+    }
+
+    function _truncate(bytes memory data)
+        internal
+        pure
+        returns (bytes memory out)
+    {
+        out = new bytes(data.length - 1);
+        for (uint256 i = 0; i < out.length; i++) {
+            out[i] = data[i];
+        }
+    }
+
     function testConstructorRejectsZeroAddress() public {
         vm.expectRevert(TychoFallbackRouter__AddressZero.selector);
         new TychoFallbackRouter(
