@@ -367,14 +367,18 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
-    /// `FellBack` is the pAMM fill-rate signal: it marks the legs the pAMM did
-    /// not serve, and nothing else on chain distinguishes the two fill paths.
-    function testFallingBackEmitsFellBack() public {
+    /// `FallbackSwap` is the pAMM fill-rate signal: it marks the swaps the pAMM
+    /// did not serve, and names the venue that filled instead.
+    function testFallingBackEmitsFallbackSwap() public {
         deal(USDC_ADDR, address(router), USDC_IN);
 
         vm.expectEmit(address(router));
-        emit TychoFallbackRouter.FellBack(
-            address(pamm), USDC_ADDR, WETH_ADDR, USDC_IN
+        emit TychoFallbackRouter.FallbackSwap(
+            address(pamm),
+            USDC_ADDR,
+            WETH_ADDR,
+            USDC_IN,
+            TychoFallbackRouter.Venue.UniswapV3
         );
         router.swap(
             FallbackSwaps.swap(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
@@ -383,8 +387,8 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         );
     }
 
-    /// A pAMM that fills emits nothing, so counting `FellBack` counts misses.
-    function testPropAMMFillEmitsNoFellBack() public {
+    /// A pAMM that fills emits nothing, so counting `FallbackSwap` counts misses.
+    function testPropAMMFillEmitsNoFallbackSwap() public {
         pamm.setPrice(USDC_ADDR, WETH_ADDR, 1e26);
         deal(WETH_ADDR, address(pamm), 100 ether);
         deal(USDC_ADDR, address(router), USDC_IN);
@@ -399,7 +403,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             assertTrue(
-                logs[i].topics[0] != TychoFallbackRouter.FellBack.selector
+                logs[i].topics[0] != TychoFallbackRouter.FallbackSwap.selector
             );
         }
     }

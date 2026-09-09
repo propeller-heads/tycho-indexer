@@ -102,16 +102,17 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
 
     event PammGasCapUpdated(uint256 oldCap, uint256 newCap);
 
-    /// @notice The pAMM failed and the fallback venue ran instead. Absence of this event on a
-    /// filled swap means the pAMM served it, which is the pAMM fill rate.
+    /// @notice The pAMM failed and `venue` filled instead. Absence of this event on a filled swap
+    /// means the pAMM served it, which is the pAMM fill rate.
     /// @dev The pAMM's revert reason is deliberately not carried: reading it would copy
     /// caller-controlled returndata of any size into this frame, and that cost sits outside
     /// `pammGasCap` and could starve the fallback it exists to protect.
-    event FellBack(
+    event FallbackSwap(
         address indexed pamm,
         address indexed tokenIn,
         address indexed tokenOut,
-        uint256 amountIn
+        uint256 amountIn,
+        Venue venue
     );
 
     constructor(
@@ -143,15 +144,16 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         address pamm,
         bytes calldata fallbackSwap
     ) external nonReentrant {
-        // Reentrancy cannot happen: the function is nonReentrant.
-        // slither-disable-next-line reentrancy-events
         try this.executePropAMM{gas: pammGasCap}(swap_, pamm) {
             return;
-        } catch {
-            emit FellBack(pamm, swap_.tokenIn, swap_.tokenOut, swap_.amountIn);
-        }
+        } catch {}
 
-        _executeFallback(swap_, fallbackSwap);
+        Venue venue = _executeFallback(swap_, fallbackSwap);
+        // Reentrancy cannot happen: the function is nonReentrant.
+        // slither-disable-next-line reentrancy-events
+        emit FallbackSwap(
+            pamm, swap_.tokenIn, swap_.tokenOut, swap_.amountIn, venue
+        );
     }
 
     /// @notice Runs the pAMM. External only so `swap` can try/catch it.
@@ -180,6 +182,7 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     /// here: the Dispatcher's balance-diff at the receiver is the single source of truth.
     function _executeFallback(Swap calldata swap_, bytes calldata encodedSwap)
         internal
+        returns (Venue venue)
     {
         if (encodedSwap.length == 0) {
             revert TychoFallbackRouter__InvalidSwapLength(encodedSwap.length);
@@ -189,7 +192,7 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         if (venueByte > uint8(type(Venue).max)) {
             revert TychoFallbackRouter__UnknownVenue(venueByte);
         }
-        Venue venue = Venue(venueByte);
+        venue = Venue(venueByte);
         bytes calldata venueData = encodedSwap[1:];
 
         if (venue == Venue.UniswapV2) {
