@@ -211,6 +211,18 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
 
     uint256 constant USDC_IN = 10_000e6;
 
+    /// Measured at FORK_BLOCK against the pools each test names. An exact
+    /// amount is what separates a correct fill from one the venue still
+    /// accepted at the wrong fee, direction or scale.
+    uint256 constant V2_WETH_OUT = 3_611_787_219_421_119_156;
+    uint256 constant V2_USDC_OUT = 10_994_711_547;
+    uint256 constant V3_WETH_OUT = 3_611_998_638_539_827_447;
+    uint256 constant V3_USDC_OUT = 11_062_418_692;
+    uint256 constant V4_USDT_OUT = 99_970_662;
+    uint256 constant V4_USDE_OUT = 100_009_300_940_809_442_564;
+    uint256 constant CURVE_USDC_OUT = 999_895_324;
+    uint256 constant CURVE_CRYPTO_USDC_OUT = 2_766_051_040;
+
     function _forkBlock() internal pure override returns (uint256) {
         return FORK_BLOCK;
     }
@@ -248,7 +260,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             address(pamm),
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
-        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), V2_WETH_OUT);
     }
 
     /// A pair with no reserves cannot price the trade.
@@ -403,7 +415,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), V3_WETH_OUT);
         // The transfer to the pAMM reverted with it.
         assertEq(IERC20(USDC_ADDR).balanceOf(address(pamm)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
@@ -420,7 +432,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), V3_USDC_OUT);
         _assertRouterDrained(WETH_ADDR, USDC_ADDR);
     }
 
@@ -434,7 +446,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
 
-        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), V2_WETH_OUT);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
@@ -450,7 +462,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
         );
 
-        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), V2_USDC_OUT);
         _assertRouterDrained(WETH_ADDR, USDC_ADDR);
     }
 
@@ -465,7 +477,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.curve(TRIPOOL, 1, 0, 1)
         );
 
-        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), CURVE_USDC_OUT);
         _assertRouterDrained(DAI_ADDR, USDC_ADDR);
         assertEq(IERC20(DAI_ADDR).allowance(address(router), TRIPOOL), 0);
     }
@@ -482,7 +494,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.curve(TRICRYPTO_POOL, 0, 2, 0)
         );
 
-        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), CURVE_CRYPTO_USDC_OUT);
         _assertRouterDrained(WETH_ADDR, USDC_ADDR);
         assertEq(
             IERC20(WETH_ADDR).allowance(address(router), TRICRYPTO_POOL), 0
@@ -500,7 +512,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
         );
 
-        assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDT_ADDR).balanceOf(BOB), V4_USDT_OUT);
         _assertRouterDrained(USDE_ADDR, USDT_ADDR);
     }
 
@@ -516,7 +528,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
         );
 
-        assertGt(IERC20(USDE_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDE_ADDR).balanceOf(BOB), V4_USDE_OUT);
         _assertRouterDrained(USDT_ADDR, USDE_ADDR);
     }
 
@@ -531,7 +543,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), V3_WETH_OUT);
         assertEq(IERC20(USDC_ADDR).balanceOf(address(silent)), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
@@ -548,7 +560,7 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
             FallbackSwaps.uniswapV3(USDC_WETH_USV3)
         );
 
-        assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(WETH_ADDR).balanceOf(BOB), V3_WETH_OUT);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
@@ -652,6 +664,10 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
     /// these tests fork later.
     uint256 constant FORK_BLOCK = 23_748_828;
 
+    /// Measured at FORK_BLOCK against FLUID_DEX.
+    uint256 constant FLUID_USDT_OUT = 12_006_909;
+    uint256 constant FLUID_SUSDE_OUT = 8_326_872_266_375_000_000;
+
     function _forkBlock() internal pure override returns (uint256) {
         return FORK_BLOCK;
     }
@@ -673,7 +689,7 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
             FallbackSwaps.fluidV1(FLUID_DEX, true)
         );
 
-        assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDT_ADDR).balanceOf(BOB), FLUID_USDT_OUT);
         _assertRouterDrained(SUSDE_ADDR, USDT_ADDR);
     }
 
@@ -689,7 +705,7 @@ contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
             FallbackSwaps.fluidV1(FLUID_DEX, false)
         );
 
-        assertGt(IERC20(SUSDE_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(SUSDE_ADDR).balanceOf(BOB), FLUID_SUSDE_OUT);
         _assertRouterDrained(USDT_ADDR, SUSDE_ADDR);
     }
 
