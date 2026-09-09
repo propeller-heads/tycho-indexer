@@ -94,6 +94,24 @@ library FallbackSwaps {
 
 error RevertingPool__Nope();
 
+/// @notice A V3-shaped "pool" that reports success without paying, so the leg delivers nothing
+/// and the route-level `minAmountOut` must be what catches it.
+contract SilentPool {
+    function swap(
+        address, /* recipient */
+        bool, /* zeroForOne */
+        int256, /* amountSpecified */
+        uint160, /* sqrtPriceLimitX96 */
+        bytes calldata /* data */
+    )
+        external
+        pure
+        returns (int256 amount0, int256 amount1)
+    {
+        return (0, 0);
+    }
+}
+
 /// @notice A "pool" that always reverts with its own error, so a test can assert the fallback
 /// slot's failure escapes `swap` unchanged.
 contract RevertingPool {
@@ -699,6 +717,37 @@ contract FallbackExecutorTest is TychoRouterTestSetup {
         assertGt(amountOut, 1000e18);
         assertEq(IERC20(DAI_ADDR).balanceOf(ALICE), amountOut);
         assertEq(IERC20(WETH_ADDR).balanceOf(address(fallbackRouter)), 0);
+    }
+
+    /// A fallback venue that reports success but pays nothing is caught by the
+    /// route-level minAmountOut -- the backstop that replaces any in-slot
+    /// output check in the fallback slot.
+    function testZeroOutputFallbackFailsRouteMinAmountOut() public {
+        SilentPool pool = new SilentPool();
+        uint256 amountIn = 10_000e6;
+        deal(USDC_ADDR, ALICE, amountIn);
+
+        bytes memory swapData = abi.encodePacked(
+            USDC_ADDR,
+            WETH_ADDR,
+            address(pamm),
+            FallbackSwaps.uniswapV3(address(pool))
+        );
+
+        vm.startPrank(ALICE);
+        IERC20(USDC_ADDR).approve(tychoRouterAddr, amountIn);
+        vm.expectPartialRevert(TychoRouter__NegativeSlippage.selector);
+        tychoRouter.singleSwap(
+            amountIn,
+            USDC_ADDR,
+            WETH_ADDR,
+            1 ether,
+            1 ether,
+            ALICE,
+            noClientFee(),
+            encodeSingleSwap(address(fallbackExecutor), swapData)
+        );
+        vm.stopPrank();
     }
 
     /// A pAMM with no price, then a Uniswap V3 retry. Executor swap data is
