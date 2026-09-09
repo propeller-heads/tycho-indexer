@@ -355,6 +355,43 @@ contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
+    /// `FellBack` is the pAMM fill-rate signal: it marks the legs the pAMM did
+    /// not serve, and nothing else on chain distinguishes the two fill paths.
+    function testFallingBackEmitsFellBack() public {
+        deal(USDC_ADDR, address(router), USDC_IN);
+
+        vm.expectEmit(address(router));
+        emit TychoFallbackRouter.FellBack(
+            address(pamm), USDC_ADDR, WETH_ADDR, USDC_IN
+        );
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
+        );
+    }
+
+    /// A pAMM that fills emits nothing, so counting `FellBack` counts misses.
+    function testPropAMMFillEmitsNoFellBack() public {
+        pamm.setPrice(USDC_ADDR, WETH_ADDR, 1e26);
+        deal(WETH_ADDR, address(pamm), 100 ether);
+        deal(USDC_ADDR, address(router), USDC_IN);
+
+        vm.recordLogs();
+        router.swap(
+            FallbackSwaps.leg(USDC_ADDR, WETH_ADDR, USDC_IN, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
+        );
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(
+                logs[i].topics[0] != TychoFallbackRouter.FellBack.selector
+            );
+        }
+    }
+
     /// The pAMM has no price, so `quote` reverts. Uniswap V3 pays inside its callback, reachable
     /// only because this contract still holds the USDC.
     function testFallsBackToUniswapV3() public {

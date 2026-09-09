@@ -163,6 +163,10 @@ wrapped in try/catch, so its transfer reverts with it and the fallback starts fr
 runs in the outer frame: it gets no try/catch, so its revert is the swap's revert and there is no third attempt. The
 contract never picks a venue itself -- the encoder decides which fallback to use and supplies its pool address.
 
+`FellBack(pamm, tokenIn, tokenOut, amountIn)` is emitted when the pAMM fails and the fallback runs. A filled leg
+without it was served by the pAMM, so counting the event against filled legs gives the pAMM fill rate. The pAMM's
+revert reason is not carried: reading caller-controlled returndata costs gas outside `pammGasCap`.
+
 A pAMM that reports success but delivers nothing reverts `TychoFallbackRouter__NoOutput`, so a silent fill still falls
 through to the fallback. The fallback slot measures nothing: the Dispatcher's balance-diff at the receiver is the
 single source of truth there, and a fallback that pays nothing fails the route-level `minAmountOut`.

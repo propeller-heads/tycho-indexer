@@ -105,6 +105,18 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
 
     event PammGasCapUpdated(uint256 oldCap, uint256 newCap);
 
+    /// @notice The pAMM failed and the fallback venue ran instead. Absence of this event on a
+    /// filled leg means the pAMM served it, which is the pAMM fill rate.
+    /// @dev The pAMM's revert reason is deliberately not carried: reading it would copy
+    /// caller-controlled returndata of any size into this frame, and that cost sits outside
+    /// `pammGasCap` and could starve the fallback it exists to protect.
+    event FellBack(
+        address indexed pamm,
+        address indexed tokenIn,
+        address indexed tokenOut,
+        uint256 amountIn
+    );
+
     constructor(
         address admin,
         IPoolManager poolManager_,
@@ -138,13 +150,15 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         // pAMM that fails by consuming gas from starving the fallback -- an uncapped call returns
         // only 1/64 of the gas it burns (EIP-150).
         //
-        // The reentrancy-events finding is a false positive: the only event this contract emits is
-        // PammGasCapUpdated, from an admin-only setter that makes no external call, so no event
-        // can follow an untrusted call in the same frame.
+        // The reentrancy-events finding reports that `FellBack` is emitted after an untrusted
+        // call. `nonReentrant` means no reentrant frame can interleave and observe it out of
+        // order, so the ordering the detector warns about cannot occur.
         // slither-disable-next-line reentrancy-events
         try this.executePropAMM{gas: pammGasCap}(leg, pamm) {
             return;
-        } catch {}
+        } catch {
+            emit FellBack(pamm, leg.tokenIn, leg.tokenOut, leg.amountIn);
+        }
 
         _executeFallback(leg, fallbackSwap);
     }
