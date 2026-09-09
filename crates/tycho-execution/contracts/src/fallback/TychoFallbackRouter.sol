@@ -50,7 +50,9 @@ error TychoFallbackRouter__ZeroGasCap();
 /// it delegatecalls `swap()`, so a reverting pAMM has already been paid and a Uniswap V3 retry,
 /// which pays in a callback, cannot be funded. Here the tokens stay in this contract.
 ///
-/// Holds no funds and grants no allowances between transactions. Native ETH unsupported.
+/// Holds no funds and grants no allowances between transactions. A balance that does end up here
+/// (Curve rounding dust, a mistaken transfer) is claimable by anyone through `swap` and is
+/// considered lost. Native ETH unsupported.
 contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -78,12 +80,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         bytes hookData;
     }
 
-    /// @notice May call `swap`. Granted to the TychoRouter, so held balances
-    /// cannot be swept by strangers naming their own pAMM.
-    //keccak256("CALLER_ROLE") : save gas on deployment
-    bytes32 public constant CALLER_ROLE =
-        0x843c3a00fa95510a35f425371231fd3fe4642e719cb4595160763d6d02594b50;
-
     // keccak256("TychoFallbackRouter#CALLBACK_SOURCE")
     bytes32 private constant _CALLBACK_SOURCE_SLOT =
         0xf69ae8e0008b818aeb91c2b052698e485056e760fad9d0aa28144b842debe4f7;
@@ -103,9 +99,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     /// needing more than this falls back instead of filling.
     uint256 public pammGasCap = 1_000_000;
 
-    event Rescued(
-        address indexed token, address indexed receiver, uint256 amount
-    );
     event PammGasCapUpdated(uint256 oldCap, uint256 newCap);
 
     constructor(
@@ -126,7 +119,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
 
     /// @notice Runs `pamm` and, only if it fails, `fallbackSwap`. A failing fallback reverts the
     /// swap; there is no third attempt.
-    /// @dev Only callers holding `CALLER_ROLE` (the TychoRouter). Push-payment: the caller MUST
+    /// @dev Permissionless: the caller names every parameter, so a balance sitting in this
+    /// contract can be taken by anyone and is considered lost. Push-payment: the caller MUST
     /// transfer `leg.amountIn` of `leg.tokenIn` here first. Native ETH is not supported.
     /// `fallbackSwap` is `[venue: uint8][venue data]`, and no venue kind is a pAMM.
     /// No output is returned: the caller measures its own `leg.tokenOut` balance diff at
@@ -134,7 +128,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     function swap(Leg calldata leg, address pamm, bytes calldata fallbackSwap)
         external
         nonReentrant
-        onlyRole(CALLER_ROLE)
     {
         // The try/catch is what unwinds the pAMM's transfer. Only the pAMM gets one: the fallback
         // is the caller's chosen venue, so its revert is the swap's revert. The gas cap keeps a
@@ -226,18 +219,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         }
         emit PammGasCapUpdated(pammGasCap, newCap);
         pammGasCap = newCap;
-    }
-
-    /// @notice Sends out a balance a Curve exchange rounded into this contract.
-    function rescue(address token, address receiver, uint256 amount)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        if (receiver == address(0)) {
-            revert TychoFallbackRouter__AddressZero();
-        }
-        emit Rescued(token, receiver, amount);
-        IERC20(token).safeTransfer(receiver, amount);
     }
 
     /// @dev Venue data: `[pair: 20][feeBps: 1]`. The pair prices nothing, so the output amount

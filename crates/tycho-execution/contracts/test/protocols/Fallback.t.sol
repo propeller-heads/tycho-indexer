@@ -187,31 +187,7 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         router = new TychoFallbackRouter(
             ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
-        bytes32 callerRole = router.CALLER_ROLE();
-        vm.prank(ADMIN);
-        router.grantRole(callerRole, address(this));
         pamm = new MockPropAMM();
-    }
-
-    /// Only `CALLER_ROLE` (the TychoRouter) may start a swap; held balances
-    /// are not first-come-first-served.
-    function testSwapRequiresCallerRole() public {
-        deal(USDC_ADDR, address(router), USDC_IN);
-        bytes32 callerRole = router.CALLER_ROLE();
-
-        vm.prank(BOB);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                BOB,
-                callerRole
-            )
-        );
-        router.swap(
-            FallbackSwaps.leg(USDC_ADDR, USDC_ADDR, USDC_IN, BOB),
-            BOB,
-            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
-        );
     }
 
     /// The enum ordinals are the wire format the encoder emits (the venue
@@ -600,24 +576,6 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         router.unlockCallback(bytes(""));
     }
 
-    function testRescueRequiresAdmin() public {
-        deal(USDC_ADDR, address(router), 1e6);
-
-        vm.prank(BOB);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                BOB,
-                bytes32(0)
-            )
-        );
-        router.rescue(USDC_ADDR, BOB, 1e6);
-
-        vm.prank(ADMIN);
-        router.rescue(USDC_ADDR, BOB, 1e6);
-        assertEq(IERC20(USDC_ADDR).balanceOf(BOB), 1e6);
-    }
-
     /// Holds no funds once a leg is done.
     function _assertRouterDrained(address tokenIn, address tokenOut)
         internal
@@ -641,9 +599,6 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
         router = new TychoFallbackRouter(
             ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
-        bytes32 callerRole = router.CALLER_ROLE();
-        vm.prank(ADMIN);
-        router.grantRole(callerRole, address(this));
         pamm = new MockPropAMM();
     }
 
