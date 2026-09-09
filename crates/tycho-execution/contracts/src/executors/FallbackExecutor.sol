@@ -15,7 +15,7 @@ error FallbackExecutor__InvalidDataLength();
 /// a call target outside it.
 ///
 /// Every venue gets `minAmountOut = 0`, since a binding value would revert the trades the fallback
-/// exists to rescue. The caller's leg-level `minAmountOut` must clear the fallback venue.
+/// exists to rescue. The TychoRouter's route-level `minAmountOut` must clear the fallback venue.
 contract FallbackExecutor is IExecutor {
     TychoFallbackRouter public immutable fallbackRouter;
 

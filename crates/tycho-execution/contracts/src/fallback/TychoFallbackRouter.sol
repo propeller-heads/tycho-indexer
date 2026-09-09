@@ -56,6 +56,9 @@ error TychoFallbackRouter__ZeroGasCap();
 contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
+    /// @notice Fallback venue tag. The ordinal is the first byte of the fallback swap data, so it
+    /// is wire format an off-chain encoder must match; `testVenueWireFormatIsStable` pins it. Each
+    /// variant's payload layout is documented on its `_swap*` function.
     enum Venue {
         UniswapV2,
         UniswapV3,
@@ -72,6 +75,7 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         address receiver;
     }
 
+    /// @notice The `poolManager.unlock` payload, decoded back in `unlockCallback`.
     struct UniswapV4Swap {
         Leg leg;
         uint24 fee;
@@ -133,6 +137,10 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         // is the caller's chosen venue, so its revert is the swap's revert. The gas cap keeps a
         // pAMM that fails by consuming gas from starving the fallback -- an uncapped call returns
         // only 1/64 of the gas it burns (EIP-150).
+        //
+        // The reentrancy-events finding is a false positive: the only event this contract emits is
+        // PammGasCapUpdated, from an admin-only setter that makes no external call, so no event
+        // can follow an untrusted call in the same frame.
         // slither-disable-next-line reentrancy-events
         try this.executePropAMM{gas: pammGasCap}(leg, pamm) {
             return;
@@ -164,9 +172,10 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         _requireOutput(leg.tokenOut, leg.receiver, balanceBefore);
     }
 
-    /// @dev The fallback is venue-tagged; a pAMM is not among the kinds, so the venue the primary
-    /// slot exists to retry can never also be the rescue. No output measurement here: the
-    /// Dispatcher's balance-diff at the receiver is the single source of truth for the leg.
+    /// @dev Decodes `[venue: uint8][venue data]` and runs the tagged venue, which pays
+    /// `leg.receiver` directly. A pAMM is not among the venue kinds, so the venue the primary slot
+    /// exists to retry can never also be the rescue. No output measurement here: the Dispatcher's
+    /// balance-diff at the receiver is the single source of truth for the leg.
     function _executeFallback(Leg calldata leg, bytes calldata encodedSwap)
         internal
     {
@@ -221,8 +230,8 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         pammGasCap = newCap;
     }
 
-    /// @dev Venue data: `[pair: 20][feeBps: 1]`. The pair prices nothing, so the output amount
-    /// comes from the reserves.
+    /// @dev Venue data: `[pair: 20][feeBps: 1]`. Uniswap V2's `swap` takes explicit output
+    /// amounts, so this computes the output from the reserves.
     function _swapUniswapV2(Leg calldata leg, bytes calldata data) internal {
         if (data.length != 21) {
             revert TychoFallbackRouter__InvalidSwapLength(data.length);
@@ -369,6 +378,10 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
         IERC20(tokenIn).safeTransfer(fluidLiquidity, amountIn);
     }
 
+    /// @notice Runs the Uniswap V4 leg inside the PoolManager's unlock: pays `leg.amountIn`, swaps
+    /// the single pool named by the venue data, and sends the output to `leg.receiver`.
+    /// @dev The pool key's currencies come from the sort order of `leg.tokenIn` and `leg.tokenOut`,
+    /// so the venue data carries no direction.
     function unlockCallback(bytes calldata data)
         external
         returns (bytes memory)
