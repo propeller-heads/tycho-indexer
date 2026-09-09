@@ -425,3 +425,26 @@ On Base the lib is always assigned before the write-path contract (NVDAc: 50,527
 Only the engine (`changeTesseraEngine`). It is stateful and sits in every component's contract
 list, so a replacement is a re-index. It has never been called on Base; the `engine` attribute
 remains as the alert.
+
+### Verification (2026-09-09)
+
+- Substreams: 24 unit tests, clippy clean, wasm built. tycho-simulation: `delta_transition`
+  reload covered by two tests (inline code loaded; non-UTF-8 address rejected).
+- The `protocols/testing` harness had **never run** for this package: the substreams-integration
+  workflow's change detection produced an empty package list on every run of this branch, and a
+  manual `workflow_dispatch` then passed vacuously because the composite action exported
+  `PROTOCOL` while `docker-compose.yaml` reads `${PROTOCOLS}` (container ran with an empty
+  package name, "Config file not found", exit 0). Both are fixed/flagged: the env name on this
+  branch (`ci: pass PROTOCOLS …`), the detection and the exit-0 behaviour as follow-up tasks.
+- With the harness actually running, the NVDAc-range test could not bootstrap TesseraSwap and the
+  engine: every Base archive node reachable (Tenderly gateway, public endpoints, Chainstack, and
+  CI's `BASE_RPC_URL_ARCHIVE`) answers `null` or "method not found" to `debug_storageRangeAt`, the
+  only method the indexer uses for `initialized_accounts`. `base-aerodrome-v1` and
+  `base-aerodrome-slipstreams` use `initialized_accounts` too and will hit the same wall once CI
+  stops passing vacuously.
+- The integration test therefore moved to the venue's genesis range **37,518,600 → 37,519,400**
+  (deployment of TesseraSwap/engine at 37,518,648, first pairs at 37,518,780, first posts from
+  37,519,101, first swap at 37,519,381; WETH/USDC post age 2 at the stop block, quoting
+  ~97 USDC/WETH — the venue's test-phase price). No `initialized_accounts` — the production
+  path. Run it in CI with
+  `gh workflow run ci-substreams-integration.yaml --ref <branch> -f protocols=base-tessera`.

@@ -8,45 +8,42 @@ adapter_contract: "TesseraSwapAdapter"
 adapter_build_signature: "constructor(address)"
 adapter_build_args: "0x55555522005BcAE1c2424D474BfD5ed477749E3e"
 
-# Balances are validated: the range is self-consistent (the NVDAc book is created and seeded
-# inside it) and the treasury never idles.
+# Balances are validated: the range is self-consistent (the treasury is seeded inside it) and the
+# treasury never idles.
 skip_balance_check: false
 
-# The two stable venue contracts were deployed before this test's range, so the substreams only
-# emit their storage updates here, never their account creations. Bootstrap them from RPC so slot
-# updates have something to attach to. The NVDAc pair itself is created inside the range, and the
-# contracts it delegatecalls into (implementation, pricing lib, write-path) reach the simulation
-# as `stateless_contract_addr_{0,1,2}` attributes — all three slots are written inside the range
-# (impl at creation, lib at 50,527,583, write-path at 50,527,613) — and are fetched by
-# tycho-simulation over `RPC_URL`, exactly as a production consumer does.
-initialized_accounts:
-  - "0x55555522005BcAE1c2424D474BfD5ed477749E3e" # TesseraSwap (entrypoint)
-  - "0x31e99e05fee3dce580af777c3fd63ee1b3b40c17" # engine
+# No `initialized_accounts`: the range starts at the package's initial block, before TesseraSwap
+# and the engine are deployed (37,518,648), so their creation code and every storage write are
+# witnessed by the substreams exactly as in a production sync. This is also the only option on
+# Base — the archive nodes available to the harness answer `null` to `debug_storageRangeAt`, so
+# an account bootstrap from RPC cannot work here. The contracts a pair delegatecalls into reach
+# the simulation as `stateless_contract_addr_{i}` attributes and are fetched over `RPC_URL`,
+# exactly as a production consumer does.
 
 tests:
-  - name: test_nvdac_pair_discovery_and_simulation
-    # Covers the NVDAc/USDC pair lifecycle: creation at block 50,526,653 (the owner Safe calls
-    # the engine — tx 0x3447f2ec…a5cb — which internally CREATEs the pair contract; the pair's
-    # init writes of the EIP-1967 impl slot + base/quote token slots plus the engine's registry
-    # write at the derived mapping slot are the discovery signal), the pricing-lib assignment
-    # at 50,527,583, and the first price post at 50,528,239. The stop block sits just after the
-    # first post so the pair quotes at simulation time — Tessera's freshness gate zeroes quotes
-    # when the last post is older than ~20 blocks, and posts only begin ~26 minutes after
-    # creation. That transaction created four pairs at once; the other three are asserted by
-    # the same discovery rule and only NVDAc is enumerated here.
-    start_block: 50526640
-    stop_block: 50528260
+  - name: test_genesis_pairs_discovery_and_simulation
+    # Covers the venue's first 800 blocks: TesseraSwap + engine deployment (37,518,648), the
+    # creation of the first pairs at 37,518,780 (the owner Safe calls the engine — tx
+    # 0x8978cc5e…29c6 — which internally CREATEs each pair contract; the pair's init writes of the
+    # EIP-1967 impl slot + base/quote token slots plus the engine's registry write at the derived
+    # mapping slot are the discovery signal), treasury seeding, the first price posts (from
+    # 37,519,101) and the venue's first swap (37,519,381). The stop block sits two blocks after a
+    # price post so the WETH/USDC pair quotes at simulation time — Tessera's freshness gate zeroes
+    # quotes when the last post is older than ~20 blocks. Only the WETH/USDC pair is enumerated;
+    # the other pairs created in the same transaction are asserted by the same discovery rule.
+    start_block: 37518600
+    stop_block: 37519400
     expected_components:
-      - id: "0xede940cdf2a9c5620cbf97e45947594723e29c14"
+      - id: "0xf524c1bc1c64a2c99bc7eccf19ede9a1d89d5a7c"
         tokens:
+          - "0x4200000000000000000000000000000000000006" # WETH
           - "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913" # USDC
-          - "0xb20000000000000000000078ee7ce2fe4908108c" # NVDAc
         static_attributes:
-          base_token: "0xb20000000000000000000078ee7ce2fe4908108c"
+          base_token: "0x4200000000000000000000000000000000000006"
           quote_token: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
           manual_updates: "0x01"
-          self_contained_tokens: "0x5b22307838333335383966636436656462366530386634633763333264346637316235346264613032393133222c22307862323030303030303030303030303030303030303030373865653763653266653439303831303863225d"
-        creation_tx: "0x3447f2ec3b4e6aa38a6d5f50968df46b9c7d492dc0a8022981dd71cc2063a5cb"
+          self_contained_tokens: "0x5b22307834323030303030303030303030303030303030303030303030303030303030303030303030303036222c22307838333335383966636436656462366530386634633763333264346637316235346264613032393133225d"
+        creation_tx: "0x8978cc5e137cde75d4aaf4323d493511858971c05860b00abc2d6a922a5e29c6"
         # No vm:tessera executor is deployed on Base yet; execution is
         # validated in Foundry (crates/tycho-execution/contracts/test/
         # protocols/Tessera.t.sol) until the rollout phase deploys one.
