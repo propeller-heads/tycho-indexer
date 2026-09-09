@@ -49,9 +49,9 @@ error TychoFallbackRouter__ZeroGasCap();
 /// it delegatecalls `swap()`, so a reverting pAMM has already been paid and a Uniswap V3 retry,
 /// which pays in a callback, cannot be funded. Here the tokens stay in this contract.
 ///
-/// Holds no funds and grants no allowances between transactions. A balance that does end up here
-/// (Curve rounding dust, a mistaken transfer) is claimable by anyone through `swap` and is
-/// considered lost. Native ETH unsupported.
+/// Holds no funds between transactions. A balance that does end up here (Curve rounding dust, a
+/// mistaken transfer) is claimable by anyone through `swap` and is considered lost, which is also
+/// why a Curve approval is left in place rather than revoked. Native ETH unsupported.
 contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -329,7 +329,6 @@ contract TychoFallbackRouter is AccessControl, ReentrancyGuardTransient {
             // crypto or llamma
             ICurveCryptoPool(pool).exchange(i, j, swap_.amountIn, 0);
         }
-        IERC20(swap_.tokenIn).forceApprove(pool, 0);
 
         uint256 received =
             IERC20(swap_.tokenOut).balanceOf(address(this)) - balanceBefore;

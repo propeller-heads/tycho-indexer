@@ -206,8 +206,9 @@ Constraints:
   rescue. The TychoRouter's route-level `minAmountOut` is the price check, so the caller must set it low enough for the
   fallback venue to clear.
 - **Uniswap V4 routes are single-pool.** A route names one pool, never a path.
-- The contract holds no funds and grants no allowances between transactions. A balance that does end up here (Curve
-  rounding dust, a mistaken transfer) is claimable by anyone through the permissionless `swap` and is considered lost.
+- The contract holds no funds between transactions. A balance that does end up here (Curve rounding dust, a mistaken
+  transfer) is claimable by anyone through the permissionless `swap` and is considered lost. A Curve exchange leaves its
+  approval in place; the same reasoning covers it, since there is nothing here to take.
 
 ### Executor Flow, Callbacks & Output Verification
 
