@@ -244,6 +244,21 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
     }
 
+    /// WETH < USDC is false, so this runs the `!zeroForOne` sqrt limit.
+    function testFallsBackToUniswapV3Reverse() public {
+        uint256 amountIn = 4 ether;
+        deal(WETH_ADDR, address(router), amountIn);
+
+        router.swap(
+            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV3(USDC_WETH_USV3)
+        );
+
+        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        _assertRouterDrained(WETH_ADDR, USDC_ADDR);
+    }
+
     /// The fallback starts from the full `amountIn`, whatever the primarySwap consumed.
     function testFallsBackToUniswapV2() public {
         deal(USDC_ADDR, address(router), USDC_IN);
@@ -256,6 +271,22 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
 
         assertGt(IERC20(WETH_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(USDC_ADDR, WETH_ADDR);
+    }
+
+    /// Reverse direction: the `!zeroForOne` reserve pairing and `pair.swap`
+    /// argument order.
+    function testFallsBackToUniswapV2Reverse() public {
+        uint256 amountIn = 4 ether;
+        deal(WETH_ADDR, address(router), amountIn);
+
+        router.swap(
+            FallbackSwaps.leg(WETH_ADDR, USDC_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV2(USDC_WETH_USV2, 30)
+        );
+
+        assertGt(IERC20(USDC_ADDR).balanceOf(BOB), 0);
+        _assertRouterDrained(WETH_ADDR, USDC_ADDR);
     }
 
     /// Curve pays the caller, so the swap forwards the output itself.
@@ -306,6 +337,22 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
 
         assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
         _assertRouterDrained(USDE_ADDR, USDT_ADDR);
+    }
+
+    /// Reverse direction: the `!zeroForOne` currency assignment and sqrt limit
+    /// inside `unlockCallback`.
+    function testFallsBackToUniswapV4Reverse() public {
+        uint256 amountIn = 100e6;
+        deal(USDT_ADDR, address(router), amountIn);
+
+        router.swap(
+            FallbackSwaps.leg(USDT_ADDR, USDE_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.uniswapV4(100, 1, address(0), bytes(""))
+        );
+
+        assertGt(IERC20(USDE_ADDR).balanceOf(BOB), 0);
+        _assertRouterDrained(USDT_ADDR, USDE_ADDR);
     }
 
     /// Zero output counts as a failure and takes back the `tokenIn` already sent.
@@ -489,6 +536,22 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
 
         assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
         assertEq(IERC20(SUSDE_ADDR).balanceOf(address(router)), 0);
+    }
+
+    /// `zero2one = false` consistently encoded: the dex requests USDT, which
+    /// is the leg's tokenIn, so the swap fills in the reverse direction.
+    function testFallsBackToFluidV1Reverse() public {
+        uint256 amountIn = 10e6;
+        deal(USDT_ADDR, address(router), amountIn);
+
+        router.swap(
+            FallbackSwaps.leg(USDT_ADDR, SUSDE_ADDR, amountIn, BOB),
+            address(pamm),
+            FallbackSwaps.fluidV1(FLUID_DEX, false)
+        );
+
+        assertGt(IERC20(SUSDE_ADDR).balanceOf(BOB), 0);
+        assertEq(IERC20(USDT_ADDR).balanceOf(address(router)), 0);
     }
 
     /// A mis-encoded `zero2one` makes the dex request the other side; the
