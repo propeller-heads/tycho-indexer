@@ -9,6 +9,11 @@ pub const VAULT_KEY: &str = "vault";
 /// Router-state store key holding the router's `Pausable` flag: `"1"` while paused.
 pub const PAUSED_KEY: &str = "paused";
 
+/// Component-index store key holding every token any created component trades.
+///
+/// Deliberately not a valid `token:` key, so the balance modules can tell the two apart.
+pub const ALL_TOKENS_KEY: &str = "tokens";
+
 /// Component-index store key holding every component id the package has created.
 ///
 /// Deliberately not a valid `token:` key, so the balance modules can tell the two apart.

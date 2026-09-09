@@ -39,7 +39,7 @@ use crate::{
     },
     utils::{
         component_id, lane_for, lane_index_to_lane_key, lane_key, sort_tokens, Config,
-        ALL_COMPONENTS_KEY, BALANCE_OWNER_ATTRIBUTE, LANE_KEY_PREFIX,
+        ALL_COMPONENTS_KEY, ALL_TOKENS_KEY, BALANCE_OWNER_ATTRIBUTE, LANE_KEY_PREFIX,
         OVERRIDE_BLOCK_TIMESTAMP_ATTRIBUTE, PAUSED_KEY, VAULT_KEY,
     },
 };
@@ -273,6 +273,9 @@ fn store_component_index(components: BlockEntityChanges, store: StoreAppend<Stri
         for component in tx_changes.component_changes {
             for token in component.tokens {
                 store.append(0, token_key(&token), component.id.clone());
+                // Enumerable token set: a `get`-only store cannot list `token:` keys, and a vault
+                // rotation has to re-snapshot every token, not just the ones seen that block.
+                store.append(0, ALL_TOKENS_KEY, hex::encode(&token));
             }
             store.append(0, ALL_COMPONENTS_KEY, component.id.clone());
         }
@@ -297,10 +300,20 @@ fn map_vault_balance_deltas(
     token_component_deltas: StoreDeltas,
     token_components_store: StoreGetString,
     router_state_store: StoreGetString,
+    router_state_deltas: StoreDeltas,
 ) -> Result<BlockBalanceDeltas> {
     let config: Config = serde_qs::from_str(params.as_str())?;
     let mut balance_deltas = Vec::new();
     let vault = vault_address(&router_state_store, &config);
+
+    // A rotation repoints the inventory at a different account, so every tracked token has to be
+    // re-read from the new vault -- not just the ones first seen this block. The initial
+    // `VaultUpdated` at the package's `initialBlock` has an empty `old_value` and is not a
+    // rotation; no components exist yet at that point either.
+    let vault_rotated = router_state_deltas
+        .deltas
+        .iter()
+        .any(|delta| delta.key == VAULT_KEY && !delta.old_value.is_empty());
 
     // Only `token:` keys carry a token to snapshot; the catch-all component index shares this
     // store and must be skipped.
@@ -315,12 +328,21 @@ fn map_vault_balance_deltas(
                 .map(str::to_string)
         })
         .collect::<HashSet<_>>();
+    let snapshot_tokens: HashSet<String> = if vault_rotated {
+        new_tokens
+            .iter()
+            .cloned()
+            .chain(known_tokens(&token_components_store))
+            .collect()
+    } else {
+        new_tokens
+    };
     let last_tx = block
         .transaction_traces
         .last()
         .map(Transaction::from);
 
-    for token_hex in &new_tokens {
+    for token_hex in &snapshot_tokens {
         let Some(tx) = &last_tx else {
             continue;
         };
@@ -356,10 +378,10 @@ fn map_vault_balance_deltas(
 
     for delta in vault_token_deltas {
         let BalanceDelta { ord, tx, token, delta, .. } = delta;
-        // Tokens tracked for the first time in this block were snapshotted with `balanceOf` above,
-        // which already reflects this block's movements. Applying the deltas too would
-        // double-count.
-        if new_tokens.contains(&hex::encode(&token)) {
+        // Tokens snapshotted with `balanceOf` above -- those tracked for the first time in this
+        // block, and every token when the vault rotated -- already reflect this block's
+        // movements. Applying the deltas too would double-count.
+        if snapshot_tokens.contains(&hex::encode(&token)) {
             continue;
         }
 
@@ -495,7 +517,6 @@ fn map_protocol_changes(
     let config: Config = serde_qs::from_str(params.as_str())?;
     let mut pending_creation = first_registrations(pair_registered_deltas);
     let mut transaction_changes: HashMap<_, TransactionChangesBuilder> = HashMap::new();
-    let vault = vault_address(&router_state_store, &config);
     let paused = router_paused(&router_state_store);
 
     for tx_changes in components.changes {
@@ -648,20 +669,21 @@ fn map_protocol_changes(
             let builder = transaction_changes
                 .entry(tx.index)
                 .or_insert_with(|| TransactionChangesBuilder::new(&tx));
-            let mut contract_change = InterimContractChange::new(&vault, false);
+            // Only component-scoped balances are emitted. The vault is not in any component's
+            // contract set, so account-scoped balances keyed by it would be filtered out of the
+            // pool anyway; simulation reaches the inventory through `balance_owner`.
             for token_balance_map in balances.values() {
                 for balance_change in token_balance_map.values() {
-                    contract_change
-                        .upsert_token_balance(&balance_change.token, &balance_change.balance);
                     builder.add_balance_change(balance_change);
                 }
             }
-            builder.add_contract_changes(&contract_change);
         });
 
     extract_contract_changes_builder(
         &block,
-        |addr| addr == config.router_address || addr == vault || addr == config.registry_address,
+        // The vault is deliberately absent: nothing calls it, so its storage is never read
+        // during simulation, and it belongs to no component's contract set.
+        |addr| addr == config.router_address || addr == config.registry_address,
         &mut transaction_changes,
     );
 
@@ -728,6 +750,21 @@ fn known_component_ids(component_index_store: &StoreGetString) -> Vec<String> {
         .map(|ids| {
             ids.split(';')
                 .filter(|id| !id.is_empty())
+                .unique()
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Every token any component trades, from the catch-all index key.
+fn known_tokens(component_index_store: &StoreGetString) -> Vec<String> {
+    component_index_store
+        .get_last(ALL_TOKENS_KEY)
+        .map(|tokens| {
+            tokens
+                .split(';')
+                .filter(|token| !token.is_empty())
                 .unique()
                 .map(str::to_string)
                 .collect()
@@ -817,6 +854,24 @@ mod tests {
 
     /// An existing component re-registered in a later block has no pending creation, so the very
     /// first registration it sees must lift the pause.
+    /// A rotation must be detected from the store delta so that every tracked token is
+    /// re-snapshotted against the new vault. The initialisation write is not a rotation.
+    #[test]
+    fn test_vault_rotation_detected_from_deltas() {
+        let rotated = |deltas: Vec<StoreDelta>| {
+            deltas
+                .iter()
+                .any(|d| d.key == VAULT_KEY && !d.old_value.is_empty())
+        };
+
+        // Initialisation: address(0) -> vault, written for the first time.
+        assert!(!rotated(vec![delta(VAULT_KEY, "", "c9d748e6")]));
+        // Rotation: an existing vault replaced.
+        assert!(rotated(vec![delta(VAULT_KEY, "c9d748e6", "deadbeef")]));
+        // An unrelated key changing is not a rotation.
+        assert!(!rotated(vec![delta(PAUSED_KEY, "0", "1")]));
+    }
+
     #[test]
     fn test_pause_transition_reregistration_without_pending_creation() {
         let mut pending: HashSet<String> = HashSet::new();

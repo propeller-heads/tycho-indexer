@@ -84,6 +84,8 @@ modules:
         mode: get
       - store: store_router_state
         mode: get
+      - store: store_router_state
+        mode: deltas
     output:
       type: proto:tycho.evm.v1.BlockBalanceDeltas
 
