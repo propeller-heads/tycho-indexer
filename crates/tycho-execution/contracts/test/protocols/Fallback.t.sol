@@ -172,22 +172,44 @@ contract GasBurnerPropAMM {
     }
 }
 
-/// @notice The claim the contract exists for: a reverting pAMM still delivers `tokenOut`, through
-/// a venue an executor could never reach.
-contract TychoFallbackRouterTest is Constants, TestUtils {
-    using FallbackSwaps for bytes;
-
+/// @notice Deploys a `TychoFallbackRouter` on a fork and holds the assertions every venue test
+/// repeats. Subclasses name the fork block, since the venues are not all live at the same one.
+abstract contract TychoFallbackRouterTestBase is Constants, TestUtils {
     TychoFallbackRouter router;
     MockPropAMM pamm;
 
-    uint256 constant USDC_IN = 10_000e6;
+    function _forkBlock() internal pure virtual returns (uint256);
 
-    function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 22689128);
+    function setUp() public virtual {
+        vm.createSelectFork(vm.rpcUrl("mainnet"), _forkBlock());
         router = new TychoFallbackRouter(
             ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
         pamm = new MockPropAMM();
+    }
+
+    /// Holds no funds once a leg is done.
+    function _assertRouterDrained(address tokenIn, address tokenOut)
+        internal
+        view
+    {
+        assertEq(IERC20(tokenIn).balanceOf(address(router)), 0);
+        assertEq(IERC20(tokenOut).balanceOf(address(router)), 0);
+    }
+}
+
+/// @notice The claim the contract exists for: a reverting pAMM still delivers `tokenOut`, through
+/// a venue an executor could never reach.
+contract TychoFallbackRouterTest is TychoFallbackRouterTestBase {
+    /// The USDC/WETH, DAI/USDC and USDE/USDT pools this contract quotes all
+    /// hold enough liquidity to fill `USDC_IN` here. Moving the block moves
+    /// every expected output with it.
+    uint256 constant FORK_BLOCK = 22_689_128;
+
+    uint256 constant USDC_IN = 10_000e6;
+
+    function _forkBlock() internal pure override returns (uint256) {
+        return FORK_BLOCK;
     }
 
     /// The enum ordinals are the wire format the encoder emits (the venue
@@ -292,17 +314,21 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         }
     }
 
-    function testConstructorRejectsZeroAddress() public {
+    function testConstructorRejectsZeroAdmin() public {
         vm.expectRevert(TychoFallbackRouter__AddressZero.selector);
         new TychoFallbackRouter(
             address(0), IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
         );
+    }
 
+    function testConstructorRejectsZeroPoolManager() public {
         vm.expectRevert(TychoFallbackRouter__AddressZero.selector);
         new TychoFallbackRouter(
             ADMIN, IPoolManager(address(0)), FLUIDV1_LIQUIDITY
         );
+    }
 
+    function testConstructorRejectsZeroFluidLiquidity() public {
         vm.expectRevert(TychoFallbackRouter__AddressZero.selector);
         new TychoFallbackRouter(ADMIN, IPoolManager(POOL_MANAGER), address(0));
     }
@@ -575,31 +601,26 @@ contract TychoFallbackRouterTest is Constants, TestUtils {
         vm.expectRevert(TychoFallbackRouter__NotPoolManager.selector);
         router.unlockCallback(bytes(""));
     }
-
-    /// Holds no funds once a leg is done.
-    function _assertRouterDrained(address tokenIn, address tokenOut)
-        internal
-        view
-    {
-        assertEq(IERC20(tokenIn).balanceOf(address(router)), 0);
-        assertEq(IERC20(tokenOut).balanceOf(address(router)), 0);
-    }
 }
 
-/// @notice Fluid pulls `tokenIn` through `dexCallback`. Forked where the dex is live.
-contract TychoFallbackRouterFluidTest is Constants, TestUtils {
+/// @notice Fluid pulls `tokenIn` through `dexCallback`.
+contract TychoFallbackRouterFluidTest is TychoFallbackRouterTestBase {
     address constant FLUID_DEX = 0x1DD125C32e4B5086c63CC13B3cA02C4A2a61Fa9b;
     address constant SUSDE_ADDR = 0x9D39A5DE30e57443BfF2A8307A4256c8797A3497;
 
-    TychoFallbackRouter router;
-    MockPropAMM pamm;
+    /// The sUSDE/USDT dex has no code at this contract's sibling block, so
+    /// these tests fork later.
+    uint256 constant FORK_BLOCK = 23_748_828;
 
-    function setUp() public {
-        vm.createSelectFork(vm.rpcUrl("mainnet"), 23748828);
-        router = new TychoFallbackRouter(
-            ADMIN, IPoolManager(POOL_MANAGER), FLUIDV1_LIQUIDITY
-        );
-        pamm = new MockPropAMM();
+    function _forkBlock() internal pure override returns (uint256) {
+        return FORK_BLOCK;
+    }
+
+    /// The router's deterministic deploy address already holds 1 sUSDE at this
+    /// block, so zero it to make `_assertRouterDrained` exact.
+    function setUp() public override {
+        super.setUp();
+        deal(SUSDE_ADDR, address(router), 0);
     }
 
     function testFallsBackToFluidV1() public {
@@ -613,7 +634,7 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
         );
 
         assertGt(IERC20(USDT_ADDR).balanceOf(BOB), 0);
-        assertEq(IERC20(SUSDE_ADDR).balanceOf(address(router)), 0);
+        _assertRouterDrained(SUSDE_ADDR, USDT_ADDR);
     }
 
     /// `zero2one = false` consistently encoded: the dex requests USDT, which
@@ -629,7 +650,7 @@ contract TychoFallbackRouterFluidTest is Constants, TestUtils {
         );
 
         assertGt(IERC20(SUSDE_ADDR).balanceOf(BOB), 0);
-        assertEq(IERC20(USDT_ADDR).balanceOf(address(router)), 0);
+        _assertRouterDrained(USDT_ADDR, SUSDE_ADDR);
     }
 
     /// A mis-encoded `zero2one` makes the dex request the other side; the
