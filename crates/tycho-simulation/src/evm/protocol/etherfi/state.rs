@@ -121,7 +121,15 @@ impl EtherfiState {
             return Ok(U256::ZERO);
         }
         let numerator = amount * self.total_shares;
-        Ok(numerator + total_pooled_ether - U256::ONE / total_pooled_ether)
+        // Ceiling division, matching LiquidityPool.sharesForWithdrawalAmount on chain.
+        Ok((numerator + total_pooled_ether - U256::ONE) / total_pooled_ether)
+    }
+
+    /// Neither wrapping eETH nor depositing ETH is capped by the protocol. Report a large but
+    /// arithmetically safe bound rather than `U256::MAX`: callers size trades from the limit, and
+    /// the share math overflows well below `U256::MAX`.
+    fn uncapped_limit() -> U256 {
+        U256::from(u128::MAX) - U256::ONE
     }
 }
 
@@ -207,9 +215,21 @@ impl ProtocolSim for EtherfiState {
         } else if base.address.as_ref() == WEETH_ADDRESS && quote.address.as_ref() == EETH_ADDRESS {
             to_price(self.amount_for_share(base_unit)?)
         } else if base.address.as_ref() == ETH_ADDRESS && quote.address.as_ref() == EETH_ADDRESS {
-            to_price(self.shares_for_amount(base_unit)?)
+            // Depositing mints shares worth the deposited ETH, so the eETH balance received is
+            // near parity with the input - not the share count.
+            to_price(self.amount_for_share(self.shares_for_amount(base_unit)?)?)
         } else if base.address.as_ref() == EETH_ADDRESS && quote.address.as_ref() == ETH_ADDRESS {
-            to_price(self.amount_for_share(base_unit)?)
+            // Redeeming burns the shares backing the eETH balance, net of the exit fee.
+            let exit_fee_in_bps = self
+                .eth_redemption_info
+                .map(|info| info.exit_fee_in_bps)
+                .unwrap_or_default();
+            let net_shares = mul_div(
+                self.shares_for_amount(base_unit)?,
+                U256::from(BASIS_POINT_SCALE) - U256::from(exit_fee_in_bps),
+                U256::from(BASIS_POINT_SCALE),
+            )?;
+            to_price(self.amount_for_share(net_shares)?)
         } else {
             Err(SimulationError::FatalError("unsupported spot price".to_string()))
         }
@@ -225,9 +245,13 @@ impl ProtocolSim for EtherfiState {
         let amount_in = biguint_to_u256(&amount_in);
         if token_in.address.as_ref() == ETH_ADDRESS && token_out.address.as_ref() == EETH_ADDRESS {
             // eth --> eeth
-            let amount_out = self.shares_for_amount(amount_in)?;
-            new_state.total_shares += amount_out;
+            // The deposit mints shares, but eETH is rebasing: the depositor receives an eETH
+            // *balance* worth the deposited ETH, which is what the caller trades. Read the
+            // balance off the post-deposit state, as `balanceOf` would on chain.
+            let shares = self.shares_for_amount(amount_in)?;
+            new_state.total_shares += shares;
             new_state.total_value_in_lp += amount_in;
+            let amount_out = new_state.amount_for_share(shares)?;
             return Ok(GetAmountOutResult::new(
                 u256_to_biguint(amount_out),
                 BigUint::from(46_886u32), // LiquidityPool.deposit function gas used
@@ -350,14 +374,22 @@ impl ProtocolSim for EtherfiState {
         }
 
         if sell_token.as_ref() == EETH_ADDRESS && buy_token.as_ref() == WEETH_ADDRESS {
-            return Ok((u256_to_biguint(U256::MAX), u256_to_biguint(U256::MAX)));
+            // Wrapping is uncapped by the protocol, but no more eETH can be wrapped than exists.
+            let max_eeth_amount = self.total_value_in_lp + self.total_value_out_of_lp;
+            let max_weeth_amount = self.shares_for_amount(max_eeth_amount)?;
+            return Ok((u256_to_biguint(max_eeth_amount), u256_to_biguint(max_weeth_amount)));
         }
 
         if sell_token.as_ref() == ETH_ADDRESS && buy_token.as_ref() == EETH_ADDRESS {
-            return Ok((u256_to_biguint(U256::MAX), u256_to_biguint(U256::MAX)));
+            let max_eth_amount = Self::uncapped_limit();
+            let max_eeth_amount = self.amount_for_share(self.shares_for_amount(max_eth_amount)?)?;
+            return Ok((u256_to_biguint(max_eth_amount), u256_to_biguint(max_eeth_amount)));
         }
 
-        Err(SimulationError::FatalError("unsupported swap".to_string()))
+        // A component only quotes the directions its venue supports (eETH cannot be minted from
+        // weETH's side, and staking is one-way). Report a zero limit rather than an error so
+        // callers skip the direction instead of treating the component as broken.
+        Ok((BigUint::ZERO, BigUint::ZERO))
     }
 
     fn delta_transition(
@@ -475,10 +507,28 @@ impl ProtocolSim for EtherfiState {
 
 #[cfg(test)]
 mod tests {
+    use tycho_common::models::Chain;
+
     use super::*;
 
     fn u256_dec(value: &str) -> U256 {
         U256::from_str_radix(value, 10).expect("valid base-10 U256")
+    }
+
+    fn token(address: [u8; 20], symbol: &str) -> Token {
+        Token::new(&Bytes::from(address), symbol, 18, 0, &[Some(0)], Chain::Ethereum, 100)
+    }
+
+    fn eeth_token() -> Token {
+        token(EETH_ADDRESS, "eETH")
+    }
+
+    fn weeth_token() -> Token {
+        token(WEETH_ADDRESS, "weETH")
+    }
+
+    fn eth_token() -> Token {
+        token(ETH_ADDRESS, "ETH")
     }
 
     fn sample_state() -> EtherfiState {
@@ -501,6 +551,41 @@ mod tests {
                 low_watermark_in_bps_of_tvl: 100,
             }),
         }
+    }
+
+    #[test]
+    fn shares_for_withdrawal_amount_rounds_up() {
+        let state = sample_state();
+        let amount = u256_dec("1000000000000000000");
+        let total_pooled = state.total_value_in_lp + state.total_value_out_of_lp;
+
+        let shares = state
+            .shares_for_withdrawal_amount(amount)
+            .expect("shares");
+
+        // Ceiling division of amount * total_shares / total_pooled_ether.
+        let expected = (amount * state.total_shares + total_pooled - U256::ONE) / total_pooled;
+        assert_eq!(shares, expected);
+        // Sanity: burning one eETH cannot burn more shares than exist.
+        assert!(shares < state.total_shares);
+    }
+
+    #[test]
+    fn get_amount_out_eeth_to_eth_keeps_state_consistent() {
+        let state = sample_state();
+        let amount_in = BigUint::parse_bytes(b"1000000000000000000", 10).expect("amount");
+
+        let result = state
+            .get_amount_out(amount_in, &eeth_token(), &eth_token())
+            .expect("amount out");
+
+        let new_state = result
+            .new_state
+            .as_any()
+            .downcast_ref::<EtherfiState>()
+            .expect("etherfi state");
+        assert!(new_state.total_shares < state.total_shares);
+        assert!(new_state.total_shares > state.total_shares / U256::from(2u8));
     }
 
     #[test]
@@ -648,6 +733,101 @@ mod tests {
 
         assert_eq!(max_in, u256_to_biguint(low_watermark - U256::ONE));
         assert_eq!(max_out, BigUint::ZERO);
+    }
+
+    #[test]
+    fn get_amount_out_eth_to_eeth_returns_eeth_balance_not_shares() {
+        let state = sample_state();
+        let one_eth = U256::from(10u8).pow(U256::from(18u8));
+        let amount_in = u256_to_biguint(one_eth);
+
+        let result = state
+            .get_amount_out(amount_in, &eth_token(), &eeth_token())
+            .expect("amount out");
+
+        // Depositing 1 ETH credits an eETH balance worth ~1 ETH. The share count is materially
+        // smaller once the share rate has drifted above parity, so quoting it under-quotes the
+        // venue by the whole share premium.
+        let shares = state
+            .shares_for_amount(one_eth)
+            .expect("shares");
+        assert!(result.amount > u256_to_biguint(shares));
+        let one_eth_big = u256_to_biguint(one_eth);
+        let tolerance = u256_to_biguint(one_eth / U256::from(1_000_000u32));
+        assert!(&one_eth_big - &result.amount < tolerance);
+    }
+
+    #[test]
+    fn get_limits_eeth_to_weeth_is_bounded_by_supply() {
+        let state = sample_state();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(WEETH_ADDRESS))
+            .expect("limits");
+
+        let total_pooled = state.total_value_in_lp + state.total_value_out_of_lp;
+        assert_eq!(max_in, u256_to_biguint(total_pooled));
+        assert_eq!(
+            max_out,
+            u256_to_biguint(
+                state
+                    .shares_for_amount(total_pooled)
+                    .expect("shares")
+            )
+        );
+        // A quote taken at the reported limit must not overflow into nonsense.
+        let quoted = state
+            .get_amount_out(max_in.clone(), &eeth_token(), &weeth_token())
+            .expect("amount out");
+        assert_eq!(quoted.amount, max_out);
+    }
+
+    #[test]
+    fn get_limits_eth_to_eeth_is_arithmetically_safe() {
+        let state = sample_state();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(ETH_ADDRESS), Bytes::from(EETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, u256_to_biguint(EtherfiState::uncapped_limit()));
+        // Depositing is near parity, so the output bound must stay the same order of magnitude
+        // as the input bound - the previous `U256::MAX` limit wrapped and reported garbage.
+        assert!(max_out > &max_in / 2u32);
+        // And a quote at 0.1% of the limit must still be near parity.
+        let amount_in = &max_in / 1000u32;
+        let quoted = state
+            .get_amount_out(amount_in.clone(), &eth_token(), &eeth_token())
+            .expect("amount out");
+        assert!(quoted.amount > &amount_in / 2u32);
+    }
+
+    #[test]
+    fn get_limits_unsupported_direction_returns_zero() {
+        let state = sample_state();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(WEETH_ADDRESS), Bytes::from(ETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, BigUint::ZERO);
+        assert_eq!(max_out, BigUint::ZERO);
+    }
+
+    #[test]
+    fn spot_price_eth_eeth_is_near_parity() {
+        let state = sample_state();
+
+        let deposit = state
+            .spot_price(&eth_token(), &eeth_token())
+            .expect("spot price");
+        let redeem = state
+            .spot_price(&eeth_token(), &eth_token())
+            .expect("spot price");
+
+        // Both legs are ~1:1; only the exit fee (30 bps here) moves the redeem leg off parity.
+        assert!((deposit - 1.0).abs() < 1e-6, "deposit leg off parity: {deposit}");
+        assert!(redeem < 1.0 && redeem > 0.99, "redeem leg not fee-adjusted: {redeem}");
     }
 
     #[test]
