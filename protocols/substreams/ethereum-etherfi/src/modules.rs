@@ -1,13 +1,13 @@
 use crate::{
     abi::weeth::functions::{Unwrap, Wrap, WrapWithPermit},
     consts::{
-        EETH_ADDRESS, ETH_ADDRESS, LIQUIDITY_POOL_ADDRESS, LIQUIDITY_POOL_CREATION_BLOCK,
-        LIQUIDITY_POOL_CREATION_TX, REDEMPTION_MANAGER_ADDRESS, WEETH_ADDRESS,
-        WEETH_CREATION_BLOCK, WEETH_CREATION_TX,
+        EETH_ADDRESS, ETH_ADDRESS, LIQUIDITY_POOL_ADDRESS, REDEMPTION_MANAGER_ADDRESS,
+        WEETH_ADDRESS,
     },
+    state::InitialState,
     storage::{get_changed_attributes, EETH_POOL_TRACKED_SLOTS, WEETH_POOL_TRACKED_SLOTS},
 };
-use anyhow::{Ok, Result};
+use anyhow::{anyhow, Ok, Result};
 use itertools::Itertools;
 use std::collections::HashMap;
 use substreams::{pb::substreams::StoreDeltas, prelude::*};
@@ -27,118 +27,69 @@ use tycho_substreams::{
 ///
 /// This method maps over blocks and instantiates ProtocolComponents with a unique ids
 /// as well as all necessary metadata for routing and encoding.
+/// Creates both components at the params-provided `start_block`, seeded from a chain snapshot.
+///
+/// The contracts predate any block worth indexing from and the attributes are derived from
+/// storage *changes*, so a slot that does not move inside the indexed range would never be
+/// reported. Seeding lets the package start recent instead of replaying from mid-2023.
 #[substreams::handlers::map]
-fn map_protocol_components(block: eth::v2::Block) -> Result<BlockChanges> {
-    let mut new_pools: Vec<TransactionChanges> = vec![];
-    if block.number == WEETH_CREATION_BLOCK {
-        if let Some(tx) = block
-            .transactions()
-            .find(|tx| tx.hash == WEETH_CREATION_TX)
-        {
-            new_pools.push(TransactionChanges {
-                tx: Some(tx.into()),
-                entity_changes: vec![EntityChanges {
-                    component_id: format!("0x{}", hex::encode(WEETH_ADDRESS)),
-                    attributes: vec![
-                        Attribute {
-                            name: "totalValueOutOfLp".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "totalValueInLp".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "totalShares".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                }],
-                component_changes: vec![ProtocolComponent {
-                    id: format!("0x{}", hex::encode(WEETH_ADDRESS)),
-                    tokens: vec![WEETH_ADDRESS.into(), EETH_ADDRESS.into()],
-                    contracts: vec![],
-                    static_att: vec![],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "ethereum_etherfi_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Custom.into(),
-                    }),
-                }],
-                ..Default::default()
-            });
-        }
+fn map_protocol_components(params: String, block: eth::v2::Block) -> Result<BlockChanges> {
+    let initial_state = InitialState::parse(&params)?;
+    if block.number != initial_state.start_block {
+        return Ok(BlockChanges { block: Some((&block).into()), ..Default::default() });
     }
-    if block.number == LIQUIDITY_POOL_CREATION_BLOCK {
-        if let Some(tx) = block
-            .transactions()
-            .find(|tx| tx.hash == LIQUIDITY_POOL_CREATION_TX)
-        {
-            new_pools.push(TransactionChanges {
-                tx: Some(tx.into()),
-                entity_changes: vec![EntityChanges {
-                    component_id: format!("0x{}", hex::encode(EETH_ADDRESS)),
-                    attributes: vec![
-                        Attribute {
-                            name: "totalValueOutOfLp".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "totalValueInLp".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "totalShares".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "ethAmountLockedForWithdrawl".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "liquidityPoolNativeBalance".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "ethRedemptionInfo".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                        Attribute {
-                            name: "ethBucketLimiter".to_string(),
-                            value: BigInt::from(0).to_signed_bytes_be(),
-                            change: ChangeType::Creation.into(),
-                        },
-                    ],
-                }],
-                component_changes: vec![ProtocolComponent {
-                    id: format!("0x{}", hex::encode(EETH_ADDRESS)),
-                    tokens: vec![EETH_ADDRESS.into(), ETH_ADDRESS.into()],
-                    contracts: vec![],
-                    static_att: vec![],
-                    change: ChangeType::Creation.into(),
-                    protocol_type: Some(ProtocolType {
-                        name: "ethereum_etherfi_pool".into(),
-                        financial_type: FinancialType::Swap.into(),
-                        attribute_schema: Vec::new(),
-                        implementation_type: ImplementationType::Custom.into(),
-                    }),
-                }],
-                ..Default::default()
-            });
-        }
+
+    let tx = block
+        .transactions()
+        .next()
+        .ok_or_else(|| anyhow!("start block {} has no transactions", block.number))?;
+
+    let weeth_attributes = initial_state.creation_attributes(&WEETH_POOL_TRACKED_SLOTS)?;
+    let mut eeth_attributes = initial_state.creation_attributes(&EETH_POOL_TRACKED_SLOTS)?;
+    eeth_attributes.push(initial_state.liquidity_pool_native_balance_attribute()?);
+
+    Ok(BlockChanges {
+        block: Some((&block).into()),
+        changes: vec![TransactionChanges {
+            tx: Some(tx.into()),
+            entity_changes: vec![
+                EntityChanges {
+                    component_id: component_id(&WEETH_ADDRESS),
+                    attributes: weeth_attributes,
+                },
+                EntityChanges {
+                    component_id: component_id(&EETH_ADDRESS),
+                    attributes: eeth_attributes,
+                },
+            ],
+            component_changes: vec![
+                swap_component(&WEETH_ADDRESS, vec![WEETH_ADDRESS.into(), EETH_ADDRESS.into()]),
+                swap_component(&EETH_ADDRESS, vec![EETH_ADDRESS.into(), ETH_ADDRESS.into()]),
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    })
+}
+
+fn component_id(address: &[u8; 20]) -> String {
+    format!("0x{}", hex::encode(address))
+}
+
+fn swap_component(address: &[u8; 20], tokens: Vec<Vec<u8>>) -> ProtocolComponent {
+    ProtocolComponent {
+        id: component_id(address),
+        tokens,
+        contracts: vec![],
+        static_att: vec![],
+        change: ChangeType::Creation.into(),
+        protocol_type: Some(ProtocolType {
+            name: "ethereum_etherfi_pool".into(),
+            financial_type: FinancialType::Swap.into(),
+            attribute_schema: Vec::new(),
+            implementation_type: ImplementationType::Custom.into(),
+        }),
     }
-    Ok(BlockChanges { block: Some((&block).into()), changes: new_pools, ..Default::default() })
 }
 
 /// Simply stores the `ProtocolComponent`s with the pool address as the key and the pool id as value
@@ -157,9 +108,47 @@ pub fn store_components(changes: BlockChanges, store: StoreSetString) {
 
 #[substreams::handlers::map]
 fn map_relative_balances(
+    params: String,
     block: eth::v2::Block,
     components_store: StoreGetString,
 ) -> Result<BlockBalanceDeltas> {
+    let initial_state = InitialState::parse(&params)?;
+    let mut seed: Vec<BalanceDelta> = vec![];
+
+    // Component balances are accumulated from relative deltas. Starting at a recent block, the
+    // balances the components already hold have no deltas to derive them from, so seed them
+    // once - without this the reported balances, and the TVL computed from them, start at zero.
+    if block.number == initial_state.start_block {
+        let tx = block
+            .transactions()
+            .next()
+            .ok_or_else(|| anyhow!("start block {} has no transactions", block.number))?;
+        seed.push(BalanceDelta {
+            ord: 0,
+            tx: Some(tx.into()),
+            token: EETH_ADDRESS.to_vec(),
+            delta: initial_state
+                .weeth_eeth_balance()?
+                .to_signed_bytes_be(),
+            component_id: WEETH_ADDRESS
+                .to_hex()
+                .as_bytes()
+                .to_vec(),
+        });
+        seed.push(BalanceDelta {
+            ord: 0,
+            tx: Some(tx.into()),
+            token: ETH_ADDRESS.to_vec(),
+            delta: initial_state
+                .liquidity_pool_native_balance()?
+                .to_signed_bytes_be(),
+            component_id: EETH_ADDRESS
+                .to_hex()
+                .as_bytes()
+                .to_vec(),
+        });
+    }
+
     let mut deltas: Vec<BalanceDelta> = block
         .transactions()
         .flat_map(|tx| {
@@ -179,6 +168,8 @@ fn map_relative_balances(
             tx_balance_deltas
         })
         .collect();
+    seed.append(&mut deltas);
+    let mut deltas = seed;
     // Keep it consistent with how it's inserted in the store. This step is important
     // because we use a zip on the store deltas and balance deltas later.
     deltas.sort_unstable_by_key(|a| a.ord);
