@@ -29,6 +29,7 @@ pub const BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_ATTR: &str =
     "buffered_ether_and_deposited_validators";
 pub const CL_BALANCE_AND_CL_VALIDATORS_ATTR: &str = "cl_balance_and_cl_validators";
 pub const STAKING_STATE_ATTR: &str = "staking_state";
+pub const WSTETH_SHARES_ATTR: &str = "wsteth_shares";
 
 const DEPOSIT_SIZE: u128 = 32_000_000_000_000_000_000;
 const UINT128_MAX_EXCLUSIVE: u128 = u128::MAX;
@@ -55,6 +56,9 @@ pub struct LidoV3State {
     cl_balance: U256,
     cl_validators: U256,
     staking_state: Option<StakingState>,
+    /// `sharesOf(wstETH)`, i.e. the shares the wrapper holds. Only set for the wstETH component,
+    /// where it bounds how much can be unwrapped.
+    wsteth_shares: Option<U256>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,6 +82,7 @@ impl LidoV3State {
         cl_balance: U256,
         cl_validators: U256,
         staking_state: Option<StakingState>,
+        wsteth_shares: Option<U256>,
     ) -> Self {
         Self {
             kind,
@@ -90,6 +95,7 @@ impl LidoV3State {
             cl_balance,
             cl_validators,
             staking_state,
+            wsteth_shares,
         }
     }
 
@@ -148,6 +154,12 @@ impl LidoV3State {
             return Err(SimulationError::FatalError("invalid Lido share rate state".to_string()));
         }
         Ok((shares_amount * numerator) / denominator)
+    }
+
+    fn wsteth_shares(&self) -> Result<U256, SimulationError> {
+        self.wsteth_shares.ok_or_else(|| {
+            SimulationError::FatalError("missing wstETH shares for wstETH component".to_string())
+        })
     }
 
     fn staking_state(&self) -> Result<StakingState, SimulationError> {
@@ -376,17 +388,27 @@ impl ProtocolSim for LidoV3State {
             LidoV3PoolKind::WstEth
                 if sell_token.as_ref() == STETH_ADDRESS && buy_token.as_ref() == WSTETH_ADDRESS =>
             {
+                // Wrapping mints against the caller's own stETH, so the protocol only bounds it
+                // by how much stETH exists.
+                let max_sell = self.internal_ether()?.min(max_input);
                 Ok((
-                    u256_to_biguint(max_input),
-                    u256_to_biguint(self.shares_for_pooled_eth(max_input)?),
+                    u256_to_biguint(max_sell),
+                    u256_to_biguint(self.shares_for_pooled_eth(max_sell)?),
                 ))
             }
             LidoV3PoolKind::WstEth
                 if sell_token.as_ref() == WSTETH_ADDRESS && buy_token.as_ref() == STETH_ADDRESS =>
             {
+                // Unwrapping pays out of the stETH the wrapper holds, so it is bounded by the
+                // wrapper's shares. Quoting an unbounded limit here makes callers size trades the
+                // wrapper cannot settle, and `wstETH.unwrap` reverts with a SafeMath underflow.
+                let max_sell = self.wsteth_shares()?.min(max_input);
+                if max_sell.is_zero() {
+                    return Ok((BigUint::ZERO, BigUint::ZERO));
+                }
                 Ok((
-                    u256_to_biguint(max_input),
-                    u256_to_biguint(self.pooled_eth_by_shares(max_input)?),
+                    u256_to_biguint(max_sell),
+                    u256_to_biguint(self.pooled_eth_by_shares(max_sell)?),
                 ))
             }
             // Staking is one-directional: unstaking goes through the asynchronous withdrawal
@@ -431,6 +453,12 @@ impl ProtocolSim for LidoV3State {
                 Self::split_low_high_u128(U256::from_be_slice(buffered_and_deposited));
             self.buffered_ether = buffered_ether;
             self.deposited_validators = deposited_validators;
+        }
+        if let Some(wsteth_shares) = delta
+            .updated_attributes
+            .get(WSTETH_SHARES_ATTR)
+        {
+            self.wsteth_shares = Some(U256::from_be_slice(wsteth_shares));
         }
         if let Some(cl_balance_and_validators) = delta
             .updated_attributes
@@ -528,13 +556,20 @@ mod tests {
             U256::from_str_radix("21114116614166341429013364", 10).unwrap(),
             U256::from(412_745u64),
             Some(sample_staking_state()),
+            None,
         )
+    }
+
+    /// The shares the wstETH wrapper holds - a little under half the pool.
+    fn sample_wsteth_shares() -> U256 {
+        U256::from_str_radix("2960000000000000000000000", 10).unwrap()
     }
 
     fn sample_wsteth_state() -> LidoV3State {
         let mut state = sample_steth_state();
         state.kind = LidoV3PoolKind::WstEth;
         state.staking_state = None;
+        state.wsteth_shares = Some(sample_wsteth_shares());
         state
     }
 
@@ -566,6 +601,12 @@ mod tests {
                 Bytes::from((state.cl_balance | (state.cl_validators << 128u32)).to_be_bytes_vec()),
             ),
         ]);
+        if kind == LidoV3PoolKind::WstEth {
+            attributes.insert(
+                WSTETH_SHARES_ATTR.to_string(),
+                Bytes::from(sample_wsteth_shares().to_be_bytes_vec()),
+            );
+        }
         let component_id = match kind {
             LidoV3PoolKind::StEth => {
                 attributes.insert(
@@ -695,6 +736,69 @@ mod tests {
             .unwrap();
         assert_eq!(unwrapped_state, &state);
         assert!(unwrap.amount > BigUint::ZERO);
+    }
+
+    #[test]
+    fn get_limits_unwrap_is_bounded_by_wrapper_shares() {
+        let state = sample_wsteth_state();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(WSTETH_ADDRESS), Bytes::from(STETH_ADDRESS))
+            .unwrap();
+
+        // Unwrapping pays out of the wrapper's stETH, so the limit is its share balance - not an
+        // unbounded sentinel, which would make callers size trades that revert on chain.
+        assert_eq!(max_in, u256_to_biguint(sample_wsteth_shares()));
+        assert_eq!(
+            max_out,
+            u256_to_biguint(
+                state
+                    .pooled_eth_by_shares(sample_wsteth_shares())
+                    .unwrap()
+            )
+        );
+        assert!(max_in < u256_to_biguint(U256::from(UINT128_MAX_EXCLUSIVE) - U256::ONE));
+    }
+
+    #[test]
+    fn get_limits_wrap_is_bounded_by_steth_supply() {
+        let state = sample_wsteth_state();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(STETH_ADDRESS), Bytes::from(WSTETH_ADDRESS))
+            .unwrap();
+
+        // No more stETH can be wrapped than exists.
+        let supply = state.internal_ether().unwrap();
+        assert_eq!(max_in, u256_to_biguint(supply));
+        assert_eq!(
+            max_out,
+            u256_to_biguint(
+                state
+                    .shares_for_pooled_eth(supply)
+                    .unwrap()
+            )
+        );
+        assert!(max_in < u256_to_biguint(U256::from(UINT128_MAX_EXCLUSIVE) - U256::ONE));
+    }
+
+    #[test]
+    fn get_limits_unwrap_with_empty_wrapper_returns_zero() {
+        let mut state = sample_wsteth_state();
+        state.wsteth_shares = Some(U256::ZERO);
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(WSTETH_ADDRESS), Bytes::from(STETH_ADDRESS))
+            .unwrap();
+
+        assert_eq!(max_in, BigUint::ZERO);
+        assert_eq!(max_out, BigUint::ZERO);
+    }
+
+    #[test]
+    fn decoder_reads_wsteth_shares() {
+        let state = sample_wsteth_state();
+        assert_eq!(state.wsteth_shares, Some(sample_wsteth_shares()));
     }
 
     #[test]

@@ -7,7 +7,7 @@ use tycho_common::{models::token::Token, Bytes};
 use super::state::{
     LidoV3PoolKind, LidoV3State, StakingState, BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_ATTR,
     CL_BALANCE_AND_CL_VALIDATORS_ATTR, STAKING_STATE_ATTR, STETH_COMPONENT_ID,
-    TOTAL_AND_EXTERNAL_SHARES_ATTR, WSTETH_COMPONENT_ID,
+    TOTAL_AND_EXTERNAL_SHARES_ATTR, WSTETH_COMPONENT_ID, WSTETH_SHARES_ATTR,
 };
 use crate::protocol::{
     errors::InvalidSnapshotError,
@@ -93,6 +93,20 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoV3State {
             LidoV3PoolKind::WstEth => None,
         };
 
+        // Only the wstETH component tracks the wrapper's share balance; it bounds unwrapping.
+        let wsteth_shares = match kind {
+            LidoV3PoolKind::StEth => None,
+            LidoV3PoolKind::WstEth => Some(U256::from_be_slice(
+                snapshot
+                    .state
+                    .attributes
+                    .get(WSTETH_SHARES_ATTR)
+                    .ok_or_else(|| {
+                        InvalidSnapshotError::MissingAttribute(WSTETH_SHARES_ATTR.to_string())
+                    })?,
+            )),
+        };
+
         Ok(LidoV3State::new(
             kind,
             block.number,
@@ -104,6 +118,7 @@ impl TryFromWithBlock<ComponentWithState, BlockHeader> for LidoV3State {
             cl_balance,
             cl_validators,
             staking_state,
+            wsteth_shares,
         ))
     }
 }
