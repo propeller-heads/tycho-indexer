@@ -50,6 +50,15 @@ pub trait SwapEncoder: Sync + Send {
         false
     }
 
+    /// Whether quotes must be requested in route order.
+    ///
+    /// True when the protocol rejects a quote executed after a quote that was issued later
+    /// (e.g. a nonce that must be strictly increasing per trader), so a swap's quote is only
+    /// valid when requested before the quotes of later swaps in the route.
+    fn requires_ordered_quotes(&self) -> bool {
+        false
+    }
+
     /// Creates a cloned instance of the swap encoder.
     ///
     /// This allows the encoder to be cloned when it is being used as a `Box<dyn SwapEncoder>`.

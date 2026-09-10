@@ -51,12 +51,19 @@ impl SwapEncoder for HashflowSwapEncoder {
                 "Estimated amount in is mandatory for a Hashflow swap".to_string(),
             ))?
             .clone();
-        let sender = encoding_context
+        let router_address = encoding_context
             .router_address
             .clone()
             .ok_or(EncodingError::FatalError(
                 "The router address is needed to perform a Hashflow swap".to_string(),
             ))?;
+        // The quote attribution becomes the quote's effective trader, giving each quote
+        // request an independent nonce sequence. Without one the quote is attributed to the
+        // router itself.
+        let sender = encoding_context
+            .quote_attribution
+            .clone()
+            .unwrap_or_else(|| router_address.clone());
         let signed_quote = on_blocking_thread(|| {
             self.runtime_handle.block_on(async {
                 protocol_state
@@ -65,8 +72,8 @@ impl SwapEncoder for HashflowSwapEncoder {
                         amount_in,
                         token_in: swap.token_in().address.clone(),
                         token_out: swap.token_out().address.clone(),
-                        sender: sender.clone(),
-                        receiver: sender,
+                        sender,
+                        receiver: router_address,
                     })
                     .await
             })
@@ -78,6 +85,7 @@ impl SwapEncoder for HashflowSwapEncoder {
             "pool",
             "external_account",
             "trader",
+            "effective_trader",
             "base_token",
             "quote_token",
             "base_token_amount",
@@ -106,6 +114,14 @@ impl SwapEncoder for HashflowSwapEncoder {
     }
 
     fn blocks_on_quote(&self) -> bool {
+        true
+    }
+
+    /// Hashflow pools require each quote's nonce — a timestamp the market maker assigns when
+    /// answering — to be strictly increasing per effective trader. All quotes of a solution
+    /// share one effective trader (its quote attribution), so a quote fetched out of route
+    /// order carries a nonce that reverts the swap executed after it.
+    fn requires_ordered_quotes(&self) -> bool {
         true
     }
 
@@ -159,6 +175,7 @@ mod test {
         .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -197,6 +214,10 @@ mod test {
             (
                 "trader".to_string(),
                 Bytes::from_str("0xcd09f75e2bf2a4d11f3ab23f1389fcc1621c0cc2").unwrap(),
+            ),
+            (
+                "effective_trader".to_string(),
+                Bytes::from_str("0x1111111111111111111111111111111111111111").unwrap(),
             ),
             (
                 "base_token".to_string(),
@@ -255,6 +276,7 @@ mod test {
         .with_protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
