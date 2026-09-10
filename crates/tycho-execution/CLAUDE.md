@@ -331,6 +331,15 @@ the route. It resolves the same
 way (family key `propammfallback`, shared `PropAMMSwapEncoder`, `PropAMMFallbackExecutor`). Only venues
 whitelisted on the PropAMMRouter may use the prefix.
 
+`fallback:{venue}` is the same liquidity executed through `TychoFallbackRouter` (see "Venue
+fallback" above), which replaces the PropAMMRouter path: any pAMM qualifies, and the solver picks
+the fallback venue per swap instead of the router owning one Uniswap V3 mapping. It resolves the
+same way (family key `fallback`, `FallbackSwapEncoder`, `FallbackExecutor`). The fallback venue —
+one of Uniswap V2/V3/V4, Curve, or Fluid V1 with its pool parameters — travels as JSON in the
+swap's `user_data` and is required; the pAMM address comes from the component's `pamm_address`
+static attribute. No `fallback` entry ships in the executor configs until the FallbackExecutor is
+deployed.
+
 ### Angstrom attestations (`evm/swap_encoder/angstrom.rs`)
 
 Angstrom's Uniswap V4 pools start every block locked. A swap against one carries a pool unlock attestation, signed by
