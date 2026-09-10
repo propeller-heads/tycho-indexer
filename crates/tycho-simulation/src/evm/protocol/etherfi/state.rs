@@ -22,7 +22,10 @@ use crate::evm::protocol::{
 
 pub const EETH_ADDRESS: [u8; 20] = hex!("35fA164735182de50811E8e2E824cFb9B6118ac2");
 pub const WEETH_ADDRESS: [u8; 20] = hex!("Cd5fE23C85820F7B72D0926FC9b05b43E359b7ee");
-pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+// Native ETH as Tycho addresses it (`Chain::native_token`), not the router's
+// 0xEeee..EEeE sentinel: this has to match the token the indexer reports and the token the
+// swap encoder compares against.
+pub const ETH_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
 pub const BASIS_POINT_SCALE: u64 = 10000;
 pub const BUCKET_UNIT_SCALE: u64 = 1_000_000_000_000;
 
@@ -928,5 +931,14 @@ mod tests {
 
         assert_eq!(max_in, u256_to_biguint(max_weeth));
         assert_eq!(max_out, u256_to_biguint(state.total_shares));
+    }
+
+    /// The ETH side has to be the address Tycho gives native ETH, not the router's
+    /// 0xEeee..EEeE sentinel. The substreams package reports this address as a component token
+    /// and `EtherfiSwapEncoder` compares against `Chain::native_token()`, so a mismatch here
+    /// leaves the token unpriced and makes every ETH-side swap fail to encode.
+    #[test]
+    fn eth_address_is_the_chain_native_token() {
+        assert_eq!(Bytes::from(ETH_ADDRESS), Chain::Ethereum.native_token().address);
     }
 }

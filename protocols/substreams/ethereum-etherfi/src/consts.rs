@@ -1,6 +1,9 @@
 use substreams::hex;
 
-pub const ETH_ADDRESS: [u8; 20] = hex!("EeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE");
+// Native ETH as Tycho addresses it, not the router's 0xEeee..EEeE sentinel. Reporting the
+// sentinel leaves the token unpriced (so the component gets no TVL row and is filtered out by
+// min_tvl) and makes the swap encoder reject every ETH-side swap.
+pub const ETH_ADDRESS: [u8; 20] = hex!("0000000000000000000000000000000000000000");
 
 pub const EETH_ADDRESS: [u8; 20] = hex!("35fA164735182de50811E8e2E824cFb9B6118ac2");
 
