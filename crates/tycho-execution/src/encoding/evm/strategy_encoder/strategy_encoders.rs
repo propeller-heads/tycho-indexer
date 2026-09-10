@@ -18,29 +18,17 @@ use crate::encoding::{
     models::{EncodedSolution, EncodingContext, Solution, Strategy, UserTransferType},
 };
 
-/// Returns the address the solution's RFQ quotes are attributed to.
-///
-/// With a quote id it is the last 20 bytes of `keccak256(sender || quote_id)`: stable for one
-/// quote request and distinct across quote requests, so their RFQ nonce sequences are
-/// independent. Without one it is the solution's sender.
-fn quote_attribution(solution: &Solution) -> Bytes {
+/// Returns the address the solution's RFQ quotes are attributed to: the last 20 bytes of
+/// `keccak256(sender || quote_id)` — stable for one quote request and distinct across quote
+/// requests, so their RFQ nonce sequences are independent — or the plain sender when the
+/// solution has no quote id.
+fn derive_quote_attribution(solution: &Solution) -> Bytes {
     match solution.quote_id() {
         Some(quote_id) => {
             let hash = keccak256([solution.sender().as_ref(), quote_id.as_bytes()].concat());
             Bytes::from(hash[12..].to_vec())
         }
         None => solution.sender().clone(),
-    }
-}
-
-/// Stamps the solution's quote attribution on every swap, so RFQ encoders attribute their
-/// quotes to it.
-fn attribute_quotes(grouped_swaps: &mut [SwapGroup], solution: &Solution) {
-    let attribution = quote_attribution(solution);
-    for group in grouped_swaps.iter_mut() {
-        for swap in group.swaps.iter_mut() {
-            swap.set_quote_attribution(attribution.clone());
-        }
     }
 }
 
@@ -55,6 +43,7 @@ fn encode_swap_group(
     swap_encoder_registry: &SwapEncoderRegistry,
     grouped_swap: &SwapGroup,
     router_address: &Bytes,
+    quote_attribution: &Bytes,
 ) -> Result<EncodedSwapGroup, EncodingError> {
     let protocol = &grouped_swap.protocol_system;
     let swap_encoder = swap_encoder_registry
@@ -65,6 +54,7 @@ fn encode_swap_group(
 
     let encoding_context = EncodingContext {
         router_address: Some(router_address.clone()),
+        quote_attribution: Some(quote_attribution.clone()),
         group_token_in: grouped_swap.token_in.clone(),
         group_token_out: grouped_swap.token_out.clone(),
     };
@@ -107,6 +97,7 @@ fn encode_swap_groups(
     swap_encoder_registry: &SwapEncoderRegistry,
     grouped_swaps: &[SwapGroup],
     router_address: &Bytes,
+    quote_attribution: &Bytes,
 ) -> Result<Vec<EncodedSwapGroup>, EncodingError> {
     let any_group_blocks = grouped_swaps.iter().any(|group| {
         swap_encoder_registry
@@ -120,6 +111,7 @@ fn encode_swap_groups(
                 swap_encoder_registry,
                 grouped_swap,
                 router_address,
+                quote_attribution,
             )?);
         }
         return Ok(encoded_groups);
@@ -148,7 +140,12 @@ fn encode_swap_groups(
         for &index in task {
             encoded.push((
                 index,
-                encode_swap_group(swap_encoder_registry, &grouped_swaps[index], router_address)?,
+                encode_swap_group(
+                    swap_encoder_registry,
+                    &grouped_swaps[index],
+                    router_address,
+                    quote_attribution,
+                )?,
             ));
         }
         Ok(encoded)
@@ -229,8 +226,7 @@ impl SingleSwapStrategyEncoder {
         self.single_swap_validator
             .validate_swap_path(solution.swaps(), solution.token_in(), solution.token_out())?;
 
-        let mut grouped_swaps = group_swaps(solution.swaps());
-        attribute_quotes(&mut grouped_swaps, solution);
+        let grouped_swaps = group_swaps(solution.swaps());
         let number_of_groups = grouped_swaps.len();
         if number_of_groups != 1 {
             return Err(EncodingError::InvalidInput(format!(
@@ -248,8 +244,12 @@ impl SingleSwapStrategyEncoder {
             ));
         }
 
-        let encoded_group =
-            encode_swap_group(&self.swap_encoder_registry, grouped_swap, &self.router_address)?;
+        let encoded_group = encode_swap_group(
+            &self.swap_encoder_registry,
+            grouped_swap,
+            &self.router_address,
+            &derive_quote_attribution(solution),
+        )?;
         let swap_data =
             self.encode_swap_header(encoded_group.executor_address, encoded_group.protocol_data);
         let gas_usage = estimate_gas_usage(solution, Strategy::Single);
@@ -326,10 +326,13 @@ impl SequentialSwapStrategyEncoder {
         self.sequential_swap_validator
             .validate_swap_path(solution.swaps(), solution.token_in(), solution.token_out())?;
 
-        let mut grouped_swaps = group_swaps(solution.swaps());
-        attribute_quotes(&mut grouped_swaps, solution);
-        let encoded_groups =
-            encode_swap_groups(&self.swap_encoder_registry, &grouped_swaps, &self.router_address)?;
+        let grouped_swaps = group_swaps(solution.swaps());
+        let encoded_groups = encode_swap_groups(
+            &self.swap_encoder_registry,
+            &grouped_swaps,
+            &self.router_address,
+            &derive_quote_attribution(solution),
+        )?;
 
         let mut swaps = vec![];
         for encoded_group in encoded_groups {
@@ -430,8 +433,7 @@ impl SplitSwapStrategyEncoder {
             .into_iter()
             .collect();
 
-        let mut grouped_swaps = group_swaps(solution.swaps());
-        attribute_quotes(&mut grouped_swaps, solution);
+        let grouped_swaps = group_swaps(solution.swaps());
 
         let intermediary_tokens: HashSet<&Bytes> = grouped_swaps
             .iter()
@@ -460,8 +462,12 @@ impl SplitSwapStrategyEncoder {
             ));
         }
 
-        let encoded_groups =
-            encode_swap_groups(&self.swap_encoder_registry, &grouped_swaps, &self.router_address)?;
+        let encoded_groups = encode_swap_groups(
+            &self.swap_encoder_registry,
+            &grouped_swaps,
+            &self.router_address,
+            &derive_quote_attribution(solution),
+        )?;
 
         let mut swaps = Vec::with_capacity(grouped_swaps.len());
         for (index, encoded_group) in encoded_groups.into_iter().enumerate() {

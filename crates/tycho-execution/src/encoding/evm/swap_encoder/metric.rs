@@ -253,6 +253,7 @@ mod tests {
 
     fn context() -> EncodingContext {
         EncodingContext {
+            quote_attribution: None,
             router_address: Some(
                 Bytes::from_str("0x4444444444444444444444444444444444444444").unwrap(),
             ),

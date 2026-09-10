@@ -254,11 +254,6 @@ pub struct Swap {
     estimated_amount_in: Option<BigUint>,
     /// Estimated gas usage for this swap by simulation
     estimated_gas: BigUint,
-    /// Address RFQ quotes are attributed to (e.g. Hashflow's effective trader). The strategy
-    /// encoders set it from the solution's sender and quote id; a consumer-set value is
-    /// overwritten.
-    #[serde(default)]
-    quote_attribution: Option<Bytes>,
 }
 
 impl Swap {
@@ -277,7 +272,6 @@ impl Swap {
             protocol_state: None,
             estimated_amount_in: None,
             estimated_gas,
-            quote_attribution: None,
         }
     }
 
@@ -335,14 +329,6 @@ impl Swap {
 
     pub fn estimated_gas(&self) -> &BigUint {
         &self.estimated_gas
-    }
-
-    pub fn quote_attribution(&self) -> Option<&Bytes> {
-        self.quote_attribution.as_ref()
-    }
-
-    pub(crate) fn set_quote_attribution(&mut self, quote_attribution: Bytes) {
-        self.quote_attribution = Some(quote_attribution);
     }
 }
 
@@ -523,11 +509,15 @@ impl PartialEq for PermitDetails {
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
+/// * `quote_attribution`: Address RFQ quotes are attributed to (e.g. Hashflow's effective trader):
+///   an address derived from the solution's sender and quote id, or the plain sender without a
+///   quote id. When absent, quotes are attributed to the router.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
+    pub quote_attribution: Option<Bytes>,
 }
 
 #[derive(PartialEq)]

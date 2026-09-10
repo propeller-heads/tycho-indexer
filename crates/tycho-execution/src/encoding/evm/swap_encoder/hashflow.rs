@@ -60,9 +60,9 @@ impl SwapEncoder for HashflowSwapEncoder {
         // The quote attribution becomes the quote's effective trader, giving each quote
         // request an independent nonce sequence. Without one the quote is attributed to the
         // router itself.
-        let sender = swap
-            .quote_attribution()
-            .cloned()
+        let sender = encoding_context
+            .quote_attribution
+            .clone()
             .unwrap_or_else(|| router_address.clone());
         let signed_quote = on_blocking_thread(|| {
             self.runtime_handle.block_on(async {
@@ -175,6 +175,7 @@ mod test {
         .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -275,6 +276,7 @@ mod test {
         .with_protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
