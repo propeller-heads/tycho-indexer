@@ -1,3 +1,11 @@
+## [0.399.0](https://github.com/propeller-heads/tycho/compare/0.398.0...0.399.0) (2026-09-10)
+
+
+### Features
+
+* add Robinhood Ekubo V3 executor address ([ed45d21](https://github.com/propeller-heads/tycho/commit/ed45d21602358ee70cf9879c03fb7ef2c2de3bee))
+* add Robinhood Ekubo V3 executor address ([#1425](https://github.com/propeller-heads/tycho/issues/1425)) ([7fe82fd](https://github.com/propeller-heads/tycho/commit/7fe82fdd0b3d7e8130684094fdc4348fe2f4e325))
+
 ## [0.398.0](https://github.com/propeller-heads/tycho/compare/0.397.0...0.398.0) (2026-09-10)
 
 
