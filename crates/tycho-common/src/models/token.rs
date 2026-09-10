@@ -309,6 +309,15 @@ mod tests {
         let dto = ResponseToken::from(pending);
         let json = serde_json::to_value(&dto).unwrap();
         assert_eq!(json["metadata_status"], "pending");
+        let mut legacy_dto = json.clone();
+        legacy_dto
+            .as_object_mut()
+            .unwrap()
+            .remove("metadata_status");
+        assert!(serde_json::from_value::<ResponseToken>(legacy_dto)
+            .unwrap()
+            .metadata_status
+            .is_ready());
         let restored: Token = serde_json::from_value::<ResponseToken>(json)
             .unwrap()
             .into();

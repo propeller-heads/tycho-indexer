@@ -23,7 +23,8 @@ class SummaryTests(unittest.TestCase):
         self.assertFalse(valid_run(rows, run_with_batching, groups))
         with_batching = {**groups, (1, "batched"): copy.deepcopy(groups[(1, "concurrent")])}
         self.assertTrue(valid_run(rows, run_with_batching, with_batching))
-        for change in ("invalid", "duplicate_round", "missing_sample", "reorg"):
+        for change in ("invalid", "duplicate_round", "missing_sample", "reorg", "no_holders",
+                       "invalid_samples_recorded"):
             with self.subTest(change=change):
                 altered_rows, altered_groups = copy.deepcopy((rows, groups))
                 samples = altered_groups[(1, "concurrent")]
@@ -33,8 +34,12 @@ class SummaryTests(unittest.TestCase):
                     samples[1]["round"] = 0
                 elif change == "missing_sample":
                     samples.pop()
-                else:
+                elif change == "reorg":
                     altered_rows[-1]["block_hash_unchanged"] = False
+                elif change == "no_holders":
+                    altered_rows.pop(0)
+                else:
+                    altered_rows[-1]["invalid_samples"] = 1
                 self.assertFalse(valid_run(altered_rows, run, altered_groups))
 
 

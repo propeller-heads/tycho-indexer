@@ -347,7 +347,7 @@ mod tests {
             .await
             .unwrap();
         let result = cache
-            .get_tokens(&[address])
+            .get_tokens(std::slice::from_ref(&address))
             .await
             .unwrap()
             .remove(0)
@@ -362,6 +362,64 @@ mod tests {
             .pending_token_addresses()
             .await
             .is_empty());
+
+        // Ready-to-ready updates still apply.
+        cache
+            .add_tokens([Token::new(&address, "V2", 6, 25, &[], Chain::Ethereum, 10)])
+            .await
+            .unwrap();
+        let updated = cache
+            .get_tokens(&[address])
+            .await
+            .unwrap()
+            .remove(0)
+            .unwrap();
+        assert_eq!((updated.symbol.as_str(), updated.quality), ("V2", 10));
+    }
+
+    #[tokio::test]
+    async fn db_fill_never_downgrades_a_ready_entry() {
+        let ready_address = Bytes::from("0x01");
+        let missing_address = Bytes::from("0x02");
+        // A database read started before the recovery write committed still returns the
+        // pending placeholder for the ready token alongside the missing one.
+        let stale = Token::pending(&ready_address, Chain::Ethereum);
+        let missing = Token::new(&missing_address, "B", 18, 0, &[None], Chain::Ethereum, 100);
+        let mut gateway = MockGateway::new();
+        gateway
+            .expect_get_tokens()
+            .times(1)
+            .return_once(move |_, _, _, _, _| {
+                Box::pin(
+                    async move { Ok(WithTotal { entity: vec![stale, missing], total: Some(2) }) },
+                )
+            });
+        let cache =
+            ProtocolMemoryCache::new(Chain::Ethereum, Duration::seconds(60), Arc::new(gateway));
+        cache
+            .add_tokens([Token::new(
+                &ready_address,
+                "RECOVERED",
+                6,
+                25,
+                &[Some(42_000)],
+                Chain::Ethereum,
+                50,
+            )])
+            .await
+            .unwrap();
+
+        let result = cache
+            .get_tokens(&[ready_address, missing_address])
+            .await
+            .unwrap();
+
+        let ready = result[0].as_ref().unwrap();
+        assert!(ready.metadata_status.is_ready());
+        assert_eq!((ready.symbol.as_str(), ready.decimals, ready.quality), ("RECOVERED", 6, 50));
+        let filled = result[1].as_ref().unwrap();
+        assert!(filled.metadata_status.is_ready());
+        assert_eq!(filled.symbol, "B");
     }
 
     #[tokio::test]

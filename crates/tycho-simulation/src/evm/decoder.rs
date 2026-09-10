@@ -1646,7 +1646,17 @@ mod tests {
             .await
             .failed_components
             .is_empty());
-        let delta = load_test_msg("uniswap_v2_delta");
+        // A pending token announced by a delta is deferred the same way, even at zero quality.
+        let mut delta = load_test_msg("uniswap_v2_delta");
+        let late_token = Bytes::from("0x0a").lpad(20, 0);
+        for state_msg in delta.state_msgs.values_mut() {
+            state_msg
+                .deltas
+                .as_mut()
+                .expect("delta message")
+                .new_tokens
+                .insert(late_token.clone(), Token::pending(&late_token, Chain::Ethereum));
+        }
         assert_eq!(
             decoder
                 .decode(&delta)
@@ -1656,6 +1666,12 @@ mod tests {
                 .len(),
             1
         );
+        assert!(!decoder
+            .state
+            .read()
+            .await
+            .tokens
+            .contains_key(&late_token));
     }
 
     #[tokio::test]
@@ -1701,6 +1717,13 @@ mod tests {
             .expect("decode failure");
 
         assert_eq!(res1.states.len(), 0);
+        // A missing token is temporary: the pool must stay eligible for a later snapshot.
+        assert!(decoder
+            .state
+            .read()
+            .await
+            .failed_components
+            .is_empty());
     }
 
     #[tokio::test]
@@ -1740,6 +1763,12 @@ mod tests {
                     panic!("Expected failures to be raised")
                 } else {
                     assert_eq!(res.states.len(), 0);
+                    assert!(decoder
+                        .state
+                        .read()
+                        .await
+                        .failed_components
+                        .contains("0x0d4a11d5eeaac28ec3f61d100daf4d40471f1852"));
                 }
             }
         }

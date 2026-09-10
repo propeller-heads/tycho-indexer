@@ -328,7 +328,10 @@ mod tests {
     use tycho_common::models::token::TokenOwnerStore;
 
     use super::*;
-    use crate::test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR};
+    use crate::{
+        rpc::config::RPCRetryConfig,
+        test_fixtures::{TestFixture, TEST_BLOCK_NUMBER, TOKEN_HOLDERS, USDC_STR, WETH_STR},
+    };
 
     const COWSWAP_SETTLEMENT: Address = address!("c9f2e6ea1637E499406986ac50ddC92401ce1f58");
 
@@ -678,6 +681,36 @@ mod tests {
             vec![Token::new(&address, &address.to_string(), 18, 0, &[], Chain::Ethereum, 10)];
         assert_eq!(serde_json::to_value(tokens).unwrap(), serde_json::to_value(expected).unwrap());
         rpc.assert_async().await;
+    }
+
+    #[tokio::test]
+    async fn test_get_tokens_keeps_legacy_fallbacks_when_the_batch_transport_fails() {
+        // Without an enrichment budget the hot path never defers: a batch that fails at the
+        // transport level still yields a ready token with the legacy fallbacks, and analysis
+        // (no funded owner here) decides the quality.
+        let mut server = Server::new_async().await;
+        let unavailable = server
+            .mock("POST", "/")
+            .with_status(503)
+            .expect(1)
+            .create_async()
+            .await;
+        let rpc = EthereumRpcClient::new(&server.url())
+            .unwrap()
+            .with_retry(RPCRetryConfig::new(0, 1, 1));
+        let processor = EthereumTokenPreProcessor::new(&rpc, Chain::Ethereum, COWSWAP_SETTLEMENT);
+        let address = Address::repeat_byte(1).to_bytes();
+        let tokens = processor
+            .get_tokens(
+                vec![address.clone()],
+                Arc::new(TokenOwnerStore::new(Default::default())),
+                BlockTag::Latest,
+            )
+            .await;
+        let expected =
+            vec![Token::new(&address, &address.to_string(), 18, 0, &[], Chain::Ethereum, 10)];
+        assert_eq!(serde_json::to_value(tokens).unwrap(), serde_json::to_value(expected).unwrap());
+        unavailable.assert_async().await;
     }
 
     #[tokio::test]

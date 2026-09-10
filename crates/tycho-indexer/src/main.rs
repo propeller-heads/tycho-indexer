@@ -844,6 +844,35 @@ async fn run_analyze_tokens(
 mod tests {
     use tycho_common::models::chain_config::ChainTokenConfig;
 
+    use super::{service_task_result, ExtractionError};
+
+    #[tokio::test]
+    async fn aborted_service_task_is_a_clean_shutdown() {
+        let handle: tokio::task::JoinHandle<Result<(), ExtractionError>> =
+            tokio::spawn(std::future::pending());
+        handle.abort();
+
+        assert_eq!(service_task_result(handle.await), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn panicked_service_task_is_an_error() {
+        let handle: tokio::task::JoinHandle<Result<(), ExtractionError>> =
+            tokio::spawn(async { panic!("boom") });
+
+        match service_task_result(handle.await) {
+            Err(ExtractionError::Unknown(message)) => assert!(message.contains("Task panicked")),
+            other => panic!("expected a panic to be reported, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn service_task_error_passes_through() {
+        let result = service_task_result(Ok(Err(ExtractionError::Unknown("x".into()))));
+
+        assert_eq!(result, Err(ExtractionError::Unknown("x".into())));
+    }
+
     #[test]
     fn test_chain_token_invalid_hex() {
         assert!(ChainTokenConfig::try_new("0xGGGGGGGG", "ETH", 18).is_err());

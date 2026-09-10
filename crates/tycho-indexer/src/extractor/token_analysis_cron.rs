@@ -558,8 +558,9 @@ mod test {
         // pass demotes it. Token 2 has an owner, so the analyzer simulates a transfer; the
         // mock RPC answers with a non-retryable, non-revert error, which is a failure.
         let mut server = mockito::Server::new_async().await;
-        let _rpc_error = server
+        let rpc_error = server
             .mock("POST", "/")
+            .expect_at_least(1)
             .with_body_from_request(|request| {
                 let body: serde_json::Value =
                     serde_json::from_slice(request.body().unwrap()).unwrap();
@@ -642,33 +643,65 @@ mod test {
         .await
         .expect("analyze batch failed");
         assert_eq!(outcome, PassOutcome { demoted: 1, failed: 1, ..Default::default() });
+        rpc_error.assert_async().await;
     }
 
     #[test_log::test(tokio::test)]
     async fn test_pending_tokens_are_skipped_before_analysis() {
-        let rpc = EthereumRpcClient::new("http://localhost:1").expect("url parses");
+        // The pending token has an owner, so analyzing it would simulate a transfer over RPC.
+        // The ready token has none and is demoted without any RPC call, so any request that
+        // reaches the server can only come from the pending token.
+        let mut server = mockito::Server::new_async().await;
+        let rpc_calls = server
+            .mock("POST", "/")
+            .expect(0)
+            .create_async()
+            .await;
+        let rpc = EthereumRpcClient::new(&server.url()).expect("url parses");
         let args = wiring_args(0);
+        let pending = "0x0000000000000000000000000000000000000002";
+        let pool = "0x7ec8e94a9b379f6b90ee5af7b9a78624280b50ea";
         let mut gw = testing::MockGateway::new();
         gw.expect_get_tokens()
-            .returning(|_, _, _, _, _| {
-                Box::pin(async {
+            .returning(move |_, _, _, _, _| {
+                Box::pin(async move {
                     Ok(WithTotal {
                         entity: vec![
                             test_token_at("0x0000000000000000000000000000000000000001", 8),
-                            Token::pending(
-                                &Bytes::from("0x0000000000000000000000000000000000000002"),
-                                Chain::Ethereum,
-                            ),
+                            Token::pending(&Bytes::from(pending), Chain::Ethereum),
                         ],
                         total: Some(2),
                     })
                 })
             });
         gw.expect_get_token_owners()
-            .returning(|_, _, _| Box::pin(async { Ok(HashMap::new()) }));
+            .returning(move |_, _, _| {
+                Box::pin(async move {
+                    Ok(HashMap::from([(
+                        Bytes::from(pending),
+                        (pool.to_string(), Bytes::from("0x0186a0")),
+                    )]))
+                })
+            });
         gw.expect_get_protocol_components()
-            .returning(|_, _, _, _, _| {
-                Box::pin(async { Ok(WithTotal { entity: vec![], total: Some(0) }) })
+            .returning(move |_, _, _, _, _| {
+                Box::pin(async move {
+                    Ok(WithTotal {
+                        entity: vec![ProtocolComponent::new(
+                            pool,
+                            "uniswap_v2",
+                            "pool",
+                            Chain::Ethereum,
+                            vec![Bytes::from(pending)],
+                            vec![],
+                            HashMap::new(),
+                            ChangeType::Creation,
+                            Bytes::from("0x00"),
+                            NaiveDateTime::default(),
+                        )],
+                        total: Some(1),
+                    })
+                })
             });
         gw.expect_get_protocol_states()
             .returning(|_, _, _, _, _, _| {
@@ -686,6 +719,7 @@ mod test {
         analyze_tokens(args, &rpc, Arc::new(gw))
             .await
             .expect("analyze tokens failed");
+        rpc_calls.assert_async().await;
     }
 
     // requires a running ethereum node

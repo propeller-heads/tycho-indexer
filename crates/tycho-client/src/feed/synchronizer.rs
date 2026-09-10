@@ -1453,7 +1453,7 @@ mod test {
         },
         protocol::{ProtocolComponent, ProtocolComponentState},
         token::Token,
-        Chain,
+        Chain, ChangeType,
     };
     use uuid::Uuid;
 
@@ -3879,15 +3879,25 @@ mod test {
                     ..Default::default()
                 })
             });
-        let components: HashMap<_, _> = [("existing", first.clone()), ("new", second.clone())]
-            .into_iter()
-            .map(|(id, token)| {
-                (
-                    id.to_string(),
-                    ProtocolComponent { id: id.into(), tokens: vec![token], ..Default::default() },
-                )
-            })
-            .collect();
+        let pool_contract = Bytes::from("0xaa");
+        let entrypoint_contract = Bytes::from("0xee");
+        let components: HashMap<_, _> = [
+            ("existing", first.clone(), vec![]),
+            ("new", second.clone(), vec![pool_contract.clone()]),
+        ]
+        .into_iter()
+        .map(|(id, token, contract_addresses)| {
+            (
+                id.to_string(),
+                ProtocolComponent {
+                    id: id.into(),
+                    tokens: vec![token],
+                    contract_addresses,
+                    ..Default::default()
+                },
+            )
+        })
+        .collect();
         let params = FetchSnapshotParams {
             tokens: Arc::new(RwLock::new(HashMap::from([(
                 first.clone(),
@@ -3900,17 +3910,24 @@ mod test {
             retrieve_balances: true,
             include_tvl: false,
         };
-        let (initial, _, _, pending) =
-            fetch_snapshot(&rpc, components.clone(), HashSet::new(), &params)
-                .await
-                .unwrap();
+        let (initial, _, contract_ids, pending) = fetch_snapshot(
+            &rpc,
+            components.clone(),
+            HashSet::from([entrypoint_contract.clone()]),
+            &params,
+        )
+        .await
+        .unwrap();
         assert_eq!(pending, vec!["new"]);
         assert!(initial.states.contains_key("existing"));
         assert!(!initial.states.contains_key("new"));
-        let (recovered, _, _, pending) = fetch_snapshot(
+        // A parked pool must not install its contracts or leak its pending token.
+        assert!(!contract_ids.contains(&pool_contract));
+        assert!(!initial.tokens.contains_key(&second));
+        let (recovered, _, contract_ids, pending) = fetch_snapshot(
             &rpc,
             components,
-            HashSet::new(),
+            HashSet::from([entrypoint_contract.clone()]),
             &FetchSnapshotParams { block_number: 12, ..params },
         )
         .await
@@ -3918,11 +3935,13 @@ mod test {
         assert!(pending.is_empty());
         assert!(recovered.states.contains_key("new"));
         assert_eq!(recovered.tokens[&second].decimals, 6);
+        // With nothing parked the caller's contract set is used as-is.
+        assert!(contract_ids.contains(&entrypoint_contract));
     }
 
     #[tokio::test]
-    async fn metadata_retry_needs_no_new_tvl_event_and_catches_up_partial_deltas() {
-        let mut sync = with_mocked_clients(true, false, None, None).with_partial_blocks(true);
+    async fn metadata_retry_needs_no_new_tvl_event_and_catches_up_buffered_deltas() {
+        let mut sync = with_mocked_clients(true, false, None, None);
         let (tx, receiver) = oneshot::channel();
         sync.snapshot_tasks.push(SnapshotTask {
             component_ids: vec!["pool".into()],
@@ -3951,21 +3970,27 @@ mod test {
             .take_snapshot_retries(tokio::time::Instant::now())
             .is_empty());
         assert_eq!(
-            sync.take_snapshot_retries(tokio::time::Instant::now() + Duration::from_secs(6)),
+            sync.take_snapshot_retries(
+                tokio::time::Instant::now() + TOKEN_METADATA_RETRY_DELAY + Duration::from_secs(1)
+            ),
             vec!["pool"]
         );
 
         let component = ProtocolComponent { id: "pool".into(), ..Default::default() };
-        let mut delta = make_block_changes(12, Some(1));
-        delta.state_deltas.insert(
-            "pool".into(),
-            tycho_common::models::protocol::ProtocolComponentStateDelta {
-                component_id: "pool".into(),
-                updated_attributes: HashMap::from([("reserve0".into(), Bytes::from(900u64))]),
-                ..Default::default()
-            },
-        );
-        sync.buffered_deltas.push(delta);
+        // The delta at the snapshot block is already reflected in the snapshot and must be
+        // skipped; only the one after it may be applied.
+        for (block, attribute, value) in [(11, "reserve0", 500u64), (12, "reserve1", 900u64)] {
+            let mut delta = make_block_changes(block, None);
+            delta.state_deltas.insert(
+                "pool".into(),
+                tycho_common::models::protocol::ProtocolComponentStateDelta {
+                    component_id: "pool".into(),
+                    updated_attributes: HashMap::from([(attribute.into(), Bytes::from(value))]),
+                    ..Default::default()
+                },
+            );
+            sync.buffered_deltas.push(delta);
+        }
         let snapshot = Snapshot {
             states: HashMap::from([(
                 "pool".into(),
@@ -3999,12 +4024,11 @@ mod test {
         .ok()
         .unwrap();
         let recovered = sync.drain_completed_snapshots();
-        assert_eq!(
-            recovered.states["pool"]
-                .state
-                .attributes["reserve0"],
-            Bytes::from(900u64)
-        );
+        let attributes = &recovered.states["pool"]
+            .state
+            .attributes;
+        assert_eq!(attributes["reserve0"], Bytes::from(100u64));
+        assert_eq!(attributes["reserve1"], Bytes::from(900u64));
         assert!(sync
             .component_tracker
             .components
@@ -4054,7 +4078,7 @@ mod test {
         });
         sync.park_for_tokens("parked".into());
         let mut delta = make_block_changes(11, None);
-        delta.revert = true;
+        delta.revert = false;
         delta
             .deleted_protocol_components
             .insert("parked".into(), ProtocolComponent::default());
@@ -4069,29 +4093,186 @@ mod test {
     }
 
     #[tokio::test]
+    async fn explicit_deletion_clears_parked_pool_and_in_flight_task() {
+        let mut sync = with_mocked_clients(true, false, None, None);
+        let (tx, receiver) = oneshot::channel();
+        sync.snapshot_tasks.push(SnapshotTask {
+            component_ids: vec!["deleted".into()],
+            snapshot_block: 10,
+            receiver,
+        });
+        sync.park_for_tokens("parked".into());
+        let mut delta = make_block_changes(11, None);
+        delta.revert = false;
+        for id in ["parked", "deleted"] {
+            delta.new_protocol_components.insert(
+                id.into(),
+                ProtocolComponent {
+                    id: id.into(),
+                    change: ChangeType::Deletion,
+                    ..Default::default()
+                },
+            );
+        }
+        sync.invalidate_pending_snapshots(&delta);
+        assert!(tx.is_closed());
+        assert!(sync.snapshot_tasks.is_empty());
+        assert!(sync.snapshot_queue.is_empty());
+        assert!(sync.token_retry_attempts.is_empty());
+    }
+
+    #[tokio::test]
     async fn parked_pool_backoff_doubles_and_resets_on_admission() {
         let mut sync = with_mocked_clients(true, false, None, None);
         let retry_at = |queue: &HashMap<String, SnapshotStatus>| match queue["pool"] {
             SnapshotStatus::WaitingForTokens(at) => at,
             ref other => panic!("unexpected status {other:?}"),
         };
+        // Pausing tokio's clock needs its `test-util` feature, which this crate does not
+        // enable. Every delay is a whole number of seconds and parking takes microseconds, so
+        // comparing whole seconds is exact.
         let mut expected = TOKEN_METADATA_RETRY_DELAY;
+        let mut last_wait = Duration::ZERO;
         for _ in 0..12 {
             let now = tokio::time::Instant::now();
             sync.park_for_tokens("pool".into());
-            let wait = retry_at(&sync.snapshot_queue) - now;
-            assert!(wait >= expected && wait <= expected + Duration::from_millis(50));
+            last_wait = retry_at(&sync.snapshot_queue) - now;
+            assert_eq!(last_wait.as_secs(), expected.as_secs());
             expected = (expected * 2).min(TOKEN_METADATA_MAX_RETRY_DELAY);
         }
-        assert_eq!(expected, TOKEN_METADATA_MAX_RETRY_DELAY);
+        assert_eq!(last_wait.as_secs(), TOKEN_METADATA_MAX_RETRY_DELAY.as_secs());
 
-        sync.token_retry_attempts.remove("pool");
+        // Admission through a completed snapshot resets the backoff.
+        let (tx, receiver) = oneshot::channel();
+        sync.snapshot_tasks.push(SnapshotTask {
+            component_ids: vec!["pool".into()],
+            snapshot_block: 10,
+            receiver,
+        });
+        tx.send(Ok(SnapshotFetchResult {
+            pending_components: vec![],
+            components: HashMap::from([(
+                "pool".into(),
+                ProtocolComponent { id: "pool".into(), ..Default::default() },
+            )]),
+            contract_ids: HashSet::new(),
+            dci_update: DCIUpdate::default(),
+            snapshot: Snapshot::default(),
+            snapshot_block: 10,
+        }))
+        .ok()
+        .unwrap();
+        sync.drain_completed_snapshots();
+        assert!(!sync
+            .token_retry_attempts
+            .contains_key("pool"));
+
         let now = tokio::time::Instant::now();
         sync.park_for_tokens("pool".into());
-        assert!(
-            retry_at(&sync.snapshot_queue) - now <=
-                TOKEN_METADATA_RETRY_DELAY + Duration::from_millis(50)
+        assert_eq!(
+            (retry_at(&sync.snapshot_queue) - now).as_secs(),
+            TOKEN_METADATA_RETRY_DELAY.as_secs()
         );
+    }
+
+    #[tokio::test]
+    async fn late_component_ids_stay_pending_in_background_fetch() {
+        let mut rpc = make_mock_client();
+        rpc.expect_get_protocol_components()
+            .times(1)
+            .returning(|_| Ok(Page::new(vec![], 0, 0, 100)));
+        rpc.expect_get_snapshots().times(0);
+        let params = FetchSnapshotParams {
+            tokens: Default::default(),
+            chain: Chain::Ethereum,
+            protocol_system: "uniswap-v2".into(),
+            block_number: 10,
+            uses_dci: false,
+            retrieve_balances: true,
+            include_tvl: false,
+        };
+        let result = fetch_snapshot_background(rpc, vec!["late".into()], params)
+            .await
+            .unwrap();
+        assert_eq!(result.pending_components, vec!["late"]);
+        assert!(result.components.is_empty());
+    }
+
+    #[tokio::test]
+    async fn first_message_drops_deltas_of_pools_parked_for_tokens() {
+        let token = Bytes::from("0x02");
+        let mut rpc_client = make_mock_client();
+        let pending = token.clone();
+        rpc_client
+            .expect_get_tokens()
+            .returning(move |_| {
+                Ok(Page::new(vec![Token::pending(&pending, Chain::Ethereum)], 1, 0, 1000))
+            });
+        let component_token = token.clone();
+        rpc_client
+            .expect_get_protocol_components()
+            .returning(move |_| {
+                Ok(Page::new(
+                    vec![ProtocolComponent {
+                        id: "Component1".to_string(),
+                        tokens: vec![component_token.clone()],
+                        ..Default::default()
+                    }],
+                    1,
+                    0,
+                    100,
+                ))
+            });
+        rpc_client
+            .expect_get_snapshots()
+            .times(0);
+        let mut deltas_client = MockDeltasClient::new();
+        let (tx, rx) = channel(1);
+        deltas_client
+            .expect_subscribe()
+            .return_once(move |_, _| Ok((Uuid::default(), rx)));
+        deltas_client
+            .expect_unsubscribe()
+            .return_once(|_| Ok(()));
+        let mut sync = with_mocked_clients(true, false, Some(rpc_client), Some(deltas_client));
+        sync.initialize()
+            .await
+            .expect("Init failed");
+
+        let mut delta = make_block_changes(1, None);
+        delta.state_deltas.insert(
+            "Component1".into(),
+            tycho_common::models::protocol::ProtocolComponentStateDelta {
+                component_id: "Component1".into(),
+                updated_attributes: HashMap::from([("reserve0".into(), Bytes::from(1u64))]),
+                ..Default::default()
+            },
+        );
+        let (mut block_tx, mut block_rx) = channel::<SyncResult<StateSyncMessage<BlockHeader>>>(15);
+        let (end_tx, end_rx) = oneshot::channel();
+        let driver = async {
+            tx.send(delta)
+                .await
+                .expect("deltas channel closed");
+            let first = timeout(Duration::from_millis(200), block_rx.recv())
+                .await
+                .expect("waiting for first state msg timed out")
+                .expect("state sync block sender closed")
+                .expect("state sync errored");
+            end_tx
+                .send(())
+                .expect("close signal not received");
+            first
+        };
+        let (result, first) = tokio::join!(sync.state_sync(&mut block_tx, end_rx), driver);
+        assert!(result.is_ok());
+        assert!(first.snapshots.states.is_empty());
+        assert!(!first
+            .deltas
+            .expect("first message carries deltas")
+            .state_deltas
+            .contains_key("Component1"));
+        assert!(matches!(sync.snapshot_queue["Component1"], SnapshotStatus::WaitingForTokens(_)));
     }
 
     /// Test that full block as first message in partial mode is accepted

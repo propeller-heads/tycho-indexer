@@ -323,6 +323,8 @@ mod cli_tests {
             "256",
             "--rpc-url",
             "http://example.com",
+            "--token-enrichment-budget-ms",
+            "1000",
             "run",
             "--api_token",
             "your_api_token",
@@ -339,9 +341,14 @@ mod cli_tests {
         ])
         .expect("parse errored");
 
+        assert_eq!(
+            cli.global_args
+                .token_enrichment_budget_ms,
+            1000
+        );
         let expected_args = Cli {
             global_args: GlobalArgs {
-                token_enrichment_budget_ms: 0,
+                token_enrichment_budget_ms: 1000,
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 database_insert_batch_size: 256,

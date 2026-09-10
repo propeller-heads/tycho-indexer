@@ -15,7 +15,8 @@ async fn test_metadata_recovery_is_durable_atomic_and_does_not_downgrade_ready_r
         .await
         .unwrap();
     let schema_name = format!("metadata_recovery_{}", std::process::id());
-    conn.batch_execute(&format!("CREATE SCHEMA {schema_name}; SET search_path TO {schema_name};
+    conn.batch_execute(&format!("DROP SCHEMA IF EXISTS {schema_name} CASCADE;
+        CREATE SCHEMA {schema_name}; SET search_path TO {schema_name};
         CREATE TABLE account (
             id BIGSERIAL PRIMARY KEY, title TEXT NOT NULL, address BYTEA NOT NULL,
             chain_id BIGINT NOT NULL, creation_tx BIGINT, created_at TIMESTAMP, deleted_at TIMESTAMP,
@@ -105,6 +106,18 @@ async fn test_metadata_recovery_is_durable_atomic_and_does_not_downgrade_ready_r
             .len(),
         3
     );
+    // The id cursor resumes strictly after the last row of the previous page.
+    let next_page = gateway
+        .pending_token_metadata(Chain::Ethereum, first_page[0].0, 32, &mut conn)
+        .await
+        .unwrap();
+    assert_eq!(
+        next_page
+            .iter()
+            .map(|row| row.1.address.clone())
+            .collect::<Vec<_>>(),
+        vec![pending[1].address.clone(), pending[2].address.clone()]
+    );
 
     conn.transaction::<_, diesel::result::Error, _>(|conn| {
         async {
@@ -128,17 +141,6 @@ async fn test_metadata_recovery_is_durable_atomic_and_does_not_downgrade_ready_r
         .await
         .unwrap()
         .is_empty());
-    let next_page = gateway
-        .pending_token_metadata(Chain::Ethereum, first_page[0].0, 32, &mut conn)
-        .await
-        .unwrap();
-    assert_eq!(
-        next_page
-            .iter()
-            .map(|row| row.1.address.clone())
-            .collect::<Vec<_>>(),
-        vec![pending[1].address.clone(), pending[2].address.clone()]
-    );
     assert_eq!(
         gateway
             .pending_token_metadata(Chain::Polygon, 0, 32, &mut conn)
