@@ -12,7 +12,21 @@ from tycho_indexer_client.dto import (
     SynchronizerState,
     SynchronizerStateEnum,
     Header,
+    ResponseToken,
+    Snapshot,
+    TokenMetadataStatus,
 )
+
+
+def test_token_metadata_readiness_and_recovered_snapshot():
+    token = dict(chain="ethereum", address="0x01", symbol="TEST", decimals=6,
+                 tax=0, gas=[30000], quality=100)
+    assert ResponseToken(**token).metadata_status == TokenMetadataStatus.ready
+    pending = ResponseToken(**{**token, "metadata_status": "pending", "quality": 0})
+    assert pending.metadata_status == TokenMetadataStatus.pending
+    snapshot = Snapshot(states={}, vm_storage={}, tokens={"0x01": token})
+    assert snapshot.tokens[HexBytes("0x01")].decimals == 6
+    assert Snapshot(states={}, vm_storage={}).tokens == {}
 
 
 def test_decode_snapshot(asset_dir):

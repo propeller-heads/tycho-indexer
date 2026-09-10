@@ -45,6 +45,10 @@ pub enum Command {
 #[derive(Parser, Debug, Clone, PartialEq)]
 #[command(version, about, long_about = None)]
 pub struct GlobalArgs {
+    /// Token-enrichment budget in milliseconds. Zero preserves legacy behavior.
+    /// Enable only after upgrading clients to support pending token metadata.
+    #[clap(long, env = "TOKEN_ENRICHMENT_BUDGET_MS", default_value = "0")]
+    pub token_enrichment_budget_ms: u64,
     /// PostgresDB Connection Url
     #[clap(
         long,
@@ -337,6 +341,7 @@ mod cli_tests {
 
         let expected_args = Cli {
             global_args: GlobalArgs {
+                token_enrichment_budget_ms: 0,
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 database_insert_batch_size: 256,
@@ -405,6 +410,7 @@ mod cli_tests {
 
         let expected_args = Cli {
             global_args: GlobalArgs {
+                token_enrichment_budget_ms: 0,
                 endpoint_url: "http://example.com".to_string(),
                 database_url: "my_db".to_string(),
                 database_insert_batch_size: 0,

@@ -64,6 +64,14 @@ struct TokenPrices {
     last_price_update: NaiveDateTime,
 }
 
+/// A `Pending` identity must never replace a `Ready` entry. Blocks buffered before a recovery
+/// write committed still carry the pending placeholder, and a database read started before that
+/// commit can return it too; in both cases the cached entry is the newer truth.
+fn keeps_ready_entry(existing: Option<&Token>, incoming: &Token) -> bool {
+    !incoming.metadata_status.is_ready() &&
+        existing.is_some_and(|old| old.metadata_status.is_ready())
+}
+
 impl ProtocolMemoryCache {
     pub fn new(
         chain: Chain,
@@ -146,6 +154,18 @@ impl ProtocolMemoryCache {
             size_of::<Duration>() +
             size_of_val(&self.gateway)
     }
+
+    /// Best effort: the cache can hold pending identities from blocks that were reverted and
+    /// never re-included, so some of these addresses may have no database row at all.
+    pub async fn pending_token_addresses(&self) -> Vec<Bytes> {
+        self.tokens
+            .read()
+            .await
+            .values()
+            .filter(|token| !token.metadata_status.is_ready())
+            .map(|token| token.address.clone())
+            .collect()
+    }
 }
 
 #[async_trait]
@@ -194,6 +214,9 @@ impl ProtocolDataCache for ProtocolMemoryCache {
                 .into_iter()
                 .for_each(|t| {
                     n_fetched += 1;
+                    if keeps_ready_entry(cached_tokens.get(&t.address), &t) {
+                        return;
+                    }
                     cached_tokens.insert(t.address.clone(), t);
                 });
             debug!(n_missing = missing.len(), n_fetched, resource = "token", "CacheMiss");
@@ -218,11 +241,12 @@ impl ProtocolDataCache for ProtocolMemoryCache {
         tokens: T,
     ) -> Result<(), StorageError> {
         let mut guard = self.tokens.write().await;
-        guard.extend(
-            tokens
-                .into_iter()
-                .map(|t| (t.address.clone(), t)),
-        );
+        for token in tokens {
+            if keeps_ready_entry(guard.get(&token.address), &token) {
+                continue;
+            }
+            guard.insert(token.address.clone(), token);
+        }
         Ok(())
     }
 
@@ -301,6 +325,44 @@ mod tests {
 
     use super::*;
     use crate::testing::MockGateway;
+
+    #[tokio::test]
+    async fn recovered_metadata_survives_a_stale_pending_block() {
+        let cache = ProtocolMemoryCache::new(
+            Chain::Ethereum,
+            Duration::seconds(60),
+            Arc::new(MockGateway::new()),
+        );
+        let address = Bytes::from("0x01");
+        let pending = Token::pending(&address, Chain::Ethereum);
+        cache
+            .add_tokens([pending.clone()])
+            .await
+            .unwrap();
+        assert_eq!(cache.pending_token_addresses().await, vec![address.clone()]);
+        let ready = Token::new(&address, "RECOVERED", 6, 25, &[Some(42_000)], Chain::Ethereum, 50);
+        cache.add_tokens([ready]).await.unwrap();
+        cache
+            .add_tokens([pending])
+            .await
+            .unwrap();
+        let result = cache
+            .get_tokens(&[address])
+            .await
+            .unwrap()
+            .remove(0)
+            .unwrap();
+        assert!(result.metadata_status.is_ready());
+        assert_eq!(
+            (result.symbol.as_str(), result.decimals, result.tax, result.quality),
+            ("RECOVERED", 6, 25, 50)
+        );
+        assert_eq!(result.gas, vec![Some(42_000)]);
+        assert!(cache
+            .pending_token_addresses()
+            .await
+            .is_empty());
+    }
 
     #[tokio::test]
     async fn test_get_token_prices() {
