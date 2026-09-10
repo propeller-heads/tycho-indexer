@@ -1161,12 +1161,6 @@ impl TestRunner {
                 .ok_or_else(|| miette!("Couldn't find protocol component {id}"))?;
 
             let tokens = component.tokens.clone();
-            let formatted_token_str = format!("{:}/{:}", tokens[0].symbol, tokens[1].symbol);
-            state
-                .spot_price(&tokens[0], &tokens[1])
-                .map(|price| info!("[{}] Spot price {:?}: {:?}", id, formatted_token_str, price))
-                .into_diagnostic()
-                .wrap_err(format!("Error calculating spot price for Pool {id:?}."))?;
 
             // Test get_amount_out with different percentages of limits. The reserves or limits
             // are relevant because we need to know how much to test with. We
@@ -1211,6 +1205,23 @@ impl TestRunner {
                     );
                     continue;
                 }
+
+                // Priced per direction rather than once per component: consumers key their
+                // price data by swap direction, so a venue that quotes only one ordering
+                // leaves them without a price for a direction that does trade. Asked after
+                // the zero-limit skip, so a direction the venue does not trade is not
+                // required to have a price either.
+                let spot_price = state
+                    .spot_price(token_in, token_out)
+                    .into_diagnostic()
+                    .wrap_err(format!(
+                        "Error calculating spot price for Pool {id:?} for in token: {}, and out token: {}",
+                        token_in.address, token_out.address
+                    ))?;
+                info!(
+                    "[{}] Spot price {}/{}: {:?}",
+                    id, token_in.symbol, token_out.symbol, spot_price
+                );
 
                 for percentage in percentages.iter() {
                     // For precision, multiply by 1000 then divide by 1000
