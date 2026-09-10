@@ -1183,6 +1183,8 @@ impl TestRunner {
                 .map(|perm| (perm[0], perm[1]))
                 .collect();
 
+            let mut quoted_any_direction = false;
+
             for (token_in, token_out) in &swap_directions {
                 let (max_input, max_output) = state
                     .get_limits(token_in.address.clone(), token_out.address.clone())
@@ -1196,6 +1198,19 @@ impl TestRunner {
                     "[{}] Retrieved limits. | Max input: {max_input} {} | Max output: {max_output} {}",
                     id, token_in.symbol, token_out.symbol
                 );
+
+                // A zero limit means the venue does not quote this direction at all - a
+                // one-directional component such as ETH -> stETH staking, or a redemption
+                // rate limit with no capacity at this block. Skip the direction instead of
+                // failing the component; the guard below still requires that at least one
+                // direction was exercised.
+                if max_input.is_zero() {
+                    warn!(
+                        "[{}] Zero limit for {} -> {}, skipping direction",
+                        id, token_in.symbol, token_out.symbol
+                    );
+                    continue;
+                }
 
                 for percentage in percentages.iter() {
                     // For precision, multiply by 1000 then divide by 1000
@@ -1229,6 +1244,8 @@ impl TestRunner {
                             token_out.symbol,
                             amount_out_result.gas
                         );
+
+                    quoted_any_direction = true;
 
                     if skip_execution.contains(id) {
                         info!("Skipping execution for component {id}");
@@ -1273,6 +1290,12 @@ impl TestRunner {
                         },
                     );
                 }
+            }
+
+            if !quoted_any_direction {
+                return Err(miette!(
+                    "No tradable direction for pool {id}: every swap direction reported a zero limit."
+                ));
             }
         }
 
