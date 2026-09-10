@@ -352,10 +352,19 @@ impl ProtocolSim for EtherfiState {
                 U256::from(eth_redemption_info.low_watermark_in_bps_of_tvl),
                 U256::from(BASIS_POINT_SCALE),
             )?;
-            if liquid_eth_amount < low_watermark {
-                return Ok((u256_to_biguint(liquid_eth_amount), BigUint::ZERO));
+            // Redemption pays out of the liquidity the pool holds above its reserve floor.
+            // Below the floor nothing is redeemable, and `get_amount_out` rejects every amount,
+            // so report no capacity - quoting the liquid balance here only sends callers into
+            // an error.
+            if liquid_eth_amount <= low_watermark {
+                return Ok((BigUint::ZERO, BigUint::ZERO));
             }
-            let mut max_eeth_amount = self.total_value_in_lp + self.total_value_out_of_lp;
+
+            // Bounded by each of the three things `get_amount_out` checks: the liquidity above
+            // the floor, the eETH that exists, and the rate-limit bucket. Bounding only by the
+            // last two over-reported the limit whenever the pool was near its floor.
+            let mut max_eeth_amount = (liquid_eth_amount - low_watermark)
+                .min(self.total_value_in_lp + self.total_value_out_of_lp);
             let limit = eth_redemption_info
                 .limit
                 .refill(self.block_timestamp);
@@ -363,6 +372,9 @@ impl ProtocolSim for EtherfiState {
             let bucket_unit = convert_to_bucket_unit(max_eeth_amount, true)?;
             if limit.remaining < bucket_unit {
                 max_eeth_amount = U256::from(limit.remaining) * U256::from(BUCKET_UNIT_SCALE);
+            }
+            if max_eeth_amount == U256::ZERO {
+                return Ok((BigUint::ZERO, BigUint::ZERO));
             }
             let eeth_shares = self.shares_for_amount(max_eeth_amount)?;
             let eth_amount_out = self.amount_for_share(mul_div(
@@ -710,7 +722,7 @@ mod tests {
     }
 
     #[test]
-    fn get_limits_eeth_to_eth_returns_liquid_amount_when_below_low_watermark() {
+    fn get_limits_eeth_to_eth_reports_no_capacity_below_low_watermark() {
         let mut state = sample_state();
         let info = state
             .eth_redemption_info
@@ -731,8 +743,82 @@ mod tests {
             .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(ETH_ADDRESS))
             .expect("limits");
 
-        assert_eq!(max_in, u256_to_biguint(low_watermark - U256::ONE));
+        // Nothing can be redeemed below the reserve floor, so the limit has to say so:
+        // `get_amount_out` rejects every amount here.
+        assert_eq!(max_in, BigUint::ZERO);
         assert_eq!(max_out, BigUint::ZERO);
+        assert!(state
+            .get_amount_out(BigUint::from(1u64), &eeth_token(), &eth_token())
+            .is_err());
+    }
+
+    /// Chain state at block 25940000, where the pool's liquid ETH sits far below its reserve
+    /// floor: redemption is effectively closed.
+    fn state_with_redemption_closed() -> EtherfiState {
+        EtherfiState::new(
+            1_787_040_551,
+            u256_dec("2206910247995761361317226"),
+            u256_dec("1051493289032982041238"),
+            u256_dec("2001243491556134113932753"),
+            Some(U256::ZERO),
+            Some(RedemptionInfo {
+                limit: BucketLimit {
+                    capacity: 2_000_000_000,
+                    remaining: 1_999_666_518,
+                    last_refill: 1_787_040_551,
+                    refill_rate: 23_148,
+                },
+                exit_fee_split_to_treasury_in_bps: 1000,
+                exit_fee_in_bps: 30,
+                low_watermark_in_bps_of_tvl: 100,
+            }),
+            Some(u256_dec("1051493289032982041238")),
+        )
+    }
+
+    #[test]
+    fn get_limits_eeth_to_eth_agrees_with_quotes_on_real_state() {
+        let state = state_with_redemption_closed();
+
+        let (max_in, max_out) = state
+            .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(ETH_ADDRESS))
+            .expect("limits");
+
+        // 1051 ETH of liquidity against a 22079 ETH floor: nothing is redeemable. Reporting the
+        // liquid balance here made callers size a trade the venue rejects outright.
+        assert_eq!(max_in, BigUint::ZERO);
+        assert_eq!(max_out, BigUint::ZERO);
+    }
+
+    #[test]
+    fn get_limits_eeth_to_eth_is_bounded_by_redeemable_liquidity() {
+        let mut state = sample_state();
+        let info = state
+            .eth_redemption_info
+            .expect("redemption info");
+        let total_pooled = state.total_value_in_lp + state.total_value_out_of_lp;
+        let low_watermark = mul_div(
+            total_pooled,
+            U256::from(info.low_watermark_in_bps_of_tvl),
+            U256::from(BASIS_POINT_SCALE),
+        )
+        .expect("low watermark");
+        let locked = state
+            .eth_amount_locked_for_withdrawl
+            .expect("locked");
+        // Plenty of bucket, but only 10 ETH above the floor.
+        let ten_eth = U256::from(10u64) * U256::from(10u64).pow(U256::from(18u64));
+        state.liquidity_pool_native_balance = Some(locked + low_watermark + ten_eth);
+
+        let (max_in, _) = state
+            .get_limits(Bytes::from(EETH_ADDRESS), Bytes::from(ETH_ADDRESS))
+            .expect("limits");
+
+        assert_eq!(max_in, u256_to_biguint(ten_eth));
+        // Whatever the limit says must actually quote.
+        state
+            .get_amount_out(max_in, &eeth_token(), &eth_token())
+            .expect("a quote at the reported limit");
     }
 
     #[test]
