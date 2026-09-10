@@ -57,11 +57,12 @@ impl SwapEncoder for HashflowSwapEncoder {
             .ok_or(EncodingError::FatalError(
                 "The router address is needed to perform a Hashflow swap".to_string(),
             ))?;
-        // The sender becomes the quote's effective trader, giving each user an independent
-        // nonce sequence. Without one the quote is attributed to the router itself.
-        let sender = encoding_context
-            .sender
-            .clone()
+        // The quote attribution becomes the quote's effective trader, giving each quote
+        // request an independent nonce sequence. Without one the quote is attributed to the
+        // router itself.
+        let sender = swap
+            .quote_attribution()
+            .cloned()
             .unwrap_or_else(|| router_address.clone());
         let signed_quote = on_blocking_thread(|| {
             self.runtime_handle.block_on(async {
@@ -118,7 +119,7 @@ impl SwapEncoder for HashflowSwapEncoder {
 
     /// Hashflow pools require each quote's nonce — a timestamp the market maker assigns when
     /// answering — to be strictly increasing per effective trader. All quotes of a solution
-    /// share one effective trader (the solution's sender), so a quote fetched out of route
+    /// share one effective trader (its quote attribution), so a quote fetched out of route
     /// order carries a nonce that reverts the swap executed after it.
     fn requires_ordered_quotes(&self) -> bool {
         true
@@ -174,7 +175,6 @@ mod test {
         .with_estimated_amount_in(BigUint::from_str("3000000000").unwrap());
 
         let encoding_context = EncodingContext {
-            sender: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -275,7 +275,6 @@ mod test {
         .with_protocol_state(Arc::new(hashflow_state));
 
         let encoding_context = EncodingContext {
-            sender: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),

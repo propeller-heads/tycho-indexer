@@ -145,6 +145,11 @@ pub struct Solution {
     swaps: Vec<Swap>,
     /// The transfer type to be used in this swap for user's funds (token in)
     user_transfer_type: UserTransferType,
+    /// Identifier of the quote request this solution answers. RFQ quotes are attributed to an
+    /// address derived from (sender, quote_id), so quote requests get independent nonce
+    /// sequences. Without one, quotes are attributed to the sender.
+    #[serde(default)]
+    quote_id: Option<String>,
 }
 
 impl Solution {
@@ -169,6 +174,7 @@ impl Solution {
             min_amount_out,
             swaps,
             user_transfer_type: UserTransferType::TransferFrom,
+            quote_id: None,
         }
     }
     pub fn sender(&self) -> &Bytes {
@@ -211,6 +217,15 @@ impl Solution {
         self
     }
 
+    pub fn quote_id(&self) -> Option<&str> {
+        self.quote_id.as_deref()
+    }
+
+    pub fn with_quote_id(mut self, quote_id: String) -> Self {
+        self.quote_id = Some(quote_id);
+        self
+    }
+
     pub fn with_user_transfer_type(mut self, user_transfer_type: UserTransferType) -> Self {
         self.user_transfer_type = user_transfer_type;
         self
@@ -239,6 +254,11 @@ pub struct Swap {
     estimated_amount_in: Option<BigUint>,
     /// Estimated gas usage for this swap by simulation
     estimated_gas: BigUint,
+    /// Address RFQ quotes are attributed to (e.g. Hashflow's effective trader). The strategy
+    /// encoders set it from the solution's sender and quote id; a consumer-set value is
+    /// overwritten.
+    #[serde(default)]
+    quote_attribution: Option<Bytes>,
 }
 
 impl Swap {
@@ -257,6 +277,7 @@ impl Swap {
             protocol_state: None,
             estimated_amount_in: None,
             estimated_gas,
+            quote_attribution: None,
         }
     }
 
@@ -314,6 +335,14 @@ impl Swap {
 
     pub fn estimated_gas(&self) -> &BigUint {
         &self.estimated_gas
+    }
+
+    pub fn quote_attribution(&self) -> Option<&Bytes> {
+        self.quote_attribution.as_ref()
+    }
+
+    pub(crate) fn set_quote_attribution(&mut self, quote_attribution: Bytes) {
+        self.quote_attribution = Some(quote_attribution);
     }
 }
 
@@ -494,14 +523,11 @@ impl PartialEq for PermitDetails {
 ///   solution does not require router address.
 /// * `group_token_in`: Token to be used as the input for the group swap.
 /// * `group_token_out`: Token to be used as the output for the group swap.
-/// * `sender`: The solution's sender — the end user's wallet. RFQ encoders attribute quotes to it
-///   (e.g. Hashflow's effective trader); when absent, quotes are attributed to the router.
 #[derive(Clone, Debug)]
 pub struct EncodingContext {
     pub router_address: Option<Bytes>,
     pub group_token_in: Bytes,
     pub group_token_out: Bytes,
-    pub sender: Option<Bytes>,
 }
 
 #[derive(PartialEq)]

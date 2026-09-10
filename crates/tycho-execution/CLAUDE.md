@@ -239,9 +239,10 @@ spawn threads via `map_on_threads` (`evm/utils.rs`) **only when an encoder in th
 `SwapEncoder::blocks_on_quote()` defaults to `false` and is `true` only for the RFQ encoders (Bebop, Hashflow,
 Liquorice, Metric). Otherwise encoding runs serially on the calling thread. Input order is preserved either way.
 Groups whose encoder sets `SwapEncoder::requires_ordered_quotes()` (Hashflow — its quote nonces must be strictly
-increasing per effective trader, which is the solution's sender) do not encode in parallel with each other: they
-share one thread and encode sequentially in route order, while the remaining groups still encode in parallel
-alongside them.
+increasing per effective trader) do not encode in parallel with each other: they share one thread and encode
+sequentially in route order, while the remaining groups still encode in parallel alongside them. The effective
+trader is the solution's sender or, when the solution carries a `quote_id`, an address derived from
+(sender, quote_id) — so different quote requests get independent nonce sequences.
 
 **Swap grouping** (`evm/group_swaps.rs`): Consecutive swaps on the same groupable protocol
 (`GROUPABLE_PROTOCOLS` in `evm/constants.rs`: `uniswap_v4`, `uniswap_v4_hooks`, `vm:balancer_v3`,

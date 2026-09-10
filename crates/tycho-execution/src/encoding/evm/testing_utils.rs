@@ -33,10 +33,10 @@ pub struct MockRFQState {
     /// How long `request_signed_quote` waits before it answers, like a network round trip.
     #[serde(default)]
     pub delay: Duration,
-    /// The `token_in` of every quote request, in arrival order. Share one log across states to
-    /// observe the request order of a route.
+    /// The `(token_in, sender)` of every quote request, in arrival order. Share one log across
+    /// states to observe the request order and quote attribution of a route.
     #[serde(skip)]
-    pub request_log: Arc<Mutex<Vec<Bytes>>>,
+    pub request_log: Arc<Mutex<Vec<(Bytes, Bytes)>>>,
 }
 #[typetag::serde]
 impl ProtocolSim for MockRFQState {
@@ -104,7 +104,7 @@ impl IndicativelyPriced for MockRFQState {
         self.request_log
             .lock()
             .expect("request log lock poisoned")
-            .push(params.token_in.clone());
+            .push((params.token_in.clone(), params.sender.clone()));
         if !self.delay.is_zero() {
             tokio::time::sleep(self.delay).await;
         }
@@ -130,7 +130,7 @@ pub fn delayed_hashflow_swap(
     token_in: Bytes,
     token_out: Bytes,
     delay: Duration,
-    request_log: Arc<Mutex<Vec<Bytes>>>,
+    request_log: Arc<Mutex<Vec<(Bytes, Bytes)>>>,
 ) -> Swap {
     let quote_data = HashMap::from([
         ("pool".to_string(), Bytes::from("0x478eca1b93865dca0b9f325935eb123c8a4af011")),
