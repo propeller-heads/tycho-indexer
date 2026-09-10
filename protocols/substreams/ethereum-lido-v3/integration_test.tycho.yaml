@@ -23,7 +23,7 @@ tests:
         # asynchronous withdrawal queue, so stETH -> ETH reports a zero limit and the harness
         # skips that direction.
         skip_simulation: false
-        skip_execution: true # No LidoV3 executor fixture in protocols/testing/fixtures.
+        skip_execution: false
       - id: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0"
         tokens:
           - "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
@@ -32,4 +32,4 @@ tests:
           token_to_track_total_pooled_eth: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84"
         creation_tx: "0xd377156654a0d6f646c9eea54e893352f98c26e8ff14911c4df8127578ff3b97"
         skip_simulation: false
-        skip_execution: true # No LidoV3 executor fixture in protocols/testing/fixtures.
+        skip_execution: false
