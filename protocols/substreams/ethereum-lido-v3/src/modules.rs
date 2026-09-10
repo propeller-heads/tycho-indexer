@@ -1,3 +1,10 @@
+//! Lido V3 indexing: the stETH staking pool and the wstETH wrapper.
+//!
+//! Neither contract has a creation event to discover, so the manifest carries a storage snapshot
+//! in `params` and every later block is driven by raw stETH storage writes.
+//!
+//! Handlers below are in manifest order.
+
 use anyhow::{anyhow, Result};
 use itertools::Itertools;
 use std::collections::HashMap;
@@ -25,16 +32,7 @@ use crate::{
     utils::attribute_with_bytes,
 };
 
-/// Which components an attribute belongs to. The share rate and the pooled-ether accounting drive
-/// both components; the stake limit only gates staking, and the wrapper's share balance only
-/// describes wstETH.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum AttributeTarget {
-    StEthOnly,
-    WstEthOnly,
-    Both,
-}
-
+/// Creates the stETH and wstETH components on `start_block`, and nothing on any other block.
 #[substreams::handlers::map]
 pub fn map_protocol_components(
     params: String,
@@ -59,6 +57,7 @@ pub fn map_protocol_components(
     })
 }
 
+/// Builds both components, each tagged with the token its `totalPooledEther` is denominated in.
 fn create_components() -> Vec<ProtocolComponent> {
     vec![
         ProtocolComponent::new(STETH_COMPONENT_ID)
@@ -72,6 +71,69 @@ fn create_components() -> Vec<ProtocolComponent> {
     ]
 }
 
+/// Carries the latest raw value of every slot that feeds a component balance, so a block that
+/// touches only one of them can still report both balances. Seeded from the manifest snapshot on
+/// `start_block`.
+#[substreams::handlers::store]
+pub fn store_balance_slots(params: String, block: eth::v2::Block, store: StoreSetBigInt) {
+    let initial_state = InitialState::parse(&params).expect("Failed to parse Lido V3 params");
+
+    if block.number == initial_state.start_block {
+        let seed = initial_state
+            .balance_state()
+            .expect("Failed to decode the Lido V3 initial state");
+        store.set(0, TOTAL_AND_EXTERNAL_SHARES_KEY, &seed.total_and_external_shares);
+        store.set(
+            0,
+            BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_KEY,
+            &seed.buffered_ether_and_deposited_validators,
+        );
+        store.set(0, CL_BALANCE_AND_CL_VALIDATORS_KEY, &seed.cl_balance_and_cl_validators);
+        store.set(0, WSTETH_SHARES_KEY, &seed.wsteth_shares);
+        return;
+    }
+
+    for tx in block.transactions() {
+        for call in tx
+            .calls
+            .iter()
+            .filter(|call| !call.state_reverted)
+        {
+            for storage_change in call
+                .storage_changes
+                .iter()
+                .filter(|change| change.address == STETH_ADDRESS)
+            {
+                if let Some(key) = balance_slot_key(&storage_change.key) {
+                    store.set(
+                        storage_change.ordinal,
+                        key,
+                        &BigInt::from_unsigned_bytes_be(&storage_change.new_value),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The subset of tracked slots that feed the component balances. The stake limit is reported as
+/// an attribute but moves no balance, so it maps to `None`.
+fn balance_slot_key(slot: &[u8]) -> Option<&'static str> {
+    if slot == TOTAL_AND_EXTERNAL_SHARES_POSITION {
+        Some(TOTAL_AND_EXTERNAL_SHARES_KEY)
+    } else if slot == BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_POSITION {
+        Some(BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_KEY)
+    } else if slot == CL_BALANCE_AND_CL_VALIDATORS_POSITION {
+        Some(CL_BALANCE_AND_CL_VALIDATORS_KEY)
+    } else if slot == WSTETH_SHARES_POSITION {
+        Some(WSTETH_SHARES_KEY)
+    } else {
+        None
+    }
+}
+
+/// Emits the component creations on `start_block`, and attribute plus balance updates on every
+/// later block. The two paths are mutually exclusive.
 #[substreams::handlers::map]
 pub fn map_protocol_changes(
     params: String,
@@ -107,6 +169,8 @@ pub fn map_protocol_changes(
     })
 }
 
+/// Registers both components on the activation transaction and seeds them from the manifest
+/// snapshot.
 fn initialize_protocol_components(
     initial_state: &InitialState,
     protocol_components: BlockTransactionProtocolComponents,
@@ -144,29 +208,8 @@ fn initialize_protocol_components(
     Ok(())
 }
 
-/// Reports both components' absolute balances.
-///
-/// The stETH component is backed by the whole staking pool, so it reports `totalPooledEther` in
-/// ETH. The wstETH component can only ever return the stETH locked in the wrapper, so it reports
-/// that, not the pool total - reporting the pool total for both would also double-count the
-/// protocol's TVL.
-fn add_balance_changes(builder: &mut TransactionChangesBuilder, balances: &BalanceState) {
-    builder.add_balance_change(&BalanceChange {
-        token: ETH_ADDRESS.to_vec(),
-        balance: balances
-            .total_pooled_ether()
-            .to_signed_bytes_be(),
-        component_id: STETH_COMPONENT_ID.as_bytes().to_vec(),
-    });
-    builder.add_balance_change(&BalanceChange {
-        token: STETH_ADDRESS.to_vec(),
-        balance: balances
-            .wsteth_steth_balance()
-            .to_signed_bytes_be(),
-        component_id: WSTETH_COMPONENT_ID.as_bytes().to_vec(),
-    });
-}
-
+/// Turns stETH storage writes into per-transaction attribute and balance changes, routing each
+/// attribute to only the components its slot describes.
 fn handle_state_updates(
     block: &eth::v2::Block,
     balance_deltas: &StoreDeltas,
@@ -237,6 +280,29 @@ fn handle_state_updates(
     }
 }
 
+/// Reports both components' absolute balances.
+///
+/// The stETH component is backed by the whole staking pool, so it reports `totalPooledEther` in
+/// ETH. The wstETH component can only ever return the stETH locked in the wrapper, so it reports
+/// that, not the pool total - reporting the pool total for both would also double-count the
+/// protocol's TVL.
+fn add_balance_changes(builder: &mut TransactionChangesBuilder, balances: &BalanceState) {
+    builder.add_balance_change(&BalanceChange {
+        token: ETH_ADDRESS.to_vec(),
+        balance: balances
+            .total_pooled_ether()
+            .to_signed_bytes_be(),
+        component_id: STETH_COMPONENT_ID.as_bytes().to_vec(),
+    });
+    builder.add_balance_change(&BalanceChange {
+        token: STETH_ADDRESS.to_vec(),
+        balance: balances
+            .wsteth_steth_balance()
+            .to_signed_bytes_be(),
+        component_id: WSTETH_COMPONENT_ID.as_bytes().to_vec(),
+    });
+}
+
 /// Rebuilds the balance inputs as of the start of the block.
 ///
 /// The store module runs before this one, so `get_last` already reflects this block's writes.
@@ -281,6 +347,17 @@ fn decode_store_value(bytes: &[u8]) -> BigInt {
         .unwrap_or_else(BigInt::zero)
 }
 
+/// Which components an attribute belongs to. The share rate and the pooled-ether accounting drive
+/// both components; the stake limit only gates staking, and the wrapper's share balance only
+/// describes wstETH.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AttributeTarget {
+    StEthOnly,
+    WstEthOnly,
+    Both,
+}
+
+/// The attribute a tracked stETH slot maps to, and the components it describes.
 fn tracked_attribute(slot: &[u8]) -> Option<(&'static str, AttributeTarget)> {
     if slot == TOTAL_AND_EXTERNAL_SHARES_POSITION {
         Some((TOTAL_AND_EXTERNAL_SHARES_ATTR, AttributeTarget::Both))
@@ -294,64 +371,5 @@ fn tracked_attribute(slot: &[u8]) -> Option<(&'static str, AttributeTarget)> {
         Some((WSTETH_SHARES_ATTR, AttributeTarget::WstEthOnly))
     } else {
         None
-    }
-}
-
-/// The subset of tracked slots that feed the component balances.
-fn balance_slot_key(slot: &[u8]) -> Option<&'static str> {
-    if slot == TOTAL_AND_EXTERNAL_SHARES_POSITION {
-        Some(TOTAL_AND_EXTERNAL_SHARES_KEY)
-    } else if slot == BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_POSITION {
-        Some(BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_KEY)
-    } else if slot == CL_BALANCE_AND_CL_VALIDATORS_POSITION {
-        Some(CL_BALANCE_AND_CL_VALIDATORS_KEY)
-    } else if slot == WSTETH_SHARES_POSITION {
-        Some(WSTETH_SHARES_KEY)
-    } else {
-        None
-    }
-}
-
-/// Carries the latest raw value of every slot that feeds a component balance, so a block that
-/// touches only one of them can still report both balances.
-#[substreams::handlers::store]
-pub fn store_balance_slots(params: String, block: eth::v2::Block, store: StoreSetBigInt) {
-    let initial_state = InitialState::parse(&params).expect("Failed to parse Lido V3 params");
-
-    if block.number == initial_state.start_block {
-        let seed = initial_state
-            .balance_state()
-            .expect("Failed to decode the Lido V3 initial state");
-        store.set(0, TOTAL_AND_EXTERNAL_SHARES_KEY, &seed.total_and_external_shares);
-        store.set(
-            0,
-            BUFFERED_ETHER_AND_DEPOSITED_VALIDATORS_KEY,
-            &seed.buffered_ether_and_deposited_validators,
-        );
-        store.set(0, CL_BALANCE_AND_CL_VALIDATORS_KEY, &seed.cl_balance_and_cl_validators);
-        store.set(0, WSTETH_SHARES_KEY, &seed.wsteth_shares);
-        return;
-    }
-
-    for tx in block.transactions() {
-        for call in tx
-            .calls
-            .iter()
-            .filter(|call| !call.state_reverted)
-        {
-            for storage_change in call
-                .storage_changes
-                .iter()
-                .filter(|change| change.address == STETH_ADDRESS)
-            {
-                if let Some(key) = balance_slot_key(&storage_change.key) {
-                    store.set(
-                        storage_change.ordinal,
-                        key,
-                        &BigInt::from_unsigned_bytes_be(&storage_change.new_value),
-                    );
-                }
-            }
-        }
     }
 }
