@@ -118,12 +118,12 @@ where
 
         // Register both label sets at zero so the first miss registers as a rise for
         // increase(); a series born at a nonzero value looks flat and no alert fires.
-        for state_found in ["true", "false"] {
+        for component_known in ["true", "false"] {
             counter!(
                 "extractor_revert_attr_miss",
                 "extractor" => name.to_string(),
                 "chain" => chain.to_string(),
-                "component_state_found" => state_found,
+                "component_known" => component_known,
             )
             .increment(0);
         }
@@ -229,6 +229,38 @@ where
         };
         buffer_guard.replace(updated);
         Ok(())
+    }
+
+    /// Returns the ids among `ids` with no protocol component entry in the reorg buffer history
+    /// and no component row in the DB.
+    ///
+    /// The protocol cache is not consulted: it keeps creations that a revert undid, so it would
+    /// label a reverted ghost as known.
+    async fn find_unknown_components(
+        &self,
+        reorg_buffer: &ReorgBuffer<BlockUpdateWithCursor<BlockChanges>>,
+        ids: &[&ComponentId],
+    ) -> Result<HashSet<ComponentId>, ExtractionError> {
+        let mut unknown = reorg_buffer.missing_components(ids);
+        if unknown.is_empty() {
+            return Ok(unknown);
+        }
+        let in_db: HashSet<ComponentId> = self
+            .gateway
+            .inner
+            .get_protocol_components(
+                &unknown
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<&str>>(),
+            )
+            .await
+            .map_err(ExtractionError::Storage)?
+            .into_iter()
+            .map(|component| component.id)
+            .collect();
+        unknown.retain(|id| !in_db.contains(id));
+        Ok(unknown)
     }
 
     async fn is_first_message(&self) -> bool {
@@ -1530,10 +1562,6 @@ where
         // both sets and it never existed before the range. Either way no prior value
         // exists and the revert deletes it. Substreams output is external input — a miss
         // is a data-quality signal, not a reason to kill the extractor.
-        // Both count per attribute. attr_misses: the component has state rows in the DB,
-        // just not this attribute. component_misses: no state rows for the component at all.
-        let mut attr_misses = 0_u64;
-        let mut component_misses = 0_u64;
         for (component_id, keys) in missing_map {
             let state = states_by_id
                 .get(component_id.as_str())
@@ -1543,39 +1571,44 @@ where
                     db_states.insert((component_id.clone(), key), value.clone());
                     continue;
                 }
-                if state.is_some() {
-                    attr_misses += 1;
-                } else {
-                    component_misses += 1;
-                }
                 not_found
                     .entry(component_id.clone())
                     .or_default()
                     .insert(key);
             }
         }
+
+        let unknown_components = self
+            .find_unknown_components(&reorg_buffer, &not_found.keys().collect::<Vec<_>>())
+            .await?;
+
+        // Both count per attribute. An attribute miss belongs to a known component. A
+        // component miss belongs to an unknown component.
+        let (component_misses, attr_misses): (Vec<_>, Vec<_>) = not_found
+            .iter()
+            .map(|(id, keys)| (id.as_str(), keys.len()))
+            .partition(|(id, _)| unknown_components.contains(*id));
         if !not_found.is_empty() {
-            let missed: Vec<(&str, usize)> = not_found
-                .iter()
-                .map(|(id, keys)| (id.as_str(), keys.len()))
-                .collect();
             warn!(
-                components = ?missed,
-                total = attr_misses + component_misses,
+                ?attr_misses,
+                ?component_misses,
                 "Attributes with no prior state in buffer or DB during revert; \
                  reverting them as deletions"
             );
         }
-        for (misses, state_found) in [(attr_misses, "true"), (component_misses, "false")] {
-            if misses > 0 {
-                counter!(
-                    "extractor_revert_attr_miss",
-                    "extractor" => self.name.clone(),
-                    "chain" => self.chain.to_string(),
-                    "component_state_found" => state_found,
-                )
-                .increment(misses);
-            }
+        for (misses, component_known) in [(attr_misses, "true"), (component_misses, "false")] {
+            counter!(
+                "extractor_revert_attr_miss",
+                "extractor" => self.name.clone(),
+                "chain" => self.chain.to_string(),
+                "component_known" => component_known,
+            )
+            .increment(
+                misses
+                    .iter()
+                    .map(|(_, n)| *n as u64)
+                    .sum(),
+            );
         }
 
         let empty = HashSet::<String>::new();
@@ -1797,6 +1830,19 @@ pub trait ExtractorGateway: Send + Sync {
         &self,
         component_ids: &[&'a str],
     ) -> Result<Vec<ProtocolComponentState>, StorageError>;
+
+    /// Returns the protocol components identified by `component_ids`.
+    ///
+    /// Only components that exist in the store are returned: unknown ids are silently omitted
+    /// rather than producing an error, so the result may be shorter than `component_ids` (and
+    /// empty if none are found).
+    ///
+    /// # Errors
+    /// Returns a [`StorageError`] only on an underlying store failure, never for missing ids.
+    async fn get_protocol_components<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponent>, StorageError>;
 
     /// Returns the contracts at the given `addresses`, including their storage slots.
     ///
@@ -2138,6 +2184,17 @@ impl ExtractorGateway for ExtractorPgGateway {
             .get_protocol_states(&self.chain, None, None, Some(component_ids), false, None)
             .await
             .map(|state_data| state_data.entity)
+    }
+
+    /// Component ids are unique per chain, so the protocol system is left unconstrained.
+    async fn get_protocol_components<'a>(
+        &self,
+        component_ids: &[&'a str],
+    ) -> Result<Vec<ProtocolComponent>, StorageError> {
+        self.state_gateway
+            .get_protocol_components(&self.chain, None, Some(component_ids), None, None)
+            .await
+            .map(|component_data| component_data.entity)
     }
 
     async fn get_contracts(&self, addresses: &[Address]) -> Result<Vec<Account>, StorageError> {
@@ -3246,12 +3303,15 @@ mod test {
         gw.expect_advance()
             .times(0)
             .returning(|_, _, _| Ok(()));
-        // Revert lookups: contracts, protocol states, component balances, account balances.
+        // Revert lookups: contracts, protocol states, protocol components, component
+        // balances, account balances.
         gw.expect_flushed_block_height()
             .returning(|| None);
         gw.expect_get_contracts()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_components()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_components_balances()
             .returning(|_| Ok(HashMap::new()));
@@ -3364,6 +3424,8 @@ mod test {
         gw.expect_get_contracts()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_components()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_components_balances()
             .returning(|_| Ok(HashMap::new()));
@@ -3595,6 +3657,8 @@ mod test {
         gw.expect_get_contracts()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_components()
             .returning(|_| Ok(Vec::new()));
         gw.expect_get_components_balances()
             .returning(|_| Ok(HashMap::new()));
@@ -4557,6 +4621,52 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_revert_attr_miss_component_lookup_error_fails_revert() {
+        let mut gw = MockExtractorGateway::new();
+        gw.expect_ensure_protocol_types()
+            .times(1)
+            .returning(|_| Ok(()));
+        gw.expect_get_cursor()
+            .times(1)
+            .returning(|| Ok(("cursor".into(), Bytes::default())));
+        gw.expect_get_block()
+            .times(1)
+            .returning(|_| Ok(Block::default()));
+        gw.expect_advance()
+            .times(0)
+            .returning(|_, _, _| Ok(()));
+        gw.expect_flushed_block_height()
+            .returning(|| None);
+        gw.expect_get_contracts()
+            .returning(|_| Ok(Vec::new()));
+        gw.expect_get_protocol_states()
+            .returning(|_| Ok(Vec::new()));
+        // The component table lookup is the only call that fails.
+        gw.expect_get_protocol_components()
+            .returning(|_| Err(StorageError::Unexpected("connection reset".to_string())));
+        let extractor = create_extractor(gw).await;
+
+        full_block(&extractor, 1, 1, vec![]).await;
+        // `pool_ghost` has no creation anywhere, so the revert reaches the component table.
+        full_block(
+            &extractor,
+            2,
+            1,
+            vec![entity_change_tx(2, 0, "pool_ghost", "reserve", 42, PbChangeType::Update)],
+        )
+        .await;
+
+        let err = extractor
+            .handle_revert(undo_to(1))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ExtractionError::Storage(StorageError::Unexpected(_))),
+            "a component table failure must abort the revert, got {err:?}"
+        );
+    }
+
+    #[tokio::test]
     async fn test_revert_resolves_prior_value_from_retained_blocks() {
         let mut gw = MockExtractorGateway::new();
         gw.expect_ensure_protocol_types()
@@ -4585,6 +4695,8 @@ mod test {
                 );
                 Ok(Vec::new())
             });
+        gw.expect_get_protocol_components()
+            .returning(|_| Ok(Vec::new()));
         gw.expect_get_components_balances()
             .returning(|_| Ok(HashMap::new()));
         gw.expect_get_account_balances()
@@ -4807,6 +4919,21 @@ mod test {
                             HashMap::new(),
                         )])
                     });
+                // pool_y is answered by the buffer; the rest reach the component table, where
+                // pool_w and pool_z exist and pool_ghost does not.
+                gw.expect_get_protocol_components()
+                    .returning(|component_ids| {
+                        let mut ids = component_ids.to_vec();
+                        ids.sort();
+                        assert_eq!(ids, vec!["pool_ghost", "pool_w", "pool_z"]);
+                        Ok(["pool_w", "pool_z"]
+                            .into_iter()
+                            .map(|id| ProtocolComponent {
+                                id: id.to_string(),
+                                ..Default::default()
+                            })
+                            .collect())
+                    });
                 gw.expect_get_components_balances()
                     .returning(|_| Ok(HashMap::new()));
                 gw.expect_get_account_balances()
@@ -4818,9 +4945,10 @@ mod test {
                 full_block(&extractor, 1, 1, vec![]).await;
                 full_block(&extractor, 2, 1, vec![component_creation_tx(2, 0, "pool_y", &[])])
                     .await;
-                // fee: pool_y has a buffered creation but no attrs and no DB rows → "false".
-                // rate: pool_ghost was never created anywhere → "false".
+                // fee: pool_y has a buffered creation but no attrs and no DB rows → "true".
                 // gone: pool_w has DB state rows, but not this attribute → "true".
+                // depth: pool_z has a component row but no state rows → "true".
+                // rate: pool_ghost was never created anywhere → "false".
                 full_block(
                     &extractor,
                     3,
@@ -4829,6 +4957,7 @@ mod test {
                         entity_change_tx(3, 0, "pool_y", "fee", 30, PbChangeType::Update),
                         entity_change_tx(3, 1, "pool_ghost", "rate", 7, PbChangeType::Update),
                         entity_change_tx(3, 2, "pool_w", "gone", 9, PbChangeType::Update),
+                        entity_change_tx(3, 3, "pool_z", "depth", 5, PbChangeType::Update),
                     ],
                 )
                 .await;
@@ -4849,11 +4978,11 @@ mod test {
                 &[
                     ("extractor", EXTRACTOR_NAME),
                     ("chain", "ethereum"),
-                    ("component_state_found", "false")
+                    ("component_known", "false")
                 ],
             ),
-            2,
-            "pool_y (no state rows) and pool_ghost (never created) miss without DB rows"
+            1,
+            "only pool_ghost exists neither in the buffer nor in the DB"
         );
         assert_eq!(
             counter_value(
@@ -4862,11 +4991,116 @@ mod test {
                 &[
                     ("extractor", EXTRACTOR_NAME),
                     ("chain", "ethereum"),
-                    ("component_state_found", "true")
+                    ("component_known", "true")
+                ],
+            ),
+            3,
+            "pool_y (buffered creation), pool_w (state rows) and pool_z (component row) are known"
+        );
+    }
+
+    // `metrics::with_local_recorder` takes a sync closure, so this test cannot use
+    // #[tokio::test]; it drives its own current-thread runtime instead.
+    #[test]
+    fn test_revert_attr_miss_on_retained_creation_is_component_known() {
+        use metrics_util::debugging::DebuggingRecorder;
+
+        let recorder = DebuggingRecorder::new();
+        let snapshotter = recorder.snapshotter();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        metrics::with_local_recorder(&recorder, || {
+            rt.block_on(async {
+                let mut gw = MockExtractorGateway::new();
+                gw.expect_ensure_protocol_types()
+                    .times(1)
+                    .returning(|_| Ok(()));
+                gw.expect_get_cursor()
+                    .times(1)
+                    .returning(|| Ok(("cursor".into(), Bytes::default())));
+                gw.expect_get_block()
+                    .times(1)
+                    .returning(|_| Ok(Block::default()));
+                gw.expect_advance()
+                    .returning(|_, _, _| Ok(()));
+                // The write never lands: the creation stays reachable in the committing
+                // section.
+                gw.expect_flushed_block_height()
+                    .returning(|| None);
+                gw.expect_get_contracts()
+                    .returning(|_| Ok(Vec::new()));
+                gw.expect_get_protocol_states()
+                    .returning(|_| Ok(Vec::new()));
+                // The buffer answers the only candidate, so the DB is never asked.
+                gw.expect_get_protocol_components()
+                    .times(0)
+                    .returning(|_| Ok(Vec::new()));
+                gw.expect_get_components_balances()
+                    .returning(|_| Ok(HashMap::new()));
+                gw.expect_get_account_balances()
+                    .returning(|_| Ok(HashMap::new()));
+
+                let extractor = create_extractor(gw).await;
+
+                // Block 1: create `pool_x` without attributes.
+                full_block(&extractor, 1, 1, vec![component_creation_tx(1, 0, "pool_x", &[])])
+                    .await;
+                // Block 2: finality 2 drains block 1 into the committing section.
+                full_block(&extractor, 2, 2, vec![]).await;
+                // Block 3: the attribute gets its first-ever value, mis-marked as an
+                // Update. Finality stays 2, so block 2 stays buffered.
+                full_block(
+                    &extractor,
+                    3,
+                    2,
+                    vec![entity_change_tx(
+                        3,
+                        0,
+                        "pool_x",
+                        "protocol_fees",
+                        500,
+                        PbChangeType::Update,
+                    )],
+                )
+                .await;
+
+                extractor
+                    .handle_revert(undo_to(2))
+                    .await
+                    .unwrap()
+                    .unwrap();
+            })
+        });
+
+        let map = snapshot_to_map(snapshotter.snapshot());
+        assert_eq!(
+            counter_value(
+                &map,
+                "extractor_revert_attr_miss",
+                &[
+                    ("extractor", EXTRACTOR_NAME),
+                    ("chain", "ethereum"),
+                    ("component_known", "true")
                 ],
             ),
             1,
-            "pool_w has state rows but not the reverted attribute"
+            "a creation drained but not yet flushed must count as a known component"
+        );
+        assert_eq!(
+            counter_value(
+                &map,
+                "extractor_revert_attr_miss",
+                &[
+                    ("extractor", EXTRACTOR_NAME),
+                    ("chain", "ethereum"),
+                    ("component_known", "false")
+                ],
+            ),
+            0,
+            "a creation in the committing section is not a component miss"
         );
     }
 
@@ -4901,11 +5135,11 @@ mod test {
         });
 
         let map = snapshot_to_map(snapshotter.snapshot());
-        for state_found in ["true", "false"] {
+        for component_known in ["true", "false"] {
             let labels = std::collections::BTreeMap::from([
                 ("extractor".to_string(), EXTRACTOR_NAME.to_string()),
                 ("chain".to_string(), "ethereum".to_string()),
-                ("component_state_found".to_string(), state_found.to_string()),
+                ("component_known".to_string(), component_known.to_string()),
             ]);
             assert!(
                 map.contains_key(&(
@@ -4913,7 +5147,7 @@ mod test {
                     "extractor_revert_attr_miss".to_string(),
                     labels,
                 )),
-                "series with component_state_found={state_found} must exist at startup; \
+                "series with component_known={component_known} must exist at startup; \
                  a series born on the first miss looks flat to increase() and no alert fires"
             );
         }

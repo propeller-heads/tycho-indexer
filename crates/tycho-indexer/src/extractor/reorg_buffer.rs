@@ -440,6 +440,10 @@ pub(crate) trait StateUpdateBufferEntry: std::fmt::Debug {
         &self,
         keys: Vec<(&Address, &Address)>,
     ) -> HashMap<(Address, Address), AccountBalance>;
+
+    /// Returns the ids among `ids` that have a protocol component entry in this block,
+    /// whatever the change type.
+    fn get_filtered_protocol_components(&self, ids: &HashSet<ComponentId>) -> HashSet<ComponentId>;
 }
 
 impl<B> ReorgBuffer<B>
@@ -482,6 +486,26 @@ where
         }
 
         (res, remaining_keys.into_iter().collect())
+    }
+
+    /// Returns the ids among `ids` with no protocol component entry in the buffered blocks,
+    /// live and committing sections included.
+    pub fn missing_components(&self, ids: &[&ComponentId]) -> HashSet<ComponentId> {
+        let mut missing: HashSet<ComponentId> = ids
+            .iter()
+            .map(|&id| id.clone())
+            .collect();
+
+        for block_message in self.history() {
+            if missing.is_empty() {
+                break;
+            }
+            for id in block_message.get_filtered_protocol_components(&missing) {
+                missing.remove(&id);
+            }
+        }
+
+        missing
     }
 
     /// Looks up buffered account state updates for the provided keys. Returns a map of updates and
@@ -605,8 +629,8 @@ mod test {
     use rstest::rstest;
     use tycho_common::models::{
         blockchain::{Transaction, TxWithChanges},
-        protocol::ProtocolComponentStateDelta,
-        Chain,
+        protocol::{ProtocolComponent, ProtocolComponentStateDelta},
+        Chain, ChangeType,
     };
 
     use super::*;
@@ -1064,6 +1088,62 @@ mod test {
             reorg_buffer.lookup_protocol_state(&[(&state1, &new), (&state1, &reserve)]);
         assert!(res.is_empty());
         assert_eq!(missing.len(), 2);
+    }
+
+    /// The `get_block_changes` fixtures carry no protocol components, so component lookups
+    /// need blocks built here.
+    fn component_creation_block(number: u64, component_id: &str) -> BlockChanges {
+        BlockChanges::new(
+            "test".to_string(),
+            Chain::Ethereum,
+            testing::block(number),
+            0,
+            false,
+            vec![TxWithChanges {
+                protocol_components: HashMap::from([(
+                    component_id.to_string(),
+                    ProtocolComponent {
+                        id: component_id.to_string(),
+                        change: ChangeType::Creation,
+                        ..Default::default()
+                    },
+                )]),
+                tx: transaction(),
+                ..Default::default()
+            }],
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn test_missing_components_reads_live_and_committing_blocks() {
+        let mut reorg_buffer = ReorgBuffer::new();
+        reorg_buffer
+            .insert_block(component_creation_block(1, "c1"))
+            .unwrap();
+        reorg_buffer
+            .insert_block(get_block_changes(2))
+            .unwrap();
+        reorg_buffer
+            .insert_block(component_creation_block(3, "c3"))
+            .unwrap();
+
+        // Blocks 1 and 2 move to the committing section, block 3 stays live.
+        reorg_buffer
+            .drain_into_committing(3)
+            .unwrap();
+
+        let c1 = "c1".to_string();
+        let c3 = "c3".to_string();
+        let ghost = "ghost".to_string();
+
+        let missing = reorg_buffer.missing_components(&[&c1, &c3, &ghost]);
+        assert_eq!(missing, HashSet::from([ghost.clone()]));
+
+        // Releasing block 1 drops its creation from the history.
+        reorg_buffer.release_committed(2);
+        let missing = reorg_buffer.missing_components(&[&c1, &c3, &ghost]);
+        assert_eq!(missing, HashSet::from([c1, ghost]));
     }
 
     #[test]
