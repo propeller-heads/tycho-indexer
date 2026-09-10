@@ -1,3 +1,10 @@
+## [0.398.0](https://github.com/propeller-heads/tycho/compare/0.397.0...0.398.0) (2026-09-10)
+
+
+### Features
+
+* **substreams:** index UP V3 on Robinhood Chain ([#1426](https://github.com/propeller-heads/tycho/issues/1426)) ([dcfc5a0](https://github.com/propeller-heads/tycho/commit/dcfc5a08fb088ba99004ebfe75424705b5844b96))
+
 ## [0.397.0](https://github.com/propeller-heads/tycho/compare/0.396.0...0.397.0) (2026-09-08)
 
 
