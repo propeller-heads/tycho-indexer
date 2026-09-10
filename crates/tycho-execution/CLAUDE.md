@@ -119,7 +119,8 @@ queryable via RPC:
 - `MAX_BPS_SQUARED = 10_000_000_000_000_000` — `MAX_BPS²`; the combined denominator when both fees use the
   sub-BPS scale
 
-**Positive slippage** (`_positiveSlippageEnabled`, toggled via `setPositiveSlippageEnabled`): when enabled, the router
+**Positive slippage** (`_positiveSlippageEnabled`, enabled from the constructor — which emits
+`PositiveSlippageToggled(true)` — and toggled afterwards via `setPositiveSlippageEnabled`): when enabled, the router
 takes the entire surplus (`actualAmountOut - expectedAmountOut`) before fees, and the remaining fees compute on
 `expectedAmountOut`. When disabled, fees compute on `actualAmountOut` and the surplus stays in the swap output. The flag
 also forces `mustOutputThroughRouter` to return true, since slippage direction is unknown before the swap. Per-client

@@ -74,16 +74,20 @@ contract FeeCalculator is AccessControl, IFeeCalculator {
      * @dev The receiver is explicit rather than defaulted to `msg.sender`: when
      *      the calculator is deployed through a CREATE2 factory, the factory is
      *      the sender, and fees credited to it can never be withdrawn.
+     *      Positive slippage capture starts enabled, since that is how every
+     *      deployment is operated; `setPositiveSlippageEnabled` turns it off.
      */
     constructor(address routerFeeSetter, address routerFeeReceiver) {
         if (routerFeeReceiver == address(0)) {
             revert FeeCalculator__AddressZero();
         }
         _routerFeeReceiver = routerFeeReceiver;
+        _positiveSlippageEnabled = true;
         // Make the role its own admin so role holders can manage their own role
         _setRoleAdmin(ROUTER_FEE_SETTER_ROLE, ROUTER_FEE_SETTER_ROLE);
         _grantRole(ROUTER_FEE_SETTER_ROLE, routerFeeSetter);
         emit RouterFeeReceiverUpdated(address(0), routerFeeReceiver);
+        emit PositiveSlippageToggled(true);
     }
 
     /**

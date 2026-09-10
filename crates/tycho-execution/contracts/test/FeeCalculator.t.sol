@@ -850,7 +850,8 @@ contract FeeCalculatorConfigTest is Constants {
         assertEq(feeCalculator.getRouterFeeOnClientFee(), 0);
         // The fee receiver is whatever the constructor was given
         assertEq(feeCalculator.getRouterFeeReceiver(), _ROUTER_FEE_RECEIVER);
-        assertFalse(feeCalculator.getPositiveSlippageEnabled());
+        // Positive slippage capture starts enabled
+        assertTrue(feeCalculator.getPositiveSlippageEnabled());
     }
 
     function testMaximumFee() public {
@@ -1033,9 +1034,8 @@ contract FeeCalculatorSlippageTest is Constants {
     FeeCalculator feeCalculator;
 
     function setUp() public {
+        // Positive slippage capture is enabled from the constructor
         feeCalculator = new FeeCalculator(FEE_SETTER, ADMIN);
-        vm.prank(FEE_SETTER);
-        feeCalculator.setPositiveSlippageEnabled(true);
     }
 
     function testRouterKeepsAllPositiveSlippage() public view {

@@ -206,6 +206,48 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         assertEq(clientFeeReceiverBalance, expectedFeeAmount);
     }
 
+    /// The constructor default, which the shared setup switches off: the router
+    /// keeps everything the pool produced above the quote.
+    function testSingleSwapCapturesPositiveSlippage() public {
+        vm.prank(FEE_SETTER);
+        feeCalculator.setPositiveSlippageEnabled(true);
+
+        uint256 amountIn = 1 ether;
+        // 1 WETH buys 2018.8 DAI on the USV2 pool, quoted at a round 2000
+        uint256 quotedAmountOut = 2000 ether;
+        uint256 poolAmountOut = 2018817438608734439722;
+
+        deal(WETH_ADDR, ALICE, amountIn);
+        vm.startPrank(ALICE);
+        IERC20(WETH_ADDR).approve(tychoRouterAddr, amountIn);
+
+        bytes memory swap = encodeSingleSwap(
+            address(usv2Executor),
+            encodeUniswapV2Swap(DAI_WETH_UNIV2_POOL, WETH_ADDR, DAI_ADDR)
+        );
+        uint256 amountOut = tychoRouter.singleSwap(
+            amountIn,
+            WETH_ADDR,
+            DAI_ADDR,
+            quotedAmountOut,
+            quotedAmountOut,
+            ALICE,
+            noClientFee(),
+            swap
+        );
+        vm.stopPrank();
+
+        // ALICE receives the quote, the surplus is credited to the router
+        assertEq(amountOut, quotedAmountOut);
+        assertEq(IERC20(DAI_ADDR).balanceOf(ALICE), quotedAmountOut);
+        assertEq(
+            tychoRouter.balanceOf(
+                routerFeeReceiver, uint256(uint160(DAI_ADDR))
+            ),
+            poolAmountOut - quotedAmountOut
+        );
+    }
+
     function testSingleSwapWithFeesAndContribution() public {
         // Tests swapping WETH -> DAI on a USV2 pool with fees and client contribution
         // Swap is 1 WETH for      2018.8 DAI (2018817438608734439722, gross output)
