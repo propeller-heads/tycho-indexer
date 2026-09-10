@@ -11,7 +11,7 @@ use crate::encoding::{
     errors::EncodingError,
     evm::utils::{bytes_to_address, create_encoding_runtime, on_blocking_thread, SafeRuntime},
     models::{EncodingContext, Swap},
-    swap_encoder::SwapEncoder,
+    swap_encoder::{QuoteBehavior, SwapEncoder},
 };
 
 /// Encodes a swap on Liquorice (RFQ) through the given executor address.
@@ -150,8 +150,8 @@ impl SwapEncoder for LiquoriceSwapEncoder {
         &self.executor_address
     }
 
-    fn blocks_on_quote(&self) -> bool {
-        true
+    fn quote_behavior(&self) -> QuoteBehavior {
+        QuoteBehavior::Blocking
     }
 
     fn clone_box(&self) -> Box<dyn SwapEncoder> {
@@ -237,6 +237,7 @@ mod tests {
         .with_protocol_state(Arc::new(liquorice_state));
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: Some(Bytes::zero(20)),
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),

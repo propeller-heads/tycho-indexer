@@ -1,5 +1,10 @@
 // This module is used in integration tests as well
-use std::{any::Any, collections::HashMap, sync::Arc, time::Duration};
+use std::{
+    any::Any,
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use async_trait::async_trait;
 use num_bigint::BigUint;
@@ -28,6 +33,10 @@ pub struct MockRFQState {
     /// How long `request_signed_quote` waits before it answers, like a network round trip.
     #[serde(default)]
     pub delay: Duration,
+    /// The `(token_in, sender)` of every quote request, in arrival order. Share one log across
+    /// states to observe the request order and quote attribution of a route.
+    #[serde(skip)]
+    pub request_log: Arc<Mutex<Vec<(Bytes, Bytes)>>>,
 }
 #[typetag::serde]
 impl ProtocolSim for MockRFQState {
@@ -92,6 +101,10 @@ impl IndicativelyPriced for MockRFQState {
         &self,
         params: GetAmountOutParams,
     ) -> Result<SignedQuote, SimulationError> {
+        self.request_log
+            .lock()
+            .expect("request log lock poisoned")
+            .push((params.token_in.clone(), params.sender.clone()));
         if !self.delay.is_zero() {
             tokio::time::sleep(self.delay).await;
         }
@@ -108,6 +121,52 @@ impl IndicativelyPriced for MockRFQState {
     }
 }
 
+/// Builds a Hashflow swap whose signed quote arrives after `delay` and logs its request into
+/// `request_log`.
+///
+/// The quote's `base_token`/`quote_token` carry `token_in`/`token_out`, so tests can locate
+/// the hop inside encoded calldata.
+pub fn delayed_hashflow_swap(
+    token_in: Bytes,
+    token_out: Bytes,
+    delay: Duration,
+    request_log: Arc<Mutex<Vec<(Bytes, Bytes)>>>,
+) -> Swap {
+    let quote_data = HashMap::from([
+        ("pool".to_string(), Bytes::from("0x478eca1b93865dca0b9f325935eb123c8a4af011")),
+        ("external_account".to_string(), Bytes::zero(20)),
+        ("trader".to_string(), Bytes::zero(20)),
+        ("effective_trader".to_string(), Bytes::zero(20)),
+        ("base_token".to_string(), token_in.clone()),
+        ("quote_token".to_string(), token_out.clone()),
+        ("base_token_amount".to_string(), Bytes::from(vec![0u8; 32])),
+        ("quote_token_amount".to_string(), Bytes::from(vec![0u8; 32])),
+        ("quote_expiry".to_string(), Bytes::from(vec![0u8; 32])),
+        ("nonce".to_string(), Bytes::from(vec![0u8; 32])),
+        ("tx_id".to_string(), Bytes::from(vec![0u8; 32])),
+        ("signature".to_string(), Bytes::from(vec![0u8; 65])),
+    ]);
+    let state = MockRFQState {
+        quote_amount_in: None,
+        quote_amount_out: BigUint::from(1_000u64),
+        quote_data,
+        delay,
+        request_log,
+    };
+    Swap::new(
+        ProtocolComponent {
+            id: "hashflow-rfq".to_string(),
+            protocol_system: "rfq:hashflow".to_string(),
+            ..Default::default()
+        },
+        default_token(token_in),
+        default_token(token_out),
+        BigUint::ZERO,
+    )
+    .with_estimated_amount_in(BigUint::from(1_000u64))
+    .with_protocol_state(Arc::new(state))
+}
+
 /// Builds a Bebop swap whose signed quote arrives after `delay`.
 pub fn delayed_bebop_swap(token_in: Bytes, token_out: Bytes, delay: Duration) -> Swap {
     let state = MockRFQState {
@@ -119,6 +178,7 @@ pub fn delayed_bebop_swap(token_in: Bytes, token_out: Bytes, delay: Duration) ->
             ("tx_to".to_string(), Bytes::from("0xbbbbbBB520d69a9775E85b458C58c648259FAD5F")),
         ]),
         delay,
+        request_log: Arc::default(),
     };
     Swap::new(
         ProtocolComponent {

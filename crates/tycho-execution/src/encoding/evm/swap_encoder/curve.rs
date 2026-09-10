@@ -301,6 +301,7 @@ mod tests {
         );
 
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -362,6 +363,7 @@ mod tests {
             BigUint::ZERO,
         );
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
@@ -424,6 +426,7 @@ mod tests {
             BigUint::ZERO,
         );
         let encoding_context = EncodingContext {
+            quote_attribution: None,
             router_address: None,
             group_token_in: token_in.clone(),
             group_token_out: token_out.clone(),
