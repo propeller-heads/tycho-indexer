@@ -68,7 +68,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
     function testSingleSwapWithAllFeeTypes() public {
         // Set up fees: 1% router fee on output, 2% client fee, 10% router fee on client fee
         vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setRouterFeeOnOutput(1_000_000); // 1%
         feeCalculator.setRouterFeeOnClientFee(10_000_000); // 10%
         vm.stopPrank();
@@ -216,7 +215,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // Remaining = 2018.8 - 40.38 = 1978.42 < 2000 so client contributes ~21.56 DAI (max 22)
 
         vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setRouterFeeOnOutput(1_000_000); // 1%
         vm.stopPrank();
 
@@ -714,7 +712,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // ALICE (tx.origin) has a custom 1% router fee that overrides the 2% default.
         // No client signature is provided, so tx.origin is used for the fee lookup.
         vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setRouterFeeOnOutput(2_000_000); // 2% default
         feeCalculator.setCustomRouterFeeOnOutput(ALICE, 1_000_000); // 1% override for ALICE
         vm.stopPrank();
@@ -770,7 +767,6 @@ contract TychoRouterFeesTest is TychoRouterTestSetup {
         // A signed client fee for clientFeeReceiver is also provided.
         // The signed clientFeeReceiver's fee (default, 0%) should be used, not ALICE's 2%.
         vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setCustomRouterFeeOnOutput(ALICE, 2_000_000); // 2% for tx.origin
         vm.stopPrank();
 

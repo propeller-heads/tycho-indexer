@@ -340,7 +340,7 @@ contract TychoRouterTestSetup is
         routerFeeReceiver = makeAddr("routerFeeReceiver");
         // clientFeeReceiver is the address corresponding to CLIENT_FEE_RECEIVER_PK
         clientFeeReceiver = vm.addr(CLIENT_FEE_RECEIVER_PK);
-        feeCalculator = new FeeCalculator(FEE_SETTER);
+        feeCalculator = new FeeCalculator(FEE_SETTER, routerFeeReceiver);
     }
 
     function pleEncode(bytes[] memory data)

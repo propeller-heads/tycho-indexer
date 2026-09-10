@@ -100,6 +100,11 @@ Three fee layers, deducted from swap output:
 3. **Router fee on client fee** (stored): `_routerFeeOnClientFeeBps` -- Tycho's cut of the client fee (deducted from the
    client's portion, not from the user).
 
+**Fee receiver**: `FeeCalculator(routerFeeSetter, routerFeeReceiver)` takes the receiver as a constructor argument
+and emits `RouterFeeReceiverUpdated(address(0), routerFeeReceiver)` at deployment; `setRouterFeeReceiver` changes it
+later. It is explicit rather than defaulted to `msg.sender` because deployment goes through the CREATE2 factory
+(`0x4e59b448…`), which can never call `withdraw` on the router — fees credited to it are lost.
+
 **Per-client overrides**: Both router fees can be overridden per client address via `_customRouterFees`
 mapping (`CustomFees` struct, single storage slot). If set, the custom rate replaces the default for that client. Can be
 removed to revert to defaults.
