@@ -315,7 +315,6 @@ contract PropAMMFallbackRouterTest is TychoRouterTestSetup {
     /// With fees active the leg's output lands at the router first, then the fee path pays out.
     function testSingleSwapWithRouterFee() public {
         vm.startPrank(FEE_SETTER);
-        feeCalculator.setRouterFeeReceiver(routerFeeReceiver);
         feeCalculator.setRouterFeeOnOutput(1_000_000); // 1%
         vm.stopPrank();
 

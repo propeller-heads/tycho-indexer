@@ -65,9 +65,13 @@ ADMIN="0x0000000000000000000000000000000000000001"
 #   - feeCalculator only needs deployed code (constructor reverts otherwise), so
 #     Permit2 is reused; the real one is set via storage at simulation time.
 #   - the four admins are role grants (storage), so any placeholder works.
+#
+# FeeCalculator(routerFeeSetter, routerFeeReceiver): both land in storage rather
+#   than in an immutable, so placeholders work — but the receiver may not be the
+#   zero address.
 NON_EXECUTOR_FIXTURES=(
     "TychoRouterV3|TychoRouterV3|$PERMIT2 $PERMIT2 $ADMIN $ADMIN $ADMIN $ADMIN"
-    "FeeCalculator|FeeCalculator|$ADMIN"
+    "FeeCalculator|FeeCalculator|$ADMIN $ADMIN"
 )
 
 # Executor fixtures protocol-testing plants, mirroring EXECUTOR_MAPPING in
