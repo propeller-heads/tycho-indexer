@@ -274,6 +274,7 @@ impl ProtocolStreamProcessor {
                     "sushiswap_v3".to_string(),
                     "robinswap_v3".to_string(),
                     "ramses_v3".to_string(),
+                    "up_v3".to_string(),
                 ]
             }
             Chain::Arbitrum => {
@@ -376,6 +377,10 @@ impl ProtocolStreamProcessor {
                     tvl_filter.clone(),
                     None,
                 );
+            }
+            "up_v3" => {
+                stream =
+                    stream.exchange::<AerodromeSlipstreamsState>("up_v3", tvl_filter.clone(), None);
             }
             "erc4626" => {
                 stream = stream.exchange::<ERC4626State>(
