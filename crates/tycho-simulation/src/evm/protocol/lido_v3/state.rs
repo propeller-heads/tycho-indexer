@@ -3,7 +3,6 @@ use std::{any::Any, collections::HashMap};
 use alloy::primitives::U256;
 use hex_literal::hex;
 use num_bigint::BigUint;
-use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use tycho_common::{
     dto::ProtocolStateDelta,
@@ -176,20 +175,36 @@ impl LidoV3State {
     }
 
     fn steth_spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
-        if base.address.as_ref() != STETH_ADDRESS || quote.address.as_ref() != ETH_ADDRESS {
+        // The pair has a rate in both directions even though only ETH -> stETH is tradable:
+        // unstaking goes through the withdrawal queue, which `get_limits` reports as a zero
+        // limit. Quoting only one ordering leaves callers that key their data by swap direction
+        // without a price for the direction that does trade.
+        let (eth, steth, invert) = if base.address.as_ref() == ETH_ADDRESS &&
+            quote.address.as_ref() == STETH_ADDRESS
+        {
+            (base, quote, false)
+        } else if base.address.as_ref() == STETH_ADDRESS && quote.address.as_ref() == ETH_ADDRESS {
+            (quote, base, true)
+        } else {
             return Err(SimulationError::FatalError("unsupported spot price".to_string()));
-        }
+        };
 
-        let quote_unit = BigUint::from(10u32).pow(quote.decimals);
-        let amount_out = self
-            .get_amount_out(quote_unit, quote, base)?
-            .amount;
-        let base_unit_f64 = u256_to_f64(U256::from(10).pow(U256::from(base.decimals)))?;
-        let amount_out_f64 = amount_out.to_f64().ok_or_else(|| {
-            SimulationError::FatalError("failed converting spot price amount".to_string())
-        })?;
-        let base_per_quote = amount_out_f64 / base_unit_f64;
-        Ok(1.0 / base_per_quote)
+        // Submitting ETH mints shares, and the depositor holds the stETH balance those shares
+        // are worth. Derived from the share rate rather than from a `get_amount_out` probe, so
+        // the rate stays available while staking is paused or its limit is exhausted - those
+        // bound capacity, not price.
+        let eth_unit = U256::from(10).pow(U256::from(eth.decimals));
+        let steth_out = self.pooled_eth_by_shares(self.shares_for_pooled_eth(eth_unit)?)?;
+        let steth_unit_f64 = u256_to_f64(U256::from(10).pow(U256::from(steth.decimals)))?;
+        let steth_per_eth = u256_to_f64(steth_out)? / steth_unit_f64;
+
+        if !invert {
+            return Ok(steth_per_eth);
+        }
+        if steth_per_eth == 0.0 {
+            return Err(SimulationError::FatalError("invalid Lido share rate state".to_string()));
+        }
+        Ok(1.0 / steth_per_eth)
     }
 
     fn wsteth_spot_price(&self, base: &Token, quote: &Token) -> Result<f64, SimulationError> {
@@ -736,6 +751,56 @@ mod tests {
             .unwrap();
         assert_eq!(unwrapped_state, &state);
         assert!(unwrap.amount > BigUint::ZERO);
+    }
+
+    #[test]
+    fn steth_spot_price_quotes_both_orderings() {
+        let state = sample_steth_state();
+
+        let steth_per_eth = state
+            .spot_price(&eth_token(), &steth_token())
+            .expect("ETH -> stETH price");
+        let eth_per_steth = state
+            .spot_price(&steth_token(), &eth_token())
+            .expect("stETH -> ETH price");
+
+        // Staking is near parity, and the two orderings are reciprocals. The tradable direction
+        // is ETH -> stETH; a caller keying prices by swap direction needs that one to exist.
+        assert!((steth_per_eth - 1.0).abs() < 1e-6, "ETH -> stETH off parity: {steth_per_eth}");
+        assert!((eth_per_steth - 1.0).abs() < 1e-6, "stETH -> ETH off parity: {eth_per_steth}");
+        assert!((steth_per_eth * eth_per_steth - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn steth_spot_price_survives_exhausted_staking_capacity() {
+        let mut state = sample_steth_state();
+        let mut staking_state = state.staking_state.unwrap();
+        // Capacity gone, but the pair still has a rate: the limit bounds size, not price.
+        staking_state.prev_stake_limit = U256::ZERO;
+        staking_state.prev_stake_block_number = state.block_number as u32;
+        staking_state.max_stake_limit_growth_blocks = 0;
+        state.staking_state = Some(staking_state);
+
+        // A quote is unavailable ...
+        assert!(state
+            .get_amount_out(BigUint::from(10u64).pow(18), &eth_token(), &steth_token())
+            .is_err());
+        // ... but both prices still resolve.
+        assert!(state
+            .spot_price(&eth_token(), &steth_token())
+            .is_ok());
+        assert!(state
+            .spot_price(&steth_token(), &eth_token())
+            .is_ok());
+    }
+
+    #[test]
+    fn steth_spot_price_rejects_unrelated_pair() {
+        let state = sample_steth_state();
+
+        assert!(state
+            .spot_price(&steth_token(), &wsteth_token())
+            .is_err());
     }
 
     #[test]
